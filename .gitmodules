@@ -1,0 +1,6 @@
+[submodule "iproute2"]
+	path = iproute2
+	url = https://github.com/iproute2/iproute2.git
+[submodule "libbpf"]
+	path = libbpf
+	url = https://github.com/libbpf/libbpf.git
