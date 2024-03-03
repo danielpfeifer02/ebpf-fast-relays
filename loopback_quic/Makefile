@@ -18,6 +18,11 @@ DEV := lo
 ingress: $(BPF_INGRESS_OBJ)
 	-bpftool net detach xdpgeneric dev $(DEV)
 	rm -f $(BPF_INGRESS_PINNED_PATH)
+	
+	rm -f /sys/fs/bpf/meta
+#	create a map to store meta data (update value size if content changes)
+	bpftool map create /sys/fs/bpf/meta type array key 4 value 4 entries 1 name meta
+
 	bpftool prog load $(BPF_INGRESS_OBJ) $(BPF_INGRESS_PINNED_PATH)
 	bpftool net attach xdpgeneric pinned $(BPF_INGRESS_PINNED_PATH) dev $(DEV)
 
