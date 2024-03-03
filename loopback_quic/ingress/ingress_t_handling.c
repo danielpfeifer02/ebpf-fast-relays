@@ -15,7 +15,7 @@ struct quic_header_wrapper {
     uint8_t header_t;
 };
 
-struct meta {
+struct meta_struc {
     int connIdLength;
 };
 
@@ -23,7 +23,7 @@ struct meta {
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, int);
-    __type(value, struct meta);
+    __type(value, struct meta_struc);
     __uint(max_entries, MAX_ENTRIES);
 } meta SEC(".maps");
 
@@ -34,15 +34,17 @@ int handle_ingress(struct xdp_md *ctx)
 {
     
     int index = 0;
-    struct meta *meta_value = bpf_map_lookup_elem(&meta, &index);
+    struct meta_struc *meta_value = bpf_map_lookup_elem(&meta, &index);
     if (!meta_value) {
         bpf_printk("meta table value is null\n");
         return XDP_PASS;
+    } else {
+        bpf_printk("[ingress xdp] meta table value is %p %d\n", meta_value, meta_value->connIdLength);
     }
 
-    int connIdLength = meta_value->connIdLength;
+    int cidLen = meta_value->connIdLength;
 
-    bpf_printk("[ingress xdp] connIdLength: %d\n", connIdLength);
+    bpf_printk("[ingress xdp] cidLen: %d\n", cidLen);
 
     // bpf_printk("Start inspection...\n");
     void *data_end = (void *)(long)ctx->data_end;
@@ -96,18 +98,24 @@ int handle_ingress(struct xdp_md *ctx)
 
     bpf_printk("[ingress xdp] packet is entering (payload size: %d)\n", payload_size);
 
-    unsigned char payload_buffer[100] = {0}; // TODO size 10 enough or off by one?
+    unsigned char payload_buffer[256] = {0}; // TODO size 256 enough?
     bpf_probe_read_kernel(payload_buffer, sizeof(payload_buffer), payload);
 
 
     struct quic_header_wrapper *header = (struct quic_header_wrapper *)payload_buffer;
     if (header->header_t&0x80) {
         bpf_printk("[ingress xdp] LONG HEADER\n");
+
+        // the 7th byte is the connection id length
+        int connection_id_length = payload_buffer[6];
+        // TODO update more specific based on uniquely identifying the connection
+        bpf_map_update_elem(&meta, &index, &connection_id_length, BPF_ANY); 
+
     } else {
         bpf_printk("[ingress xdp] SHORT HEADER\n");
         int shl = 1;
 
-        if (connIdLength == 0) { // this has the downside that we ignore packet with connection id length 0 (special case)
+        if (cidLen == 0) { // this has the downside that we ignore packet with connection id length 0 (special case)
             bpf_printk("[ingress xdp] connection id length not found\n");
             return XDP_PASS;
         }
@@ -118,7 +126,10 @@ int handle_ingress(struct xdp_md *ctx)
 
         // now we get the actual packet number (packet number length is number of bytes)
         int packet_number = 0;
-        int pnoffset = shl + connIdLength;
+
+        // unsigned char so that the verfication works for all packet number lengths
+        unsigned char pnoffset = shl + cidLen;
+
         if (packet_number_length == 1) {
             packet_number = payload_buffer[pnoffset];
         } else if (packet_number_length == 2) {
@@ -129,7 +140,8 @@ int handle_ingress(struct xdp_md *ctx)
             packet_number = payload_buffer[pnoffset] << 24 | payload_buffer[pnoffset+1] << 16 | payload_buffer[pnoffset+2] << 8 | payload_buffer[pnoffset+3];
         }
 
-        bpf_printk("[ingress xdp] packet number (%d bytes long): %d\n", packet_number_length, packet_number);
+        bpf_printk("[ingress xdp] packet number (%d bytes long): %d (based on connection id length: %d)\n", 
+                    packet_number_length, packet_number, cidLen);
     }
     
     return XDP_PASS;
