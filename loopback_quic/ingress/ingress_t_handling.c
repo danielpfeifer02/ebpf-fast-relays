@@ -127,7 +127,7 @@ int handle_ingress(struct xdp_md *ctx)
     bpf_probe_read_kernel(payload_buffer, sizeof(payload_buffer), payload);
 
 
-    struct quic_header_wrapper *header = (struct quic_header_wrapper *)payload_buffer;
+    struct quic_header_wrapper *header = (struct quic_header_wrapper *)payload_buffer; //TODO not ideal since only one byte?
     if (header->header_t&0x80) {
 
         // check for type == 0x02 (Handshake) to get the right conn id length
@@ -140,6 +140,10 @@ int handle_ingress(struct xdp_md *ctx)
 
         //TODO differentiate between src and dst conn id length
         //TODO support retry packets
+
+        // byte 1 to 4 are the version
+        int version = payload_buffer[1] << 24 | payload_buffer[2] << 16 | payload_buffer[3] << 8 | payload_buffer[4];
+        bpf_printk("[ingress xdp] version: %d\n", version);
 
 
         // the 7th byte is the destination connection id length
