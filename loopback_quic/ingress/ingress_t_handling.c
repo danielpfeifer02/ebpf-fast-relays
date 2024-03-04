@@ -9,21 +9,27 @@
 // activate go: export PATH=$PATH:/usr/local/go/bin
 
 #define DEST_PORT 4242 // see loopback_quic/quic_traffic.go
-#define MAX_ENTRIES 1
+#define MAX_ENTRIES 16
 
 struct quic_header_wrapper {
     uint8_t header_t;
 };
 
-struct meta_struc {
-    int connIdLength;
+struct meta_s {
+    int dst_conn_id_len;
+    int src_conn_id_len;
+};
+
+struct key_s {
+    int src_port;
+    int dst_port;
 };
 
 // Define a map to store one element of type struct meta
 struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, int);
-    __type(value, struct meta_struc);
+    __type(value, struct meta_s);
     __uint(max_entries, MAX_ENTRIES);
 } meta SEC(".maps");
 
@@ -32,19 +38,6 @@ struct {
 SEC("xdp")
 int handle_ingress(struct xdp_md *ctx)
 {
-    
-    int index = 0;
-    struct meta_struc *meta_value = bpf_map_lookup_elem(&meta, &index);
-    if (!meta_value) {
-        bpf_printk("meta table value is null\n");
-        return XDP_PASS;
-    } else {
-        bpf_printk("[ingress xdp] meta table value is %p %d\n", meta_value, meta_value->connIdLength);
-    }
-
-    int cidLen = meta_value->connIdLength;
-
-    bpf_printk("[ingress xdp] cidLen: %d\n", cidLen);
 
     // bpf_printk("Start inspection...\n");
     void *data_end = (void *)(long)ctx->data_end;
@@ -88,6 +81,9 @@ int handle_ingress(struct xdp_md *ctx)
         return XDP_PASS;
     }
 
+    int src_port = ntohs(udp->source);
+    int dst_port = ntohs(udp->dest);
+
     // Point to start of payload.
     payload = (unsigned char *)udp + sizeof(*udp);
     payload_size = ntohs(udp->len) - sizeof(*udp);
@@ -98,18 +94,67 @@ int handle_ingress(struct xdp_md *ctx)
 
     bpf_printk("[ingress xdp] packet is entering (payload size: %d)\n", payload_size);
 
+    struct key_s index = {
+        .src_port = src_port,
+        .dst_port = dst_port
+    };
+    struct meta_s *meta_data = bpf_map_lookup_elem(&meta, &index);
+    if (meta_data == 0) {
+        struct meta_s tmp = {
+            .dst_conn_id_len = 0,
+            .src_conn_id_len = 0
+        };
+        meta_data = &tmp;
+        bpf_map_update_elem(&meta, &index, meta_data, BPF_ANY);
+    } else {
+        bpf_printk("[ingress xdp] meta table is at %p \
+        (src (%d) conn id len: %d, \
+        dst (%d) conn id len: %d)\n", 
+        meta_data, src_port, meta_data->src_conn_id_len, dst_port, meta_data->dst_conn_id_len);
+    }
+
+    if (meta_data->src_conn_id_len > 20 || meta_data->dst_conn_id_len > 20) {
+        bpf_printk("[ingress xdp] ERROR: conn id length is too long\n");
+        return XDP_PASS;
+    }
+
+    int cidLen = meta_data->src_conn_id_len;
+
+
+    bpf_printk("[ingress xdp] cidLen: %d\n", cidLen);
+
     unsigned char payload_buffer[256] = {0}; // TODO size 256 enough?
     bpf_probe_read_kernel(payload_buffer, sizeof(payload_buffer), payload);
 
 
     struct quic_header_wrapper *header = (struct quic_header_wrapper *)payload_buffer;
     if (header->header_t&0x80) {
-        bpf_printk("[ingress xdp] LONG HEADER\n");
 
-        // the 7th byte is the connection id length
-        int connection_id_length = payload_buffer[6];
+        // check for type == 0x02 (Handshake) to get the right conn id length
+        int type = (header->header_t&0x30) >> 4;
+        if (type != 0x02) {
+            return XDP_PASS;
+        }
+
+        bpf_printk("[ingress xdp] LONG HEADER (handshake type)\n");
+
+        //TODO differentiate between src and dst conn id length
+        //TODO support retry packets
+
+
+        // the 7th byte is the destination connection id length
+        int dst_connection_id_length = payload_buffer[6];
+
+        // the (7 + dst_connection_id_length + 1)th byte is the source connection id length
+        int src_connection_id_length = payload_buffer[6 + dst_connection_id_length + 1];
+
+        struct meta_s meta_datas = { // TODO check if reference or copy is used (i.e. malloc needed?)
+            .dst_conn_id_len = dst_connection_id_length,
+            .src_conn_id_len = src_connection_id_length
+        };
+
         // TODO update more specific based on uniquely identifying the connection
-        bpf_map_update_elem(&meta, &index, &connection_id_length, BPF_ANY); 
+        bpf_map_update_elem(&meta, &index, &meta_datas, BPF_ANY); 
 
     } else {
         bpf_printk("[ingress xdp] SHORT HEADER\n");
