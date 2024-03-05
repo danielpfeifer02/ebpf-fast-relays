@@ -16,6 +16,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"os"
 
 	"github.com/quic-go/quic-go"
 )
@@ -118,9 +119,18 @@ func generateTLSConfig() *tls.Config {
 	if err != nil {
 		panic(err)
 	}
+
+	// Create a KeyLogWriter
+	keyLogFile, err := os.OpenFile("tls.keylog", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		panic(err)
+	}
+	// defer keyLogFile.Close() // TODO why not close?
+
 	return &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"quic-echo-example"},
+		KeyLogWriter: keyLogFile,
 	}
 }
 

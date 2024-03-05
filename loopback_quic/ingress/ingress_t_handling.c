@@ -116,10 +116,10 @@ int handle_ingress(struct xdp_md *ctx)
         return XDP_PASS;
     }
 
-    int cidLen = meta_data->src_conn_id_len;
+    int short_header_conn_id_len = 4; //meta_data->dst_conn_id_len; // TODO not working yet
 
 
-    bpf_printk("[ingress xdp] cidLen: %d\n", cidLen);
+    bpf_printk("[ingress xdp] short_header_conn_id_len: %d\n", short_header_conn_id_len);
 
     unsigned char payload_buffer[256] = {0}; // TODO size 256 enough?
     bpf_probe_read_kernel(payload_buffer, sizeof(payload_buffer), payload);
@@ -152,6 +152,24 @@ int handle_ingress(struct xdp_md *ctx)
         // the (6 + dst_connection_id_length + 1)th byte is the source connection id length
         int src_connection_id_length = payload_buffer[5 + dst_connection_id_length + 1];
 
+        // TODO this feels hacky but idk how to do it better yet
+        if (meta_data->dst_conn_id_len > 0) { // this means we already have a connection id length for dst
+            if (dst_connection_id_length > 0 && dst_connection_id_length != meta_data->dst_conn_id_len) {
+                bpf_printk("[ingress xdp] ERROR: destination connection id length changed\n");
+                return XDP_PASS;
+            } else if (dst_connection_id_length == 0) {
+                dst_connection_id_length = meta_data->dst_conn_id_len;
+            }
+        }
+        if (meta_data->src_conn_id_len > 0) { // this means we already have a connection id length for src
+            if (src_connection_id_length > 0 && src_connection_id_length != meta_data->src_conn_id_len) {
+                bpf_printk("[ingress xdp] ERROR: source connection id length changed\n");
+                return XDP_PASS;
+            } else if (src_connection_id_length == 0) {
+                src_connection_id_length = meta_data->src_conn_id_len;
+            }
+        }
+
         struct meta_s meta_datas = { // TODO check if reference or copy is used (i.e. malloc needed?)
             .dst_conn_id_len = dst_connection_id_length,
             .src_conn_id_len = src_connection_id_length
@@ -164,7 +182,7 @@ int handle_ingress(struct xdp_md *ctx)
         bpf_printk("[ingress xdp] SHORT HEADER\n");
         int shl = 1;
 
-        if (cidLen == 0) { // this has the downside that we ignore packet with connection id length 0 (special case)
+        if (short_header_conn_id_len == 0) { // this has the downside that we ignore packet with connection id length 0 (special case)
             bpf_printk("[ingress xdp] connection id length not found\n");
             return XDP_PASS;
         }
@@ -177,7 +195,7 @@ int handle_ingress(struct xdp_md *ctx)
         int packet_number = 0;
 
         // unsigned char so that the verfication works for all packet number lengths
-        unsigned char pnoffset = shl + cidLen;
+        unsigned char pnoffset = shl + short_header_conn_id_len;
 
         if (packet_number_length == 1) {
             packet_number = payload_buffer[pnoffset];
@@ -190,7 +208,7 @@ int handle_ingress(struct xdp_md *ctx)
         }
 
         bpf_printk("[ingress xdp] packet number (%d bytes long): %d (based on connection id length: %d)\n", 
-                    packet_number_length, packet_number, cidLen);
+                    packet_number_length, packet_number, short_header_conn_id_len);
     }
     
     return XDP_PASS;
