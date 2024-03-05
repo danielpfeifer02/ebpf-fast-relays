@@ -107,9 +107,7 @@ int handle_ingress(struct xdp_md *ctx)
         meta_data = &tmp;
         bpf_map_update_elem(&meta, &index, meta_data, BPF_ANY);
     } else {
-        bpf_printk("[ingress xdp] meta table is at %p \
-        (src (%d) conn id len: %d, \
-        dst (%d) conn id len: %d)\n", 
+        bpf_printk("[ingress xdp] meta table is at %p (src (%d) conn id len: %d, dst (%d) conn id len: %d)\n", 
         meta_data, src_port, meta_data->src_conn_id_len, dst_port, meta_data->dst_conn_id_len);
     }
 
@@ -127,6 +125,9 @@ int handle_ingress(struct xdp_md *ctx)
     bpf_probe_read_kernel(payload_buffer, sizeof(payload_buffer), payload);
 
 
+    // TODO handle more than one quic packet in the payload
+
+
     struct quic_header_wrapper *header = (struct quic_header_wrapper *)payload_buffer; //TODO not ideal since only one byte?
     if (header->header_t&0x80) {
 
@@ -138,7 +139,6 @@ int handle_ingress(struct xdp_md *ctx)
 
         bpf_printk("[ingress xdp] LONG HEADER (handshake type)\n");
 
-        //TODO differentiate between src and dst conn id length
         //TODO support retry packets
 
         // byte 1 to 4 are the version
@@ -146,11 +146,11 @@ int handle_ingress(struct xdp_md *ctx)
         bpf_printk("[ingress xdp] version: %d\n", version);
 
 
-        // the 7th byte is the destination connection id length
-        int dst_connection_id_length = payload_buffer[6];
+        // the 6th byte is the destination connection id length
+        int dst_connection_id_length = payload_buffer[5];
 
-        // the (7 + dst_connection_id_length + 1)th byte is the source connection id length
-        int src_connection_id_length = payload_buffer[6 + dst_connection_id_length + 1];
+        // the (6 + dst_connection_id_length + 1)th byte is the source connection id length
+        int src_connection_id_length = payload_buffer[5 + dst_connection_id_length + 1];
 
         struct meta_s meta_datas = { // TODO check if reference or copy is used (i.e. malloc needed?)
             .dst_conn_id_len = dst_connection_id_length,
