@@ -121,6 +121,7 @@ int handle_ingress(struct xdp_md *ctx)
 
     bpf_printk("[ingress xdp] short_header_conn_id_len: %d\n", short_header_conn_id_len);
 
+    // TODO kinda useless for now since header protection still present
     unsigned char payload_buffer[256] = {0}; // TODO size 256 enough?
     bpf_probe_read_kernel(payload_buffer, sizeof(payload_buffer), payload);
 
