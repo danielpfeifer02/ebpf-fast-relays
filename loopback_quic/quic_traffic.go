@@ -5,6 +5,11 @@ package main
 // sudo sysctl -w net.core.rmem_max=2500000
 // sudo sysctl -w net.core.wmem_max=2500000
 
+// if error when fetching quic-go-no-crypto run with this env:
+// GONOSUMDB=* go mod tidy
+
+// go clean -modcache && go mod tidy
+
 import (
 	"context"
 	"crypto/rand"
@@ -16,8 +21,9 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"os"
 
-	"github.com/quic-go/quic-go"
+	"github.com/danielpfeifer02/quic-go-no-crypto"
 )
 
 const addr = "localhost:4242"
@@ -37,7 +43,7 @@ func main() {
 
 // Start a server that echos all data on the first stream opened by the client
 func echoServer() error {
-	listener, err := quic.ListenAddr(addr, generateTLSConfig(), nil)
+	listener, err := quic.ListenAddr(addr, generateTLSConfig(), generateQUICConfig())
 	if err != nil {
 		return err
 	}
@@ -64,7 +70,7 @@ func clientMain() error {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-echo-example"},
 	}
-	conn, err := quic.DialAddr(context.Background(), addr, tlsConf, nil)
+	conn, err := quic.DialAddr(context.Background(), addr, tlsConf, generateQUICConfig())
 	if err != nil {
 		return err
 	}
@@ -118,8 +124,22 @@ func generateTLSConfig() *tls.Config {
 	if err != nil {
 		panic(err)
 	}
+
+	// Create a KeyLogWriter
+	keyLogFile, err := os.OpenFile("tls.keylog", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		panic(err)
+	}
+	// defer keyLogFile.Close() // TODO why not close?
+
 	return &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"quic-echo-example"},
+		KeyLogWriter: keyLogFile,
+		CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
 	}
+}
+
+func generateQUICConfig() *quic.Config {
+	return &quic.Config{}
 }

@@ -1,13 +1,11 @@
-module github.com/peter-mcconnell/dilih
+module github.com/danielpfeifer02/adaptive_moq
 
 go 1.21
 
 toolchain go1.22.0
 
-require (
-	github.com/cilium/ebpf v0.10.0
-	github.com/quic-go/quic-go v0.41.0
-)
+// github.com/quic-go/quic-go v0.41.0
+require github.com/danielpfeifer02/quic-go-no-crypto v0.41.0-1
 
 require (
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
