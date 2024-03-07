@@ -36,22 +36,23 @@ struct key_s {
     int dst_ip;
     int src_port;
     int dst_port;
+    // TODO add index to key
 };
 
 // Define a map to store one element of type struct meta
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, int);
+    __type(key, struct key_s);
     __type(value, struct meta_s);
     __uint(max_entries, MAX_ENTRIES_META);
 } meta SEC(".maps");
 
-struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __type(key, int);
-    __type(value, char);
-    __uint(max_entries, MAX_ENTRIES_PAYLOAD);
-} payload_mp SEC(".maps");
+// struct {
+//     __uint(type, BPF_MAP_TYPE_ARRAY);
+//     __type(key, int);
+//     __type(value, char);
+//     __uint(max_entries, MAX_ENTRIES_PAYLOAD);
+// } payload_mp SEC(".maps");
 
 // in userspace: "int map_fd = bpf_map_create(BPF_MAP_TYPE_ARRAY, "name", sizeof(int), sizeof(struct meta), MAX_ENTRIES, 0);"
 
@@ -210,29 +211,9 @@ int handle_ingress(struct xdp_md *ctx)
             src_connection_id[5], src_connection_id[6], src_connection_id[7], src_connection_id[8], src_connection_id[9]);
 
 
-#ifdef DEBUG
-        long_header_type_version_print((header.header_t&0x30) >> 4);
-#endif
-
-        // // this means we already have a connection id length for dst
-        // if (meta_data->dst_conn_id_len > 0) { 
-        //     if (dst_connection_id_length > 0 && dst_connection_id_length != meta_data->dst_conn_id_len) {
-        //         bpf_printk("[ingress xdp] ERROR: destination connection id length changed\n");
-        //         return XDP_PASS;
-        //     } else if (dst_connection_id_length == 0) {
-        //         dst_connection_id_length = meta_data->dst_conn_id_len;
-        //     }
-        // }
-        // if (meta_data->src_conn_id_len > 0) { // this means we already have a connection id length for src
-        //     if (src_connection_id_length > 0 && src_connection_id_length != meta_data->src_conn_id_len) {
-        //         bpf_printk("[ingress xdp] ERROR: source connection id length changed\n");
-        //         return XDP_PASS;
-        //     } else if (src_connection_id_length == 0) {
-        //         src_connection_id_length = meta_data->src_conn_id_len;
-        //     }
-        // }
-
-        // TODO way to store more than one connection id per connection
+        #ifdef DEBUG
+            long_header_type_version_print((header.header_t&0x30) >> 4);
+        #endif
 
         meta_data->dst_ids[meta_data->dst_next_index].length = dst_connection_id_length;
         for (int i=0; i<MAX_CONNECTION_ID_LENGTH; i++) {

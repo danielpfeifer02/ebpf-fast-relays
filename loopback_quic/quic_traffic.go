@@ -82,18 +82,22 @@ func clientMain() error {
 	}
 	defer stream.Close()
 
-	fmt.Printf("Client: Sending '%s'\n", message)
-	_, err = stream.Write([]byte(message))
-	if err != nil {
-		return err
-	}
+	for i := 0; i < 3; i++ {
 
-	buf := make([]byte, len(message))
-	_, err = io.ReadFull(stream, buf)
-	if err != nil {
-		return err
+		fmt.Printf("Client: Sending '%s%d'\n", message, i)
+		_, err = stream.Write([]byte(message + fmt.Sprintf("%d", i)))
+		if err != nil {
+			return err
+		}
+
+		buf := make([]byte, len(message)+1)
+		_, err = io.ReadFull(stream, buf)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Client: Got '%s'\n", buf)
+
 	}
-	fmt.Printf("Client: Got '%s'\n", buf)
 
 	return nil
 }
