@@ -5,6 +5,11 @@ package main
 // sudo sysctl -w net.core.rmem_max=2500000
 // sudo sysctl -w net.core.wmem_max=2500000
 
+// if error when fetching quic-go-no-crypto run with this env:
+// GONOSUMDB=* go mod tidy
+
+// go clean -modcache && go mod tidy
+
 import (
 	"context"
 	"crypto/rand"
@@ -18,7 +23,7 @@ import (
 	"math/big"
 	"os"
 
-	"github.com/quic-go/quic-go"
+	"github.com/danielpfeifer02/quic-go-no-crypto"
 )
 
 const addr = "localhost:4242"
@@ -131,6 +136,7 @@ func generateTLSConfig() *tls.Config {
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"quic-echo-example"},
 		KeyLogWriter: keyLogFile,
+		CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
 	}
 }
 
