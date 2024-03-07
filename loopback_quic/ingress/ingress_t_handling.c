@@ -23,6 +23,8 @@ struct meta_s {
 };
 
 struct key_s {
+    int src_ip;
+    int dst_ip;
     int src_port;
     int dst_port;
 };
@@ -71,6 +73,15 @@ int handle_ingress(struct xdp_md *ctx)
         return XDP_PASS;
     }
 
+    int ip_version = ip->version;
+    // TODO ipv6 used?
+    if (ip_version != 4) {
+        bpf_printk("[ingress xdp] ERROR: ip version is not 4\n");
+        return XDP_PASS;
+    }
+    int src_ip = ip->saddr;
+    int dst_ip = ip->daddr;
+
     // Not a UDP packet
     if (ip->protocol != IPPROTO_UDP) {
         // bpf_printk("Something was dropped (ip protocol was not upd but: %d)\n", ip->protocol);
@@ -104,6 +115,8 @@ int handle_ingress(struct xdp_md *ctx)
     bpf_printk("[ingress xdp] packet is entering (payload size: %d)\n", payload_size);
 
     struct key_s index = {
+        .src_ip = src_ip,
+        .dst_ip = dst_ip,
         .src_port = src_port,
         .dst_port = dst_port
     };
