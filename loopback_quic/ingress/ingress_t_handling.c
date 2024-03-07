@@ -12,14 +12,23 @@
 #define MAX_ENTRIES_META 16
 #define MAX_ENTRIES_PAYLOAD 256
 #define MAX_CONNECTION_ID_LENGTH 20
+#define MAX_IDS_PER_CONNECTION 4
 
 struct quic_header_wrapper {
     uint8_t header_t;
 };
 
+struct connection_id {
+    // length set to 0 if not present
+    int length;
+    unsigned char id[MAX_CONNECTION_ID_LENGTH];
+};
+
 struct meta_s {
-    int dst_conn_id_len;
-    int src_conn_id_len;
+    struct connection_id dst_ids[MAX_IDS_PER_CONNECTION]; // might need indirect map due to verifier
+    struct connection_id src_ids[MAX_IDS_PER_CONNECTION]; // - // -
+    unsigned char dst_next_index;
+    unsigned char src_next_index;
 };
 
 struct key_s {
@@ -123,25 +132,21 @@ int handle_ingress(struct xdp_md *ctx)
     struct meta_s *meta_data = bpf_map_lookup_elem(&meta, &index);
     if (meta_data == 0) {
         struct meta_s tmp = {
-            .dst_conn_id_len = 0,
-            .src_conn_id_len = 0
+            .dst_ids = {0},
+            .src_ids = {0},
+            .dst_next_index = 0,
+            .src_next_index = 0
         };
+        // TODO looks weird with scopes? undef behaviour?
         meta_data = &tmp;
         bpf_map_update_elem(&meta, &index, meta_data, BPF_ANY);
     } else {
-        bpf_printk("[ingress xdp] meta table is at %p (src (%d) conn id len: %d, dst (%d) conn id len: %d)\n", 
-        meta_data, src_port, meta_data->src_conn_id_len, dst_port, meta_data->dst_conn_id_len);
+        bpf_printk("[ingress xdp] meta table for tuple (%d %d %d %d) is at %p\n", src_ip, dst_ip, src_port, dst_port, meta_data);
     }
 
-    if (meta_data->src_conn_id_len > 20 || meta_data->dst_conn_id_len > 20) {
-        bpf_printk("[ingress xdp] ERROR: conn id length is too long\n");
-        return XDP_PASS;
-    }
+    // int short_header_conn_id_len = 4; //meta_data->dst_conn_id_len; // TODO not working yet
 
-    int short_header_conn_id_len = 4; //meta_data->dst_conn_id_len; // TODO not working yet
-
-
-    bpf_printk("[ingress xdp] short_header_conn_id_len: %d\n", short_header_conn_id_len);
+    // bpf_printk("[ingress xdp] short_header_conn_id_len: %d\n", short_header_conn_id_len);
 
     // TODO kinda useless for now since header protection still present
     // unsigned char payload_buffer[256] = {0}; // TODO size 256 enough?
@@ -227,13 +232,23 @@ int handle_ingress(struct xdp_md *ctx)
         //     }
         // }
 
-        struct meta_s meta_datas = { // TODO check if reference or copy is used (i.e. malloc needed?)
-            .dst_conn_id_len = dst_connection_id_length,
-            .src_conn_id_len = src_connection_id_length
-        };
+        // TODO way to store more than one connection id per connection
+
+        meta_data->dst_ids[meta_data->dst_next_index].length = dst_connection_id_length;
+        for (int i=0; i<MAX_CONNECTION_ID_LENGTH; i++) {
+            meta_data->dst_ids[meta_data->dst_next_index].id[i] = dst_connection_id[i];
+        }
+        // here we sort of have a ring buffer if we have more than MAX_IDS_PER_CONNECTION connection ids
+        meta_data->dst_next_index = (meta_data->dst_next_index + 1) % MAX_IDS_PER_CONNECTION;
+
+        meta_data->src_ids[meta_data->src_next_index].length = src_connection_id_length;
+        for (int i=0; i<MAX_CONNECTION_ID_LENGTH; i++) {
+            meta_data->src_ids[meta_data->src_next_index].id[i] = src_connection_id[i];
+        }
+        meta_data->src_next_index = (meta_data->src_next_index + 1) % MAX_IDS_PER_CONNECTION;
 
         // TODO update more specific based on uniquely identifying the connection
-        bpf_map_update_elem(&meta, &index, &meta_datas, BPF_ANY); 
+        bpf_map_update_elem(&meta, &index, &meta_data, BPF_ANY); 
 
     } else {
         bpf_printk("[ingress xdp] SHORT HEADER\n");

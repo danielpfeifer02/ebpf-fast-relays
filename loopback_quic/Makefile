@@ -22,6 +22,7 @@ ingress: $(BPF_INGRESS_OBJ)
 	rm -f /sys/fs/bpf/meta
 	rm -f /sys/fs/bpf/payload_mp
 #	create a map to store meta data (update value size if content changes)
+#   TODO change sizes to correct values
 	bpftool map create /sys/fs/bpf/meta type hash key 16 value 4 entries 16 name meta
 	bpftool map create /sys/fs/bpf/payload_mp type array key 4 value 1 entries 256 name payload_mp
 
