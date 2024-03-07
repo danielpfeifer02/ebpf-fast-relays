@@ -9,7 +9,9 @@
 // activate go: export PATH=$PATH:/usr/local/go/bin
 
 #define DEST_PORT 4242 // see loopback_quic/quic_traffic.go
-#define MAX_ENTRIES 16
+#define MAX_ENTRIES_META 16
+#define MAX_ENTRIES_PAYLOAD 256
+#define MAX_CONNECTION_ID_LENGTH 20
 
 struct quic_header_wrapper {
     uint8_t header_t;
@@ -30,8 +32,15 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, int);
     __type(value, struct meta_s);
-    __uint(max_entries, MAX_ENTRIES);
+    __uint(max_entries, MAX_ENTRIES_META);
 } meta SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, int);
+    __type(value, char);
+    __uint(max_entries, MAX_ENTRIES_PAYLOAD);
+} payload_mp SEC(".maps");
 
 // in userspace: "int map_fd = bpf_map_create(BPF_MAP_TYPE_ARRAY, "name", sizeof(int), sizeof(struct meta), MAX_ENTRIES, 0);"
 
@@ -122,54 +131,88 @@ int handle_ingress(struct xdp_md *ctx)
     bpf_printk("[ingress xdp] short_header_conn_id_len: %d\n", short_header_conn_id_len);
 
     // TODO kinda useless for now since header protection still present
-    unsigned char payload_buffer[256] = {0}; // TODO size 256 enough?
-    bpf_probe_read_kernel(payload_buffer, sizeof(payload_buffer), payload);
+    // unsigned char payload_buffer[256] = {0}; // TODO size 256 enough?
+    // bpf_probe_read_kernel(&payload_mp, sizeof(MAX_ENTRIES_PAYLOAD), payload);
 
 
     // TODO handle more than one quic packet in the payload
 
+    struct quic_header_wrapper header;
+    bpf_probe_read_kernel(&header, sizeof(header), payload); //TODO not ideal since only one byte?
+    if (header.header_t&0x80) {
 
-    struct quic_header_wrapper *header = (struct quic_header_wrapper *)payload_buffer; //TODO not ideal since only one byte?
-    if (header->header_t&0x80) {
-
-        // check for type == 0x02 (Handshake) to get the right conn id length
-        int type = (header->header_t&0x30) >> 4;
-        if (type != 0x02) {
-            return XDP_PASS;
+        // char long_packet_type = (header->header_t&0x30) >> 4;
+        // char packet_number_length = header->header_t&0x03;
+        int version = 0;
+        for (int i=1; i<5; i++) {
+            char tmp;
+            bpf_probe_read_kernel(&tmp, sizeof(tmp), payload+i);
+            version = version << 8 | tmp;
         }
+        // start after version field which means we have already read 5 bytes
+        int next_ptr = 5;
 
-        bpf_printk("[ingress xdp] LONG HEADER (handshake type)\n");
+        bpf_printk("[ingress xdp] LONG HEADER (for version: %d)\n", version); 
 
-        //TODO support retry packets
+        // the 6th byte of all long headers is the destination connection id length
+        unsigned char dst_connection_id_length;
+        bpf_probe_read_kernel(&dst_connection_id_length, sizeof(dst_connection_id_length), payload+next_ptr);
+        next_ptr++;
 
-        // byte 1 to 4 are the version
-        int version = payload_buffer[1] << 24 | payload_buffer[2] << 16 | payload_buffer[3] << 8 | payload_buffer[4];
-        bpf_printk("[ingress xdp] version: %d\n", version);
-
-
-        // the 6th byte is the destination connection id length
-        int dst_connection_id_length = payload_buffer[5];
-
-        // the (6 + dst_connection_id_length + 1)th byte is the source connection id length
-        int src_connection_id_length = payload_buffer[5 + dst_connection_id_length + 1];
-
-        // TODO this feels hacky but idk how to do it better yet
-        if (meta_data->dst_conn_id_len > 0) { // this means we already have a connection id length for dst
-            if (dst_connection_id_length > 0 && dst_connection_id_length != meta_data->dst_conn_id_len) {
-                bpf_printk("[ingress xdp] ERROR: destination connection id length changed\n");
-                return XDP_PASS;
-            } else if (dst_connection_id_length == 0) {
-                dst_connection_id_length = meta_data->dst_conn_id_len;
-            }
+        unsigned char dst_connection_id[MAX_CONNECTION_ID_LENGTH] = {0};
+        bpf_probe_read_kernel(&dst_connection_id, sizeof(dst_connection_id), payload+next_ptr);
+        for(int i=dst_connection_id_length; i<MAX_CONNECTION_ID_LENGTH; i++) {
+            dst_connection_id[i] = 0;
         }
-        if (meta_data->src_conn_id_len > 0) { // this means we already have a connection id length for src
-            if (src_connection_id_length > 0 && src_connection_id_length != meta_data->src_conn_id_len) {
-                bpf_printk("[ingress xdp] ERROR: source connection id length changed\n");
-                return XDP_PASS;
-            } else if (src_connection_id_length == 0) {
-                src_connection_id_length = meta_data->src_conn_id_len;
-            }
+        next_ptr += dst_connection_id_length;
+
+        // the (6 + dst_connection_id_length + 1)th byte of all long headers is 
+        // the source connection id length
+        unsigned char src_connection_id_length;
+        bpf_probe_read_kernel(&src_connection_id_length, sizeof(src_connection_id_length), payload+next_ptr);
+        next_ptr++;
+
+        unsigned char src_connection_id[MAX_CONNECTION_ID_LENGTH] = {0};
+        bpf_probe_read_kernel(&src_connection_id, sizeof(src_connection_id), payload+next_ptr);
+        for(int i=src_connection_id_length; i<MAX_CONNECTION_ID_LENGTH; i++) {
+            src_connection_id[i] = 0;
         }
+        next_ptr += src_connection_id_length;
+
+        bpf_printk("[ingress xdp] destination connection id length: %d\n", dst_connection_id_length);
+        
+        bpf_printk("[ingress xdp] destination connection id (first 10 bytes): %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", 
+            dst_connection_id[0], dst_connection_id[1], dst_connection_id[2], dst_connection_id[3], dst_connection_id[4], 
+            dst_connection_id[5], dst_connection_id[6], dst_connection_id[7], dst_connection_id[8], dst_connection_id[9]);
+        
+        bpf_printk("[ingress xdp] source connection id length: %d\n", src_connection_id_length);
+
+        bpf_printk("[ingress xdp] source connection id (first 10 bytes): %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", 
+            src_connection_id[0], src_connection_id[1], src_connection_id[2], src_connection_id[3], src_connection_id[4], 
+            src_connection_id[5], src_connection_id[6], src_connection_id[7], src_connection_id[8], src_connection_id[9]);
+
+
+#ifdef DEBUG
+        long_header_type_version_print((header.header_t&0x30) >> 4);
+#endif
+
+        // // this means we already have a connection id length for dst
+        // if (meta_data->dst_conn_id_len > 0) { 
+        //     if (dst_connection_id_length > 0 && dst_connection_id_length != meta_data->dst_conn_id_len) {
+        //         bpf_printk("[ingress xdp] ERROR: destination connection id length changed\n");
+        //         return XDP_PASS;
+        //     } else if (dst_connection_id_length == 0) {
+        //         dst_connection_id_length = meta_data->dst_conn_id_len;
+        //     }
+        // }
+        // if (meta_data->src_conn_id_len > 0) { // this means we already have a connection id length for src
+        //     if (src_connection_id_length > 0 && src_connection_id_length != meta_data->src_conn_id_len) {
+        //         bpf_printk("[ingress xdp] ERROR: source connection id length changed\n");
+        //         return XDP_PASS;
+        //     } else if (src_connection_id_length == 0) {
+        //         src_connection_id_length = meta_data->src_conn_id_len;
+        //     }
+        // }
 
         struct meta_s meta_datas = { // TODO check if reference or copy is used (i.e. malloc needed?)
             .dst_conn_id_len = dst_connection_id_length,
@@ -181,38 +224,135 @@ int handle_ingress(struct xdp_md *ctx)
 
     } else {
         bpf_printk("[ingress xdp] SHORT HEADER\n");
-        int shl = 1;
+        // int shl = 1;
 
-        if (short_header_conn_id_len == 0) { // this has the downside that we ignore packet with connection id length 0 (special case)
-            bpf_printk("[ingress xdp] connection id length not found\n");
-            return XDP_PASS;
-        }
+        // if (short_header_conn_id_len == 0) { // this has the downside that we ignore packet with connection id length 0 (special case)
+        //     bpf_printk("[ingress xdp] connection id length not found\n");
+        //     return XDP_PASS;
+        // }
 
-        // we need to get the packet number. To do that first we need the packet number length (mask: 0x03, no shift)
-        int packet_number_length = header->header_t&0x03;
-        bpf_printk("[ingress xdp] packet number length: %d\n", packet_number_length);
+        // // we need to get the packet number. To do that first we need the packet number length (mask: 0x03, no shift)
+        // int packet_number_length = header.header_t&0x03;
+        // bpf_printk("[ingress xdp] packet number length: %d\n", packet_number_length);
 
         // now we get the actual packet number (packet number length is number of bytes)
-        int packet_number = 0;
+        // int packet_number = 0;
 
         // unsigned char so that the verfication works for all packet number lengths
-        unsigned char pnoffset = shl + short_header_conn_id_len;
+        // unsigned char pnoffset = shl + short_header_conn_id_len;
 
-        if (packet_number_length == 1) {
-            packet_number = payload_buffer[pnoffset];
-        } else if (packet_number_length == 2) {
-            packet_number = payload_buffer[pnoffset] << 8 | payload_buffer[pnoffset+1];
-        } else if (packet_number_length == 3) {
-            packet_number = payload_buffer[pnoffset] << 16 | payload_buffer[pnoffset+1] << 8 | payload_buffer[pnoffset+2];
-        } else if (packet_number_length == 4) {
-            packet_number = payload_buffer[pnoffset] << 24 | payload_buffer[pnoffset+1] << 16 | payload_buffer[pnoffset+2] << 8 | payload_buffer[pnoffset+3];
-        }
+        // bpf_printk("[ingress xdp] packet number hex: %02x %02x %02x %02x\n", payload_buffer[pnoffset], payload_buffer[pnoffset+1], payload_buffer[pnoffset+2], payload_buffer[pnoffset+3]);
 
-        bpf_printk("[ingress xdp] packet number (%d bytes long): %d (based on connection id length: %d)\n", 
-                    packet_number_length, packet_number, short_header_conn_id_len);
+        // if (packet_number_length == 1) {
+        //     packet_number = payload_buffer[pnoffset];
+        // } else if (packet_number_length == 2) {
+        //     packet_number = payload_buffer[pnoffset] << 8 | payload_buffer[pnoffset+1];
+        // } else if (packet_number_length == 3) {
+        //     packet_number = payload_buffer[pnoffset] << 16 | payload_buffer[pnoffset+1] << 8 | payload_buffer[pnoffset+2];
+        // } else if (packet_number_length == 4) {
+        //     packet_number = payload_buffer[pnoffset] << 24 | payload_buffer[pnoffset+1] << 16 | payload_buffer[pnoffset+2] << 8 | payload_buffer[pnoffset+3];
+        // }
+
+        // bpf_printk("[ingress xdp] packet number (%d bytes long): %d (based on connection id length: %d)\n", 
+        //             packet_number_length, packet_number, short_header_conn_id_len);
     }
     
     return XDP_PASS;
+}
+
+void long_header_type_version_print(int long_header_type) {
+    switch(long_header_type) {
+            case 0x00:
+                bpf_printk("[ingress xdp] long packet type: initial\n");
+
+                /* Initial packet structure: 
+                    Initial Packet {
+                        Header Form (1) = 1,
+                        Fixed Bit (1) = 1,
+                        Long Packet Type (2) = 0,
+                        Reserved Bits (2),
+                        Packet Number Length (2),
+                        Version (32),
+                        Destination Connection ID Length (8),
+                        Destination Connection ID (0..160),
+                        Source Connection ID Length (8),
+                        Source Connection ID (0..160),
+                        ...
+                    }
+                    // Since we wan to decide based on the connection id we
+                    // do not care about the rest of the packet                
+                */
+
+                break;
+            case 0x01:
+                bpf_printk("[ingress xdp] long packet type: 0-RTT\n");
+
+                /* 0-RTT packet structure: 
+                    0-RTT Packet {
+                        Header Form (1) = 1,
+                        Fixed Bit (1) = 1,
+                        Long Packet Type (2) = 1,
+                        Reserved Bits (2),
+                        Packet Number Length (2),
+                        Version (32),
+                        Destination Connection ID Length (8),
+                        Destination Connection ID (0..160),
+                        Source Connection ID Length (8),
+                        Source Connection ID (0..160),
+                        ...
+                    }
+                    // Since we wan to decide based on the connection id we
+                    // do not care about the rest of the packet                
+                */
+
+                break;
+            case 0x02:
+                bpf_printk("[ingress xdp] long packet type: Handshake\n");
+
+                /* Handshake packet structure: 
+                    Handshake Packet {
+                        Header Form (1) = 1,
+                        Fixed Bit (1) = 1,
+                        Long Packet Type (2) = 2,
+                        Reserved Bits (2),
+                        Packet Number Length (2),
+                        Version (32),
+                        Destination Connection ID Length (8),
+                        Destination Connection ID (0..160),
+                        Source Connection ID Length (8),
+                        Source Connection ID (0..160),
+                        ...
+                    }
+                    // Since we wan to decide based on the connection id we
+                    // do not care about the rest of the packet                
+                */
+
+                break;
+            case 0x03:
+                bpf_printk("[ingress xdp] long packet type: Retry\n");
+
+                /* Retry packet structure: 
+                    Retry Packet {
+                        Header Form (1) = 1,
+                        Fixed Bit (1) = 1,
+                        Long Packet Type (2) = 3,
+                        Unused (4),
+                        Version (32),
+                        Destination Connection ID Length (8),
+                        Destination Connection ID (0..160),
+                        Source Connection ID Length (8),
+                        Source Connection ID (0..160),
+                        Retry Token (..),
+                        Retry Integrity Tag (128),
+                    }
+                    // Since we wan to decide based on the connection id we
+                    // do not care about the rest of the packet                
+                */
+
+                break;
+            default:
+                bpf_printk("[ingress xdp] ERROR: unknown long packet type\n");
+        }
 }
 
 char _license[] SEC("license") = "GPL";

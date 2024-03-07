@@ -20,8 +20,10 @@ ingress: $(BPF_INGRESS_OBJ)
 	rm -f $(BPF_INGRESS_PINNED_PATH)
 	
 	rm -f /sys/fs/bpf/meta
+	rm -f /sys/fs/bpf/payload_mp
 #	create a map to store meta data (update value size if content changes)
 	bpftool map create /sys/fs/bpf/meta type hash key 8 value 4 entries 16 name meta
+	bpftool map create /sys/fs/bpf/payload_mp type array key 4 value 1 entries 256 name payload_mp
 
 	bpftool prog load $(BPF_INGRESS_OBJ) $(BPF_INGRESS_PINNED_PATH)
 	bpftool net attach xdpgeneric pinned $(BPF_INGRESS_PINNED_PATH) dev $(DEV)
@@ -32,7 +34,7 @@ $(BPF_INGRESS_OBJ): ${INGRESS_PATH}/%.o: ${INGRESS_PATH}/%.c
 		-target bpf \
 	  -I../libbpf/src\
 		-Wall \
-		-Werror \
+		-fno-builtin \
 		-O2 -emit-llvm -c -o ${@:.o=.ll} $<
 	llc -march=bpf -filetype=obj -O2 -o $@ ${@:.o=.ll}
 
@@ -63,6 +65,7 @@ clean:
 	rm -f $(BPF_EGRESS_OBJ)
 	rm -f ${BPF_EGRESS_OBJ:.o=.ll}
 	rm -f /sys/fs/bpf/meta
+	rm -f /sys/fs/bpf/payload_mp
 #	tc filter del dev ${DEV} ingress
 	tc filter del dev ${DEV} egress
 	tc qdisc del dev ${DEV} clsact
