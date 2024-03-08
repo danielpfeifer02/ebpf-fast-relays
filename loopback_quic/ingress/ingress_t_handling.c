@@ -56,6 +56,56 @@ struct {
 
 // in userspace: "int map_fd = bpf_map_create(BPF_MAP_TYPE_ARRAY, "name", sizeof(int), sizeof(struct meta), MAX_ENTRIES, 0);"
 
+struct decoded_varint {
+    uint64_t value;
+    uint8_t length;
+};
+
+int decode_varint(unsigned char *data, struct decoded_varint* res) { //TODO write test
+
+    if (data == 0) {
+        // TODO error
+        bpf_printk("[ingress xdp] ERROR: data is null\n");
+        return 1;
+    }
+
+    uint64_t result = 0;
+    char first_byte = 0;
+    bpf_probe_read_kernel(&first_byte, sizeof(first_byte), data);
+    char length = 1 << ((first_byte & 0xC0) >> 6);
+    result = first_byte & 0x3F;
+
+    if (length == 2) {
+        char second_byte = 0;
+        bpf_probe_read_kernel(&second_byte, sizeof(second_byte), data + 1);
+        result = result << 8 | second_byte;
+    } else if (length == 4) {
+        char next_three_bytes[3];
+        bpf_probe_read_kernel(&next_three_bytes, sizeof(next_three_bytes), data + 1);
+        for (int i=0; i<3; i++) {
+            result = result << 8 | next_three_bytes[i];
+        }
+    } else if (length == 8) {
+        char next_seven_bytes[7];
+        bpf_probe_read_kernel(&next_seven_bytes, sizeof(next_seven_bytes), data + 1);
+        for (int i=0; i<7; i++) {
+            result = result << 8 | next_seven_bytes[i];
+        }
+    } else if (length != 1) {
+        // TODO error
+        bpf_printk("[ingress xdp] ERROR: varint length not valid\n");
+    }
+
+    if (res != 0) {
+        res->value = result;
+        res->length = length;
+        return 0;
+    }
+    return 1;
+}
+
+
+
 SEC("xdp")
 int handle_ingress(struct xdp_md *ctx)
 {
@@ -215,6 +265,7 @@ int handle_ingress(struct xdp_md *ctx)
             long_header_type_version_print((header.header_t&0x30) >> 4);
         #endif
 
+#ifdef DEBUG
         meta_data->dst_ids[meta_data->dst_next_index].length = dst_connection_id_length;
         for (int i=0; i<MAX_CONNECTION_ID_LENGTH; i++) {
             meta_data->dst_ids[meta_data->dst_next_index].id[i] = dst_connection_id[i];
@@ -230,9 +281,31 @@ int handle_ingress(struct xdp_md *ctx)
 
         // TODO update more specific based on uniquely identifying the connection
         bpf_map_update_elem(&meta, &index, &meta_data, BPF_ANY); 
+#endif
 
     } else {
         bpf_printk("[ingress xdp] SHORT HEADER\n");
+        uint8_t next_ptr = 5; // TODO set correctly
+
+        struct decoded_varint result = {0};
+        // copy into buffer where size is known to satisfy verifier
+        // TODO setup so that there is always enough bytes in the payload to parse varint
+        unsigned char payload_varint[10] = {0};
+        bpf_probe_read_kernel(&payload_varint, sizeof(payload_varint), payload+next_ptr);
+        decode_varint(payload_varint, &result);
+
+
+        // TODO check FRAME TYPE
+        // the one that is important is NEW CONNECTION ID since it adds a new connection id
+        // and RETIRE CONNECTION ID since it removes a connection id
+        /* https://datatracker.ietf.org/doc/html/rfc9000#frames
+            Frame {
+                Frame Type (i),
+                Type-Dependent Fields (..),
+            }
+        */
+
+
         // int shl = 1;
 
         // if (short_header_conn_id_len == 0) { // this has the downside that we ignore packet with connection id length 0 (special case)
