@@ -23,8 +23,11 @@ import (
 	"math/big"
 	"os"
 
-	"github.com/danielpfeifer02/quic-go-no-crypto"
+	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
+
+// "github.com/danielpfeifer02/quic-go-no-crypto"
+// "github.com/danielpfeifer02/quic-go-prio-packs"
 
 const addr = "localhost:4242"
 
@@ -33,6 +36,16 @@ const message = "foobar"
 // We start a server echoing data on the first stream the client opens,
 // then connect with a client, send the message, and wait for its receipt.
 func main() {
+
+	// Set priorities (for testing)
+	quic.PrioRetryPacket = 1
+	quic.PrioConnectionClosePacket = 1
+	quic.PrioCoalescedPacket = 1
+	quic.PrioAppendPacket = 1
+	quic.PrioProbePacket = 1
+	quic.PrioMTUProbePacket = 1
+	quic.PrioLongHeaderPacket = 1
+
 	go func() { log.Fatal(echoServer()) }()
 
 	err := clientMain()
@@ -82,18 +95,22 @@ func clientMain() error {
 	}
 	defer stream.Close()
 
-	fmt.Printf("Client: Sending '%s'\n", message)
-	_, err = stream.Write([]byte(message))
-	if err != nil {
-		return err
-	}
+	for i := 0; i < 3; i++ {
 
-	buf := make([]byte, len(message))
-	_, err = io.ReadFull(stream, buf)
-	if err != nil {
-		return err
+		fmt.Printf("Client: Sending '%s%d'\n", message, i)
+		_, err = stream.Write([]byte(message + fmt.Sprintf("%d", i)))
+		if err != nil {
+			return err
+		}
+
+		buf := make([]byte, len(message)+1)
+		_, err = io.ReadFull(stream, buf)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Client: Got '%s'\n", buf)
+
 	}
-	fmt.Printf("Client: Got '%s'\n", buf)
 
 	return nil
 }
