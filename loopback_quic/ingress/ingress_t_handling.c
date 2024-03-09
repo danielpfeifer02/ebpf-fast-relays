@@ -204,6 +204,8 @@ int handle_ingress(struct xdp_md *ctx)
     // bpf_probe_read_kernel(&payload_mp, sizeof(MAX_ENTRIES_PAYLOAD), payload);
 
 
+    char adaptive_streaming = 1; // TODO read from map set by userspace
+
     // TODO handle more than one quic packet in the payload
 
     struct quic_header_wrapper header;
@@ -285,14 +287,35 @@ int handle_ingress(struct xdp_md *ctx)
 
     } else {
         bpf_printk("[ingress xdp] SHORT HEADER\n");
-        uint8_t next_ptr = 5; // TODO set correctly
 
-        struct decoded_varint result = {0};
+        // the connection id always starts at the 6th byte
+        // we can assume based on the priority encoding that
+        // it has a length bigger than 0
+        char conn_id_start = 1;
+
+        char prio;
+        bpf_probe_read_kernel(&prio, sizeof(prio), payload+conn_id_start);
+
+        if (prio == 0x00) {
+            bpf_printk("[ingress xdp] LOW PRIORITY\n");
+            if (adaptive_streaming) {
+                return XDP_DROP;
+            }
+        } else if (prio == 0x01) {
+            bpf_printk("[ingress xdp] HIGH PRIORITY\n");
+        } else {
+            bpf_printk("[ingress xdp] ERROR: unknown priority\n");
+        }
+
+
+
+
+        // struct decoded_varint result = {0};
         // copy into buffer where size is known to satisfy verifier
         // TODO setup so that there is always enough bytes in the payload to parse varint
-        unsigned char payload_varint[10] = {0};
-        bpf_probe_read_kernel(&payload_varint, sizeof(payload_varint), payload+next_ptr);
-        decode_varint(payload_varint, &result);
+        // unsigned char payload_varint[10] = {0};
+        // bpf_probe_read_kernel(&payload_varint, sizeof(payload_varint), payload+next_ptr);
+        // decode_varint(payload_varint, &result);
 
 
         // TODO check FRAME TYPE
