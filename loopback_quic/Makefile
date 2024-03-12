@@ -23,8 +23,9 @@ ingress: $(BPF_INGRESS_OBJ)
 	rm -f /sys/fs/bpf/payload_mp
 #	create a map to store meta data (update value size if content changes)
 #   TODO change sizes to correct values
-	bpftool map create /sys/fs/bpf/meta type hash key 16 value 4 entries 16 name meta
-	bpftool map create /sys/fs/bpf/payload_mp type array key 4 value 1 entries 256 name payload_mp
+#	bpftool map create /sys/fs/bpf/meta type hash key 16 value 4 entries 16 name meta
+#	bpftool map create /sys/fs/bpf/payload_mp type array key 4 value 1 entries 256 name payload_mp
+	bpftool map create /sys/fs/bpf/adaptive_flag type array key 4 value 1 entries 1 name adaptive_flag
 
 	bpftool prog load $(BPF_INGRESS_OBJ) $(BPF_INGRESS_PINNED_PATH)
 	bpftool net attach xdpgeneric pinned $(BPF_INGRESS_PINNED_PATH) dev $(DEV)
@@ -61,12 +62,18 @@ clean:
 	-bpftool net detach xdpgeneric dev $(DEV)
 	sudo rm -f $(BPF_INGRESS_PINNED_PATH)
 	sudo rm -f $(BPF_EGRESS_PINNED_PATH)
+
+#	tc filter del dev ${DEV} ingress
+	@if [ -e "$(BPF_EGRESS_OBJ)" ]; then \
+		echo "Deleting egress TC rules"; \
+		tc filter del dev ${DEV} egress; \
+		tc qdisc del dev ${DEV} clsact; \
+	fi
+
 	rm -f $(BPF_INGRESS_OBJ)
 	rm -f ${BPF_INGRESS_OBJ:.o=.ll}
 	rm -f $(BPF_EGRESS_OBJ)
 	rm -f ${BPF_EGRESS_OBJ:.o=.ll}
-	rm -f /sys/fs/bpf/meta
-	rm -f /sys/fs/bpf/payload_mp
-#	tc filter del dev ${DEV} ingress
-	tc filter del dev ${DEV} egress
-	tc qdisc del dev ${DEV} clsact
+	rm -f /sys/fs/bpf/adaptive_flag
+#	rm -f /sys/fs/bpf/meta
+#	rm -f /sys/fs/bpf/payload_mp
