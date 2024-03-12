@@ -4,7 +4,9 @@ go 1.21
 
 toolchain go1.22.0
 
-require github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-2
+require (
+	github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-3
+)
 
 // github.com/danielpfeifer02/quic-go-no-crypto v0.41.0-1
 
