@@ -15,6 +15,15 @@ EGRESS_NAME := egress_exec
 INGRESS_NAME := ingress_exec
 DEV := lo
 
+CC = gcc
+CFLAGS = -Wall -Wextra -g
+LDFLAGS = -lbpf
+
+
+APC_SET_PATH = manage
+APC_SET = $(APC_SET_PATH)/apc_set
+APC_SET_C = $(APC_SET:=.c)
+
 ingress: $(BPF_INGRESS_OBJ)
 	-bpftool net detach xdpgeneric dev $(DEV)
 	rm -f $(BPF_INGRESS_PINNED_PATH)
@@ -25,7 +34,8 @@ ingress: $(BPF_INGRESS_OBJ)
 #   TODO change sizes to correct values
 #	bpftool map create /sys/fs/bpf/meta type hash key 16 value 4 entries 16 name meta
 #	bpftool map create /sys/fs/bpf/payload_mp type array key 4 value 1 entries 256 name payload_mp
-	bpftool map create /sys/fs/bpf/adaptive_flag type array key 4 value 1 entries 1 name adaptive_flag
+#	bpftool map create /sys/fs/bpf/adaptive_flag type array key 4 value 1 entries 1 name adaptive_flag
+
 
 	bpftool prog load $(BPF_INGRESS_OBJ) $(BPF_INGRESS_PINNED_PATH)
 	bpftool net attach xdpgeneric pinned $(BPF_INGRESS_PINNED_PATH) dev $(DEV)
@@ -58,6 +68,13 @@ $(BPF_EGRESS_OBJ): ${EGRESS_PATH}/%.o: ${EGRESS_PATH}/%.c
 		-O2 -emit-llvm -c -o ${@:.o=.ll} $<
 	llc -march=bpf -filetype=obj -O2 -o $@ ${@:.o=.ll}
 
+
+manage: $(APC_SET)
+	sudo chmod 777 /sys/fs/bpf/adaptive_flag
+
+$(APC_SET): $(APC_SET_C)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 clean:
 	-bpftool net detach xdpgeneric dev $(DEV)
 	sudo rm -f $(BPF_INGRESS_PINNED_PATH)
@@ -74,6 +91,7 @@ clean:
 	rm -f ${BPF_INGRESS_OBJ:.o=.ll}
 	rm -f $(BPF_EGRESS_OBJ)
 	rm -f ${BPF_EGRESS_OBJ:.o=.ll}
+	rm -f $(APC_SET)
 	rm -f /sys/fs/bpf/adaptive_flag
 #	rm -f /sys/fs/bpf/meta
 #	rm -f /sys/fs/bpf/payload_mp

@@ -9,3 +9,10 @@ Execute 'sudo make egress' inside of the directory 'loopback_quic/'
 
 ## Remove all packet handlers ##
 Execute 'sudo make clean' inside of the directory 'loopback_quic/'
+
+## Run the example of adaptive packet handling ##
+0)  Navigate inside the 'loopback_quic' folder
+1)  Execute 'sudo make ingress' to build and run the eBPF program inside the kernel
+2)  Execute 'go run quic_traffic.go' to create some quic traffic on the system
+    (you should see both high and low priority messages being transmitted)
+3)  Change ...

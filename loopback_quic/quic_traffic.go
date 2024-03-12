@@ -14,7 +14,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 	"os"
 
@@ -27,13 +26,19 @@ const message = "foobar"
 
 // We start a server echoing data on the first stream the client opens,
 // then connect with a client, send the message, and wait for its receipt.
-func main() {
-	go func() { log.Fatal(echoServer()) }()
+func mainTraffic() {
+	go func() {
+		err := echoServer()
+		if err != nil {
+			panic(err)
+		}
+	}()
 
 	err := clientMain()
 	if err != nil {
 		panic(err)
 	}
+
 }
 
 // Start a server that echos all data on the first stream opened by the client
@@ -66,7 +71,10 @@ func echoServer() error {
 		// Echo through the loggingWriter
 		_, err = io.Copy(loggingWriter{stream}, stream)
 		if err != nil {
-			panic(err)
+			// TODO:	causes a application error panic?
+			//			happening when the client closes the connection?
+			// panic(err)
+			return
 		}
 	}(stream)
 
@@ -84,7 +92,10 @@ func echoServer() error {
 	// Echo through the loggingWriter
 	_, err = io.Copy(loggingWriter{stream2}, stream2)
 	if err != nil {
-		panic(err)
+		// TODO:	causes a application error panic?
+		//			happening when the client closes the connection?
+		// panic(err)
+		return nil
 	}
 
 	return nil

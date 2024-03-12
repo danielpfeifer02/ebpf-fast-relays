@@ -20,6 +20,7 @@ struct {
     __type(key, int);
     __type(value, char);
     __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } adaptive_flag SEC(".maps");
 
 SEC("xdp")
