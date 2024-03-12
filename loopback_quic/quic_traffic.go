@@ -16,6 +16,7 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"time"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
@@ -24,21 +25,43 @@ const addr = "localhost:4242"
 
 const message = "foobar"
 
+func createTraffic(timeout int) {
+	done := make(chan struct{})
+	go clientServerPair(done)
+
+	timer := time.NewTimer(time.Duration(timeout) * time.Second)
+
+	select {
+	case <-done:
+		return
+	case <-timer.C:
+		fmt.Print("\n\n\t### Execution timed out. Exiting... ###\n\n\n")
+		return
+	}
+}
+
 // We start a server echoing data on the first stream the client opens,
 // then connect with a client, send the message, and wait for its receipt.
-func mainTraffic() {
+func clientServerPair(done chan struct{}) {
 	go func() {
+		// time.AfterFunc(5*time.Second, func() {
+		// 	fmt.Println("Error setting APC:", "timeout")
+		// 	close(done)
+		// 	runtime.Goexit()
+		// })
 		err := echoServer()
 		if err != nil {
 			panic(err)
 		}
+		// since we essentially are influencing whether the server
+		// gets packets we need to make sure it can be timed (see createTraffic)
+		close(done)
 	}()
 
 	err := clientMain()
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 // Start a server that echos all data on the first stream opened by the client
@@ -49,9 +72,12 @@ func echoServer() error {
 	}
 	defer listener.Close()
 
+	// timedContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
 	// Accept the incoming connection from the client
 	conn, err := listener.Accept(context.Background())
 	if err != nil {
+		// cancel()
 		return err
 	}
 
@@ -60,7 +86,6 @@ func echoServer() error {
 	if err != nil {
 		panic(err)
 	}
-	defer stream.Close()
 
 	// TODO: AcceptStream seems to not return the stream with the same priority?
 	// fmt.Printf("Prio stream one (serverside): %d\n", stream.Priority())
@@ -68,6 +93,7 @@ func echoServer() error {
 	// Handle the first stream opened by the client
 	// in a separate goroutine
 	go func(stream quic.Stream) {
+		defer stream.Close()
 		// Echo through the loggingWriter
 		_, err = io.Copy(loggingWriter{stream}, stream)
 		if err != nil {
@@ -83,12 +109,12 @@ func echoServer() error {
 	if err2 != nil {
 		panic(err2)
 	}
-	defer stream2.Close()
 
 	// fmt.Printf("Prio stream two (serverside): %d\n", stream2.Priority())
 
 	// Handle the second stream opened by the client
 	// in the current goroutine
+	defer stream2.Close()
 	// Echo through the loggingWriter
 	_, err = io.Copy(loggingWriter{stream2}, stream2)
 	if err != nil {
@@ -98,6 +124,7 @@ func echoServer() error {
 		return nil
 	}
 
+	// cancel()
 	return nil
 }
 

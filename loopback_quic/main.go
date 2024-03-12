@@ -83,7 +83,7 @@ func main() {
 			clearScreen()
 			fmt.Print("\nRunning example traffic...\n\n")
 			fmt.Print("========================\n\n")
-			mainTraffic()
+			createTraffic(5)
 			fmt.Print("========================\n\n")
 			printMenu()
 		case 4:
