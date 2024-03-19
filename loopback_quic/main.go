@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 )
 
 const adaptiveFlagMapPath = "/sys/fs/bpf/adaptive_flag"
@@ -17,7 +19,8 @@ func printMenu() {
 	fmt.Println("1. Enable Adaptive Priority Control (APC)")
 	fmt.Println("2. Disable Adaptive Priority Control (APC)")
 	fmt.Println("3. Run example QUIC traffic")
-	fmt.Println("4. Exit")
+	fmt.Println("4. Toggle crypto turn off")
+	fmt.Println("5. Exit")
 }
 
 func clearScreen() {
@@ -87,6 +90,14 @@ func main() {
 			fmt.Print("========================\n\n")
 			printMenu()
 		case 4:
+			clearScreen()
+			fmt.Print("\n\n\n")
+			// turn off crypto
+			crypto_turnoff.CRYPTO_TURNED_OFF = !crypto_turnoff.CRYPTO_TURNED_OFF
+			fmt.Println("Crypto turned off:", crypto_turnoff.CRYPTO_TURNED_OFF)
+			fmt.Print("\n\n\n")
+			printMenu()
+		case 5:
 			clearScreen()
 			fmt.Print("\nExiting...\n\n")
 			time.Sleep(1 * time.Second)

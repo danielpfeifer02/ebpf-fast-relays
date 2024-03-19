@@ -26,6 +26,10 @@ const addr = "localhost:4242"
 const message = "foobar"
 
 func createTraffic(timeout int) {
+
+	// // turn off crypto
+	// crypto_turnoff.CRYPTO_TURNED_OFF = true
+
 	done := make(chan struct{})
 	go clientServerPair(done)
 
@@ -66,6 +70,8 @@ func clientServerPair(done chan struct{}) {
 
 // Start a server that echos all data on the first stream opened by the client
 func echoServer() error {
+	// delete tls.keylog file if present
+	os.Remove("tls.keylog")
 	listener, err := quic.ListenAddr(addr, generateTLSConfig(), generateQUICConfig())
 	if err != nil {
 		return err

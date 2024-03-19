@@ -4,11 +4,10 @@ go 1.21
 
 toolchain go1.22.0
 
-require (
-	github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-3
-)
+require github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-4
 
 // github.com/danielpfeifer02/quic-go-no-crypto v0.41.0-1
+// github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-4
 
 require (
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
