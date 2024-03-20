@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     // Open the BPF map
     int map_fd = bpf_obj_get(map_path);
     if (map_fd < 0) {
-        printf("Error opening BPF map");
+        printf("Error opening BPF map\n");
         return 1;
     }
 
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     int old_value = 0;
     // Retrieve BPF map element
     if (bpf_map_lookup_elem(map_fd, &key, &old_value) != 0) {
-        printf("Error looking up BPF map element");
+        printf("Error looking up BPF map element\n");
         close(map_fd);
         return 1;
     }
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
     // Update BPF map element
     if (bpf_map_update_elem(map_fd, &key, &acn_flag, BPF_ANY) != 0) {
-        printf("Error updating BPF map element");
+        printf("Error updating BPF map element\n");
         close(map_fd);
         return 1;
     }

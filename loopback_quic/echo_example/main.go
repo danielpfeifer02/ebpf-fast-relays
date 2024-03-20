@@ -35,7 +35,8 @@ func clearScreen() {
 }
 
 func setAPC(value string) {
-	cmd := exec.Command("./manage/apc_set", "-p", adaptiveFlagMapPath, "-v", value)
+	// TODO get error opening BPF map? used to work?
+	cmd := exec.Command("../manage/apc_set", "-p", adaptiveFlagMapPath, "-v", value)
 	cmd.Stdout = os.Stdout
 	err := cmd.Run()
 	if err != nil {
@@ -106,7 +107,7 @@ func main() {
 		default:
 			clearScreen()
 			printMenu()
-			fmt.Println("\nInvalid choice. Please choose a number between 1 and 4.")
+			fmt.Println("\nInvalid choice. Please choose a number between 1 and 5.")
 		}
 	}
 }
