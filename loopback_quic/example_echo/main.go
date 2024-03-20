@@ -53,6 +53,7 @@ func main() {
 	clearScreen()
 	fmt.Print("\n\n\n")
 	printMenu()
+	fmt.Print("\n (don't forget to make targets \"ingress\" and \"manage\" first, in said order)\n\n")
 
 	for {
 
