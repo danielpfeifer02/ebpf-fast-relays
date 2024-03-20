@@ -236,7 +236,31 @@ int tc_egress(struct __sk_buff *skb)
                         return TC_ACT_OK;
                 }
 
-                bpf_printk("[egress tc] packet is leaving (duplicate pn: %d)", *pn);
+                // get packet number length
+                unsigned char pn_len = -1;
+                int pn_len_offset = 0;
+                bpf_probe_read_kernel(&pn_len, sizeof(pn_len), payload + pn_len_offset);
+                pn_len &= 0x03;
+                pn_len += 1;
+
+                if (pn_len != 2) {
+                        bpf_printk("[egress tc] ERROR: packet number length is not 2\n");
+                        return TC_ACT_OK;
+                }
+
+                // set the packet number in packet
+                // int pn_offset = 16 + 1;
+                // uint32_t pn_n = htonl(*pn);
+                // char * pn_n_c = (char *) &pn_n;
+                uint16_t pn16 = (*pn) << 8 | (*pn) >> 8;
+                int off = sizeof(*eth) + sizeof(*ip) + sizeof(*udp) + 16 + 1;
+                bpf_skb_store_bytes(skb, off, &pn16, 2, BPF_F_RECOMPUTE_CSUM);
+
+                // increase the packet number by one in map
+                *pn += 1;
+                bpf_map_update_elem(&pn_ctr, &index, pn, BPF_ANY);
+                
+                bpf_printk("[egress tc] packet is leaving (duplicate pn: %d)", pn16);
                 return TC_ACT_OK;
         }
 
