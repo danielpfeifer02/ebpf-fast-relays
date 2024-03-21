@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 )
 
 const sleeping_time = 1 * time.Second
@@ -34,6 +36,8 @@ func main() {
 }
 
 func main_advanced() {
+
+	crypto_turnoff.CRYPTO_TURNED_OFF = true
 
 	args := os.Args
 	if len(args) != 2 {
