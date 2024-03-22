@@ -50,6 +50,7 @@ func main_advanced() {
 		scanner := bufio.NewScanner(os.Stdin)
 
 		server := NewStreamingServer()
+
 		go server.run()
 
 		for {

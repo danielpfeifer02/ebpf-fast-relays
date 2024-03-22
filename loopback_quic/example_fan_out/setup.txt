@@ -1,0 +1,11 @@
+The (logical) setup of the server-relay-client connection looks like this:
+
+
+|                               interface: veth1                        interface: veth3
+|                               ip: 192.168.1.2/24                      ip: 192.168.1.4/24
+|             interface: veth0       \              interface: veth2       \
+|             ip: 192.168.1.1/24      \             ip: 192.168.1.3/24      \
+|__________  /                         \  _______  /                         \  __________ 
+|          |/                           \|       |/                           \|          |
+|  Server  |-------> veth0@veth1 ------->| Relay |-------> veth2@veth3 ------->|  Client  |
+|__________|<------- veth1@veth0 <-------|_______|<------- veth3@veth2 <-------|__________|

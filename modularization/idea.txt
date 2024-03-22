@@ -19,12 +19,8 @@ packet is received by the relay. Then, without going up the network stack of the
 relay, the packet is directly redirected using bpf_redirect.
 
 
-ifindex's are:
-
-veth1/veth0: 12
-veth0/veth1: 13
-veth3/veth2: 14
-veth2/veth3: 15 
+ifindex's are printed when doing 'sudo make interface'
+(has to be done the first time after reboot) 
 
 
 

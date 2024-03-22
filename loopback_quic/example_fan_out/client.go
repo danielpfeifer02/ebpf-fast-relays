@@ -49,7 +49,7 @@ func (c *StreamingClient) connectToServer() error {
 		NextProtos:         []string{"quic-streaming-example"},
 	}
 	fmt.Println("C: Dialing address")
-	conn, err := quic.DialAddr(context.Background(), addr, tlsConf, generateQUICConfig())
+	conn, err := quic.DialAddr(context.Background(), relay_addr, tlsConf, generateQUICConfig())
 	if err != nil {
 		return err
 	}
