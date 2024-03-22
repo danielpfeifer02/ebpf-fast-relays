@@ -114,12 +114,16 @@ type RelayServer struct {
 
 var _ Server = &RelayServer{}
 
+// TODO check which maps are actually needed
 func NewRelayServer() *RelayServer {
 	return &RelayServer{
-		conn_chan:      make(chan quic.Connection),
-		stream_chan:    make(chan quic.Stream),
-		interrupt_chan: make(chan bool),
-		stream_list:    make([]quic.Stream, 0),
+		conn_chan:               make(chan quic.Connection),
+		stream_chan:             make(chan quic.Stream),
+		interrupt_chan:          make(chan bool),
+		stream_list:             make([]quic.Stream, 0),
+		stream_pairs:            make(map[quic.Stream]quic.Stream),
+		connection_pairs:        make(map[quic.Connection]quic.Connection),
+		stream_connection_pairs: make(map[quic.Stream]quic.Connection),
 	}
 }
 
