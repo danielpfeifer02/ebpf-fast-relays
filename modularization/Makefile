@@ -43,8 +43,8 @@ interface:
 	sudo ip link set dev veth1 up
 
 	sudo ip link add veth2 type veth peer name veth3
-	sudo ip addr add 192.168.1.1/24 dev veth2
-	sudo ip addr add 192.168.1.2/24 dev veth3
+	sudo ip addr add 192.168.1.3/24 dev veth2
+	sudo ip addr add 192.168.1.4/24 dev veth3
 	sudo ip link set dev veth2 up
 	sudo ip link set dev veth3 up
 
