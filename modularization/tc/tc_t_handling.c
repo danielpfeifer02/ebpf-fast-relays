@@ -17,6 +17,11 @@
 	__attribute__((section(NAME), used))
 #endif
 
+#define veth0_veth1 6
+#define veth1_veth0 7
+#define veth2_veth3 8
+#define veth3_veth2 9
+
 __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
 {
@@ -37,7 +42,7 @@ int tc_ingress(struct __sk_buff *skb)
         // redirection would work.
         if (eth->h_proto == htons(ETH_P_ARP)) {
                 bpf_printk("[ingress tc] packet entered ingress and will be redirected to egress!\n");
-                return bpf_redirect(15, 0);
+                return bpf_redirect(veth2_veth3, 0);
         }
 
         return TC_ACT_OK;
