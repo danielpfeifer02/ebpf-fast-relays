@@ -18,6 +18,7 @@ func NewStreamingClient() *StreamingClient {
 	}
 }
 
+// TODO structure better
 func (c *StreamingClient) run() {
 
 	// for now only one stream is supported

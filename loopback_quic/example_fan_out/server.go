@@ -126,8 +126,10 @@ func NewRelayServer() *RelayServer {
 func (s *RelayServer) run() error {
 	listener, err := quic.ListenAddr(relay_addr, generateTLSConfig(), generateQUICConfig())
 	if err != nil {
+		fmt.Printf("Error: %v\n", err)
 		return err
 	}
+	fmt.Println("R: Relay up")
 
 	done := make(chan struct{})
 
@@ -167,7 +169,7 @@ func (s *RelayServer) run() error {
 				s.stream_pairs[stream] = server_stream
 				s.stream_pairs[server_stream] = stream
 
-				// set listening routine for the new stream correctly
+				go passOnTraffic(server_stream, stream)
 
 				fmt.Println("R: New stream added")
 
@@ -203,20 +205,19 @@ func (s *RelayServer) run() error {
 	return nil
 }
 
-func (s *RelayServer) connectToServer(clientConnection quic.Connection) error {
-	// dial address
-
-	// fmt.Println("R: Opening stream")
-	// // Open a new stream with high priority
-	// stream, err := conn.OpenStreamSyncWithPriority(context.Background(), quic.HighPriority)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// fmt.Println("R: Appending stream")
-	// s.stream_list = append(s.stream_list, stream)
-
-	return nil
+func passOnTraffic(recv_stream quic.Stream, send_stream quic.Stream) error {
+	for {
+		buf := make([]byte, 1024)
+		n, err := recv_stream.Read(buf)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
+		_, err = send_stream.Write(buf[:n])
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func connectionAcceptWrapper(listener *quic.Listener, channel chan quic.Connection) {
