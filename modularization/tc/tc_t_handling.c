@@ -18,9 +18,9 @@
 #endif
 
 #define veth0_veth1 6
-#define veth1_veth0 7
+#define veth1_veth0 5
 #define veth2_veth3 8
-#define veth3_veth2 9
+#define veth3_veth2 7
 
 __section("ingress")
 int tc_ingress(struct __sk_buff *skb)

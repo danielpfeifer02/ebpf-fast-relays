@@ -9,3 +9,8 @@ The (logical) setup of the server-relay-client connection looks like this:
 |          |/                           \|       |/                           \|          |
 |  Server  |-------> veth0@veth1 ------->| Relay |-------> veth2@veth3 ------->|  Client  |
 |__________|<------- veth1@veth0 <-------|_______|<------- veth3@veth2 <-------|__________|
+
+
+
+TODO:
+set local addr of relay and client accordingly so that hooking to interface works correctly

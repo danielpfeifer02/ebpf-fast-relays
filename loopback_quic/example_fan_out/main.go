@@ -41,11 +41,13 @@ func main_advanced() {
 
 	args := os.Args
 	if len(args) != 2 {
-		fmt.Printf("Usage: go run *.go (server|client|relay)\n", args[0])
+		fmt.Printf("Usage: go run *.go (server|client)\n", args[0])
 		return
 	}
 
 	if args[1] == "server" {
+
+		crypto_turnoff.CRYPTO_TURNED_OFF = true
 
 		scanner := bufio.NewScanner(os.Stdin)
 
@@ -91,6 +93,8 @@ func main_advanced() {
 
 	} else if args[1] == "client" {
 
+		clearScreen()
+
 		client := NewStreamingClient()
 		client.connectToServer()
 		client.run()
@@ -101,7 +105,9 @@ func main_advanced() {
 		// 	relay.run()
 
 	} else {
-		fmt.Printf("Usage: go run %s (server|client|relay)\n", args[0])
+
+		fmt.Printf("Usage: go run %s (server|client)\n", args[0])
+
 	}
 
 }
