@@ -1,6 +1,8 @@
 The (logical) setup of the server-relay-client connection looks like this:
 
 
+Logical setup:
+
 |                               interface: veth1                        interface: veth3
 |                               ip: 192.168.1.2/24                      ip: 192.168.1.4/24
 |             interface: veth0       \              interface: veth2       \
@@ -12,5 +14,44 @@ The (logical) setup of the server-relay-client connection looks like this:
 
 
 
+
+
+Actual setup (using bridge and namespaces):
+|
+|______________________                      _____________________                      ______________________
+|                      |                    |                     |                    |                      |
+|   Server namespace   |                    |   Relay namespace   |                    |   Client namespace   |
+|      ___________     |                    |  _______   _______  |                    |      ___________     |
+|_____|___veth0___|____|                    |_|_veth1_|_|_veth2_|_|                    |_____|___veth3___|____|
+|           \                                     /         \                                      /
+|            \                                   /           \                                    /
+|             \                                 /             \                                  /
+|              \                               /               \                                /
+|               \ ___________________________ /                 \ ____________________________ /
+|               /veth0-br|           |veth1-br\                 /veth2-br|            |veth3-br\
+|               |                             |                 |                              |
+|               \_Bridge ser-rel__________|NAT/                 \NAT|___________Bridge rel-cli_/
+|                                           \                     /
+|                                            \                   /
+|                                             \   ___________   /
+|                                               /             \
+|                                              |   enp1s0f0    |
+|                                               \ ___________ /
+|                                                      |
+|                                                      |
+|                                                   INTERNET
+
+TODO:
+    add used ip addresses
+
+
+    
+This setup with bridges that allow additional internet access is needed since the namespaces will need to 
+execute go programs that require downloading some go packages initially. For that reason a simple direct
+veth connection between the namesapces would not work.
+
+
 TODO:
 set local addr of relay and client accordingly so that hooking to interface works correctly
+
+
