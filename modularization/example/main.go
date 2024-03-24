@@ -13,6 +13,8 @@ func main() {
 	ip := "192.168.1.2" // shouldnt matter
 	numberOfPings := 5
 
+	fmt.Println("Make sure to use tc_poc_handling.c in Makefile ($TC should be set to \"tc_poc\")!")
+
 	done := make(chan bool)
 	go readFromTracingPipe(done)
 

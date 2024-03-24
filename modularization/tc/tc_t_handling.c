@@ -17,35 +17,36 @@
 	__attribute__((section(NAME), used))
 #endif
 
-#define veth0_veth1 6
-#define veth1_veth0 5
-#define veth2_veth3 8
-#define veth3_veth2 7
+#define veth2_egress_ifindex 187
 
 __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
 {
 
-        void *data = (void *)(long)skb->data;
-        void *data_end = (void *)(long)skb->data_end;
+        // void *data = (void *)(long)skb->data;
+        // void *data_end = (void *)(long)skb->data_end;
 
-        if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
-                return TC_ACT_OK; // Not enough data
-        }
+        // if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
+        //         return TC_ACT_OK; // Not enough data
+        // }
 
-        // Load ethernet header
-        struct ethhdr *eth = (struct ethhdr *)data;
+        // // Load ethernet header
+        // struct ethhdr *eth = (struct ethhdr *)data;
 
-        // Since ping packets start with an ARP packet and 
-        // we don't really car about the exact type of the
-        // packet here, we can just use ARP to show how the
-        // redirection would work.
-        if (eth->h_proto == htons(ETH_P_ARP)) {
-                bpf_printk("[ingress tc] packet entered ingress and will be redirected to egress!\n");
-                return bpf_redirect(veth2_veth3, 0);
-        }
+        // Before redirecting we need to: 
 
-        return TC_ACT_OK;
+        //      1) change src ethernet 
+        //      2) change dst ethernet
+        //      3) change src ip
+        //      4) change dst ip
+        //      5) change dst port (or set it in code)
+        //      6) change connection id (setup maps for that)
+
+        // TODO: also filter for direction so that connection establishment from client is not affected
+
+        bpf_printk("[ingress tc] packet entered ingress and will be redirected to egress!\n");
+        return bpf_redirect(veth2_egress_ifindex, 0);
+
 }
 
 __section("egress")

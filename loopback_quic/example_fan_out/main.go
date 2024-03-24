@@ -35,6 +35,8 @@ func main() {
 	main_advanced()
 }
 
+// TODO: fix timeout issues when there is no stuff happening
+
 func main_advanced() {
 
 	crypto_turnoff.CRYPTO_TURNED_OFF = true

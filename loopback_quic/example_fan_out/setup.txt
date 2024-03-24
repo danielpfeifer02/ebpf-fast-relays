@@ -42,7 +42,7 @@ Actual setup (using bridge and namespaces):
 |                                                  (INTERNET)
 
 TODO:
-    add used ip addresses
+    create one sh script for both bridge creations
 
 
 

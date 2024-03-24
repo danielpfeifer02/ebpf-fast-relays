@@ -1,4 +1,4 @@
-TC = tc_t
+TC = tc_t # tc_poc
 TC_PATH = tc
 BPF_TC = ${TC_PATH}/${TC:=_handling}
 BPF_TC_C = ${BPF_TC:=.c}
