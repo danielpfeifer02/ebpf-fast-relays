@@ -36,7 +36,7 @@ fi
 if ip link show | grep -q "${BRIDGE_INTERFACE}"; then
     echo "deleting ${BRIDGE_INTERFACE}"
     ip link set dev ${BRIDGE_INTERFACE} down
-    ip link del ${BRIDGE_INTERFACE}
+    brctl delbr ${BRIDGE_INTERFACE}
 fi
 # Remove server veth counterpart in bridge if it exists
 if ip link show | grep -q "${SERVER_VETH_PEER}"; then
@@ -89,6 +89,7 @@ ip -n ${RELAY_NS} link set lo up
 # Set default route for server towards bridge
 ip addr add ${BRIDGE_IP}/24 dev ${BRIDGE_INTERFACE}
 ip -n ${SERVER_NS} route add default via ${BRIDGE_IP}
+ip -n ${RELAY_NS} route add default via ${BRIDGE_IP}
 
 # Set NAT for bridge
 iptables --table nat -A POSTROUTING -s ${BRIDGE_NET_ADDR}/24 -j MASQUERADE
@@ -100,3 +101,7 @@ echo 1 > /proc/sys/net/ipv4/ip_forward
 ip netns exec ${SERVER_NS} mkdir -p /etc/netns/${SERVER_NS}
 ip netns exec ${SERVER_NS} echo "nameserver 8.8.8.8" > /etc/netns/${SERVER_NS}/resolv.conf
 ip netns exec ${SERVER_NS} echo "nameserver 8.8.4.4" >> /etc/netns/${SERVER_NS}/resolv.conf
+
+ip netns exec ${RELAY_NS} mkdir -p /etc/netns/${RELAY_NS}
+ip netns exec ${RELAY_NS} echo "nameserver 8.8.8.8" > /etc/netns/${RELAY_NS}/resolv.conf
+ip netns exec ${RELAY_NS} echo "nameserver 8.8.4.4" >> /etc/netns/${RELAY_NS}/resolv.conf
