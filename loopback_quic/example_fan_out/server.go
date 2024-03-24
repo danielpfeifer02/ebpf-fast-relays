@@ -13,8 +13,8 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
 
-const server_addr = "192.168.1.1:4242"
-const relay_addr = "192.168.1.3:4242"
+const server_addr = "192.168.10.1:4242"
+const relay_addr = "192.168.11.2:4242"
 
 type StreamingStream struct {
 	stream     quic.Stream
@@ -130,7 +130,7 @@ func NewRelayServer() *RelayServer {
 func (s *RelayServer) run() error {
 	listener, err := quic.ListenAddr(relay_addr, generateTLSConfig(), generateQUICConfig())
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
+		fmt.Printf("\nError: %v\n", err)
 		return err
 	}
 	fmt.Println("R: Relay up")

@@ -18,34 +18,34 @@ Logical setup:
 
 Actual setup (using bridge and namespaces):
 |
-|______________________                      _____________________                      ______________________
-|                      |                    |                     |                    |                      |
-|   Server namespace   |                    |   Relay namespace   |                    |   Client namespace   |
-|      ___________     |                    |  _______   _______  |                    |      ___________     |
-|_____|___veth0___|____|                    |_|_veth1_|_|_veth2_|_|                    |_____|___veth3___|____|
-|           \                                     /         \                                      /
-|            \                                   /           \                                    /
-|             \                                 /             \                                  /
-|              \                               /               \                                /
-|               \ ___________________________ /                 \ ____________________________ /
-|               /veth0-br|           |veth1-br\                 /veth2-br|            |veth3-br\
-|               |                             |                 |                              |
-|               \_Bridge ser-rel__________|NAT/                 \NAT|___________Bridge rel-cli_/
-|                                           \                     /
-|                                            \                   /
-|                                             \   ___________   /
+|______________________               _______________________________________              ______________________
+|   Server namespace   |             |            Relay namespace            |            |   Client namespace   |
+|      ___________     |             |    ______________   ______________    |            |     ____________     |
+|    |192.168.10.1|    |             |   | 192.168.10.2 | | 192.168.11.2 |   |            |    |192.168.11.1|    |
+|____|___veth0____|____|             |___|____veth1_____|_|____veth2_____|___|            |____|____veth3___|____|
+|           \                                  /                 \                                   /
+|            \                                /                   \                                 /
+|             \                              /                     \                               /
+|              \                            /                       \                             /
+|               \ ________________________ /_                      __\ _________________________ /
+|               /veth0-br|           |veth1-br\                   /veth2-br|            |veth3-br\
+|               |                          ___|                   |___                           |
+|               \_____v-net-0_____________|NAT/                   \NAT|_______________v-net-1____/
+|                       /                   \                     /                     /
+|               ip: 192.168.10.10            \                   /              ip: 192.168.11.10
+|               net: 192.168.10.0/24          \   ___________   /               net: 192.168.11.0/24
 |                                               /             \
 |                                              |   enp1s0f0    |
 |                                               \ ___________ /
 |                                                      |
 |                                                      |
-|                                                   INTERNET
+|                                                  (INTERNET)
 
 TODO:
     add used ip addresses
 
 
-    
+
 This setup with bridges that allow additional internet access is needed since the namespaces will need to 
 execute go programs that require downloading some go packages initially. For that reason a simple direct
 veth connection between the namesapces would not work.

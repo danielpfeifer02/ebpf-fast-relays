@@ -52,10 +52,8 @@ func main_advanced() {
 		scanner := bufio.NewScanner(os.Stdin)
 
 		server := NewStreamingServer()
-		relay := NewRelayServer()
 
 		go server.run()
-		go relay.run()
 
 		for {
 			clearScreen()
@@ -99,10 +97,10 @@ func main_advanced() {
 		client.connectToServer()
 		client.run()
 
-		// } else if args[1] == "relay" {
+	} else if args[1] == "relay" {
 
-		// 	relay := NewRelayServer()
-		// 	relay.run()
+		relay := NewRelayServer()
+		relay.run()
 
 	} else {
 
