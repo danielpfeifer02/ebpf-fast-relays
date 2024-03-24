@@ -5,10 +5,10 @@ set -x euo -pipefail
 CLIENT_NS="client_ns"
 RELAY_NS="relay_ns"
 
-CLIENT_VETH="veth2"
-RELAY_VETH="veth3"
-CLIENT_VETH_PEER="veth2-br"
-RELAY_VETH_PEER="veth3-br"
+CLIENT_VETH="veth3"
+RELAY_VETH="veth2"
+CLIENT_VETH_PEER="veth3-br"
+RELAY_VETH_PEER="veth2-br"
 
 CLIENT_VETH_ADDR="192.168.11.1"
 RELAY_VETH_ADDR="192.168.11.2"
