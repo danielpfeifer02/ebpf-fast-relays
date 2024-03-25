@@ -45,6 +45,7 @@ int tc_ingress(struct __sk_buff *skb)
         // TODO: also filter for direction so that connection establishment from client is not affected
 
         bpf_printk("[ingress tc] packet entered ingress and will be redirected to egress!\n");
+        return TC_ACT_OK;
         return bpf_redirect(veth2_egress_ifindex, 0);
 
 }
@@ -52,9 +53,25 @@ int tc_ingress(struct __sk_buff *skb)
 __section("egress")
 int tc_egress(struct __sk_buff *skb)
 {
-
-        bpf_printk("[egress tc] packet entered egress and will be dropped!\n");
-        return TC_ACT_SHOT;
+        bpf_printk("[egress tc] packet entered egress and will not be dropped!\n");
+        return TC_ACT_OK;
 }
 
 char __license[] __section("license") = "GPL";
+
+
+/*
+        Basic setup how the ingress-to-egress redirection should work:
+
+        First we get a packet we have not seen before (i.e. we don't know how to forward it yet).
+        
+        We determine such a packet by checking the connection id map, which maps ingress quic 
+        connection id to egress quic connection id. (TODO feels like this might get weird)
+        
+        At egress we also check a map based on the connection id as a key and if there is no 
+        entry, we create a new one that stores all the information we need at the ingress hook
+        (i.e. MAC addresses, IP addresses, ports, etc.)
+
+        Once this map is set every packet at ingress will have access to these values and can
+        directly modify the packet and forward it to the egress interface.
+*/

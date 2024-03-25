@@ -105,3 +105,6 @@ ip netns exec ${SERVER_NS} echo "nameserver 8.8.4.4" >> /etc/netns/${SERVER_NS}/
 ip netns exec ${RELAY_NS} mkdir -p /etc/netns/${RELAY_NS}
 ip netns exec ${RELAY_NS} echo "nameserver 8.8.8.8" > /etc/netns/${RELAY_NS}/resolv.conf
 ip netns exec ${RELAY_NS} echo "nameserver 8.8.4.4" >> /etc/netns/${RELAY_NS}/resolv.conf
+
+# TODO: remove later (for now not that big of a deal)
+iptables -P FORWARD ACCEPT

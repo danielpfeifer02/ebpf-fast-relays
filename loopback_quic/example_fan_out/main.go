@@ -101,6 +101,8 @@ func main_advanced() {
 
 	} else if args[1] == "relay" {
 
+		clearScreen()
+
 		relay := NewRelayServer()
 		relay.run()
 
