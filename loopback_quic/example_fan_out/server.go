@@ -103,13 +103,12 @@ func (s *StreamingServer) sendToAll(message string) {
 }
 
 type RelayServer struct {
-	conn_chan               chan quic.Connection
-	stream_chan             chan quic.Stream
-	interrupt_chan          chan bool
-	stream_list             []quic.Stream
-	stream_pairs            map[quic.Stream]quic.Stream
-	connection_pairs        map[quic.Connection]quic.Connection
-	stream_connection_pairs map[quic.Stream]quic.Connection
+	conn_chan         chan quic.Connection
+	stream_chan       chan quic.Stream
+	interrupt_chan    chan bool
+	stream_list       []quic.Stream
+	server_connection quic.Connection
+	server_stream     quic.Stream
 }
 
 var _ Server = &RelayServer{}
@@ -117,13 +116,12 @@ var _ Server = &RelayServer{}
 // TODO check which maps are actually needed
 func NewRelayServer() *RelayServer {
 	return &RelayServer{
-		conn_chan:               make(chan quic.Connection),
-		stream_chan:             make(chan quic.Stream),
-		interrupt_chan:          make(chan bool),
-		stream_list:             make([]quic.Stream, 0),
-		stream_pairs:            make(map[quic.Stream]quic.Stream),
-		connection_pairs:        make(map[quic.Connection]quic.Connection),
-		stream_connection_pairs: make(map[quic.Stream]quic.Connection),
+		conn_chan:         make(chan quic.Connection),
+		stream_chan:       make(chan quic.Stream),
+		interrupt_chan:    make(chan bool),
+		stream_list:       make([]quic.Stream, 0),
+		server_connection: nil,
+		server_stream:     nil,
 	}
 }
 
@@ -157,42 +155,38 @@ func (s *RelayServer) run() error {
 				done <- struct{}{}
 				return
 
-			// TODO create new stream to the server
 			case stream := <-s.stream_chan:
 				s.stream_list = append(s.stream_list, stream)
 
-				client_connection := s.stream_connection_pairs[stream]
-
-				// Open a new stream with high priority to server
-				server_connection := s.connection_pairs[client_connection]
-				server_stream, err := server_connection.OpenStreamSyncWithPriority(context.Background(), quic.HighPriority)
-				if err != nil {
-					panic(err)
+				if s.server_stream == nil {
+					if s.server_connection == nil {
+						panic("Server connection not initialized")
+					}
+					server_stream, err := s.server_connection.OpenStreamSyncWithPriority(context.Background(), quic.HighPriority)
+					if err != nil {
+						panic(err)
+					}
+					s.server_stream = server_stream
+					go passOnTraffic(s)
 				}
-
-				s.stream_pairs[stream] = server_stream
-				s.stream_pairs[server_stream] = stream
-
-				go passOnTraffic(server_stream, stream)
 
 				fmt.Println("R: New stream added")
 
-			// TODO create new stream to the server
 			case conn := <-s.conn_chan:
 				fmt.Println("R: New connection accepted")
 
-				tlsConf := &tls.Config{
-					InsecureSkipVerify: true,
-					NextProtos:         []string{"quic-streaming-example"},
+				if s.server_connection == nil {
+					tlsConf := &tls.Config{
+						InsecureSkipVerify: true,
+						NextProtos:         []string{"quic-streaming-example"},
+					}
+					fmt.Println("R: Dialing server address")
+					conn_to_server, err := quic.DialAddr(context.Background(), server_addr, tlsConf, generateQUICConfig())
+					if err != nil {
+						panic(err)
+					}
+					s.server_connection = conn_to_server
 				}
-				fmt.Println("R: Dialing server address")
-				conn_to_server, err := quic.DialAddr(context.Background(), server_addr, tlsConf, generateQUICConfig())
-				if err != nil {
-					panic(err)
-				}
-
-				s.connection_pairs[conn] = conn_to_server
-				s.connection_pairs[conn_to_server] = conn
 
 				go streamAcceptWrapperRelay(conn, s)
 			}
@@ -209,17 +203,19 @@ func (s *RelayServer) run() error {
 	return nil
 }
 
-func passOnTraffic(recv_stream quic.Stream, send_stream quic.Stream) error {
+func passOnTraffic(relay *RelayServer) error {
 	for {
 		buf := make([]byte, 1024)
-		n, err := recv_stream.Read(buf)
+		n, err := relay.server_stream.Read(buf)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
-		_, err = send_stream.Write(buf[:n])
-		if err != nil {
-			return err
+		for _, send_stream := range relay.stream_list {
+			_, err = send_stream.Write(buf[:n])
+			if err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -240,7 +236,6 @@ func streamAcceptWrapperRelay(connection quic.Connection, s *RelayServer) {
 		if err != nil {
 			panic(err)
 		}
-		s.stream_connection_pairs[stream] = connection
 		s.stream_chan <- stream
 	}
 }
