@@ -27,8 +27,9 @@ func clearScreen() {
 
 func printMenu() {
 	fmt.Println("Menu:")
-	fmt.Println("1. Send a message to all clients")
-	fmt.Println("2. Exit")
+	fmt.Println("1. Send a high-prio message to all clients")
+	fmt.Println("2. Send a low-prio message to all clients")
+	fmt.Println("3. Exit")
 }
 
 func main() {
@@ -43,7 +44,7 @@ func main_advanced() {
 
 	args := os.Args
 	if len(args) != 2 {
-		fmt.Printf("Usage: go run *.go (server|client)\n", args[0])
+		fmt.Printf("Usage: go run *.go (server|client|relay)\n", args[0])
 		return
 	}
 
@@ -76,10 +77,14 @@ func main_advanced() {
 
 			switch choice {
 			case 1:
-				fmt.Println("Sending message to all clients")
-				server.sendToAll("foobar")
+				fmt.Println("Sending high-prio message to all clients")
+				server.sendToAllHigh("foobar high")
 				time.Sleep(sleeping_time)
 			case 2:
+				fmt.Println("Sending low-prio message to all clients")
+				server.sendToAllLow("foobar low")
+				time.Sleep(sleeping_time)
+			case 3:
 				fmt.Println("Exiting")
 				server.interrupt_chan <- true
 				time.Sleep(sleeping_time)
@@ -108,7 +113,7 @@ func main_advanced() {
 
 	} else {
 
-		fmt.Printf("Usage: go run %s (server|client)\n", args[0])
+		fmt.Printf("Usage: go run %s (server|client|relay)\n", args[0])
 
 	}
 
@@ -127,7 +132,7 @@ func main_basic() {
 	client.connectToServer()
 	time.Sleep(sleeping_time)
 
-	server.sendToAll("Hello, World!")
+	server.sendToAllHigh("Hello, World!")
 	time.Sleep(sleeping_time)
 
 	fmt.Println("Sending interrupt")

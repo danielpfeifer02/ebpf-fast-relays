@@ -2,7 +2,7 @@
 
 set -x
 
-clear 
+clear
 
 CLIENT_NS="client_ns"
 

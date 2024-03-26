@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"os/exec"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
@@ -26,10 +27,12 @@ type Server interface {
 }
 
 type StreamingServer struct {
-	conn_chan      chan quic.Connection
-	stream_chan    chan quic.Stream
-	interrupt_chan chan bool
-	stream_list    []quic.Stream
+	conn_chan        chan quic.Connection
+	stream_chan      chan quic.Stream
+	interrupt_chan   chan bool
+	stream_list      []quic.Stream
+	high_prio_stream quic.Stream
+	low_prio_stream  quic.Stream
 }
 
 var _ Server = &StreamingServer{}
@@ -40,6 +43,9 @@ func NewStreamingServer() *StreamingServer {
 		stream_chan:    make(chan quic.Stream),
 		interrupt_chan: make(chan bool),
 		stream_list:    make([]quic.Stream, 0),
+		// TODO set high_prio_stream and low_prio_stream
+		high_prio_stream: nil,
+		low_prio_stream:  nil,
 	}
 }
 
@@ -93,13 +99,22 @@ func (s *StreamingServer) run() error {
 	return nil
 }
 
-func (s *StreamingServer) sendToAll(message string) {
-	for _, stream := range s.stream_list {
-		_, err := stream.Write([]byte(message))
-		if err != nil {
-			panic(err)
-		}
+func sendToAll(stream *quic.Stream, message string) {
+	_, err := (*stream).Write([]byte(message))
+	if err != nil {
+		panic(err)
 	}
+}
+
+func (s *StreamingServer) sendToAllHigh(message string) {
+	// sendToAll(s.high_prio_stream, message)
+	for _, stream := range s.stream_list {
+		sendToAll(&stream, message)
+	}
+}
+
+func (s *StreamingServer) sendToAllLow(message string) {
+	// sendToAll(s.low_prio_stream, message)
 }
 
 type RelayServer struct {
@@ -126,6 +141,7 @@ func NewRelayServer() *RelayServer {
 }
 
 func (s *RelayServer) run() error {
+
 	listener, err := quic.ListenAddr(relay_addr, generateTLSConfig(), generateQUICConfig())
 	if err != nil {
 		fmt.Printf("\nError: %v\n", err)
@@ -134,6 +150,8 @@ func (s *RelayServer) run() error {
 	fmt.Println("R: Relay up")
 
 	done := make(chan struct{})
+
+	clearBPFMaps()
 
 	// separate goroutine that handles all connections, interrupts and message sendings
 	go func() {
@@ -203,6 +221,23 @@ func (s *RelayServer) run() error {
 	return nil
 }
 
+// TODO this is probably not the most elegant way to clear the BPF maps
+func clearBPFMaps() {
+
+	paths := []string{"client_data", "client_id", "id_counter", "number_of_clients"}
+	map_location := "/sys/fs/bpf/tc/globals/"
+
+	for _, path := range paths {
+		cmd := exec.Command("./clear_bpf_map", map_location+path)
+		stdout, err := cmd.Output()
+		if err != nil {
+			fmt.Printf(string(stdout))
+			panic(err)
+		}
+		fmt.Println(string(stdout))
+	}
+}
+
 func passOnTraffic(relay *RelayServer) error {
 	for {
 		buf := make([]byte, 1024)
@@ -232,7 +267,7 @@ func connectionAcceptWrapper(listener *quic.Listener, channel chan quic.Connecti
 
 func streamAcceptWrapperRelay(connection quic.Connection, s *RelayServer) {
 	for {
-		stream, err := connection.AcceptStream(context.Background())
+		stream, err := connection.AcceptStream(context.TODO())
 		if err != nil {
 			panic(err)
 		}
@@ -241,8 +276,9 @@ func streamAcceptWrapperRelay(connection quic.Connection, s *RelayServer) {
 }
 
 func streamAcceptWrapperServer(connection quic.Connection, channel chan quic.Stream) {
+	ctx := context.TODO()
 	for {
-		stream, err := connection.AcceptStream(context.Background())
+		stream, err := connection.AcceptStream(ctx)
 		if err != nil {
 			panic(err)
 		}
