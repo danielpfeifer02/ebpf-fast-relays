@@ -13,10 +13,13 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 )
 
 const server_addr = "192.168.10.1:4242"
 const relay_addr = "192.168.11.2:4242"
+
+const bpf_enabled = false
 
 type StreamingStream struct {
 	stream     quic.Stream
@@ -152,17 +155,35 @@ func (s *RelayServer) run() error {
 
 	done := make(chan struct{})
 
-	clearBPFMaps()
+	// Just for the compiler to not complain
+	var number_of_clients *ebpf.Map
+	var client_ctr uint32
+	if bpf_enabled {
+		clearBPFMaps()
 
-	number_of_clients, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/number_of_clients", &ebpf.LoadPinOptions{})
-	if err != nil {
-		panic(err)
+		number_of_clients, err = ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/number_of_clients", &ebpf.LoadPinOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		client_ctr := uint32(0)
+
+		// set number of clients to 0
+		err = number_of_clients.Update(uint32(0), client_ctr, 0)
+		if err != nil {
+			panic(err)
+		}
+
+		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		err = connection_map.Update(uint32(0), uint8(0), 0)
+		if err != nil {
+			panic(err)
+		}
 	}
-
-	client_ctr := uint32(0)
-
-	// set number of clients to 0
-	err = number_of_clients.Update(uint32(0), client_ctr, 0)
 
 	// separate goroutine that handles all connections, interrupts and message sendings
 	go func() {
@@ -204,12 +225,14 @@ func (s *RelayServer) run() error {
 			case conn := <-s.conn_chan:
 				fmt.Println("R: New connection accepted")
 
-				client_ctr++
-				err = number_of_clients.Update(uint32(0), client_ctr, 0)
-				if err != nil {
-					panic(err)
+				if bpf_enabled {
+					client_ctr++
+					err = number_of_clients.Update(uint32(0), client_ctr, 0)
+					if err != nil {
+						panic(err)
+					}
+					fmt.Printf("R: Number of clients is now: %d\n", client_ctr)
 				}
-				fmt.Printf("R: Number of clients is now: %d\n", client_ctr)
 
 				if s.server_connection == nil {
 					tlsConf := &tls.Config{
@@ -222,6 +245,18 @@ func (s *RelayServer) run() error {
 						panic(err)
 					}
 					s.server_connection = conn_to_server
+					fmt.Print("R: Connected to server\n")
+
+					if bpf_enabled {
+						connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
+						if err != nil {
+							panic(err)
+						}
+						err = connection_map.Update(uint32(0), uint8(1), 0)
+						if err != nil {
+							panic(err)
+						}
+					}
 				}
 
 				go streamAcceptWrapperRelay(conn, s)
@@ -339,5 +374,7 @@ func generateTLSConfig() *tls.Config {
 }
 
 func generateQUICConfig() *quic.Config {
-	return &quic.Config{}
+	return &quic.Config{
+		Tracer: qlog.DefaultTracer,
+	}
 }

@@ -17,11 +17,12 @@
 	__attribute__((section(NAME), used))
 #endif
 
-#define veth2_egress_ifindex 187
+#define veth2_egress_ifindex 14
 #define CONN_ID_LEN 16
 #define MAC_LEN 6
 #define MAX_CLIENTS 1024
 #define RELAY_PORT 4242
+#define SERVER_PORT 4242
 #define PORT_MARKER 6969
 
 // this key is used to make sure that we can check if a client is already in the map
@@ -92,6 +93,14 @@ struct {
     __uint(max_entries, 1);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } packet_counter SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, uint32_t);
+    __type(value, uint8_t);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} connection_established SEC(".maps");
 
 __section("ingress_startup")
 int tc_ingress_startup(struct __sk_buff *skb)
@@ -242,8 +251,27 @@ int tc_ingress_startup(struct __sk_buff *skb)
 __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
 {
+
+        // load connection_established map
+        uint32_t zero = 0;
+        uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &zero);
+        if (conn_est == NULL) {
+                bpf_printk("No connection established found\n");
+                return TC_ACT_OK;
+        }
+        if (*conn_est == 0) {
+                bpf_printk("Connection not established\n");
+                return TC_ACT_OK;
+        }
+
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
+
+        // TODO hacky for now since i know the payload / packet size
+        uint32_t sz = skb->data_end - skb->data;
+        if (sz > 100) {
+                return TC_ACT_OK;
+        }
 
         if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
                 return TC_ACT_OK; // Not enough data
@@ -264,7 +292,7 @@ int tc_ingress(struct __sk_buff *skb)
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
         // Check if the packet is QUIC
-        if (udp->dest != htons(RELAY_PORT)) {
+        if (udp->source != htons(SERVER_PORT)) {
                 return TC_ACT_OK;
         }
 
@@ -301,6 +329,8 @@ int tc_ingress(struct __sk_buff *skb)
                         return TC_ACT_OK;
                 }
 
+                bpf_printk("Short header - redirecting for %d clients\n", *num_clients);
+
                 // set packet_counter to 0
                 uint32_t pack_ctr = 0;
                 bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
@@ -316,6 +346,7 @@ int tc_ingress(struct __sk_buff *skb)
                         if (i >= *num_clients) {
                                 break;
                         }
+                        bpf_printk("DEBUG: Redirecting packet\n");
                         bpf_redirect(veth2_egress_ifindex, 0);
                 }
 
@@ -392,7 +423,7 @@ int tc_egress(struct __sk_buff *skb)
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
         // Check if the packet is QUIC
-        if (udp->dest != htons(RELAY_PORT)) {
+        if (udp->source != htons(RELAY_PORT) && udp->source != htons(PORT_MARKER)) { // TODO change to SERVER_PORT or PORT_MARKER once it is sent?
                 return TC_ACT_OK;
         }
 
@@ -432,6 +463,11 @@ int tc_egress(struct __sk_buff *skb)
                 uint32_t zero = 0;
                 uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
 
+                if (pack_ctr == NULL) {
+                        bpf_printk("No packet counter found\n");
+                        return TC_ACT_OK;
+                }
+
 
                 // get pack_ctr-th client data
                 struct client_info_t *value;
@@ -465,14 +501,14 @@ int tc_egress(struct __sk_buff *skb)
                 // bpf_probe_write(&ip->daddr, &value->dst_ip_addr, sizeof(value->dst_ip_addr));
 
                 // set src_port to value->src_port
-                uint16_t src_port_tmp = sizeof(struct ethhdr) + sizeof(struct iphdr);
-                uint32_t src_port_tmp_off = (void *)&udp->source - (void *)skb->data;
+                uint16_t src_port_tmp = value->src_port;
+                uint32_t src_port_tmp_off = sizeof(struct ethhdr) + sizeof(struct iphdr);
                 bpf_skb_store_bytes(skb, src_port_tmp_off, &src_port_tmp, sizeof(src_port_tmp), 0);
                 // bpf_probe_write(&udp->source, &src_port_tmp, sizeof(src_port_tmp));
 
                 // set dst_port to value->dst_port
-                uint16_t dst_port_tmp = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
-                uint32_t dst_port_tmp_off = (void *)&udp->dest - (void *)skb->data;
+                uint16_t dst_port_tmp = value->dst_port;
+                uint32_t dst_port_tmp_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
                 bpf_skb_store_bytes(skb, dst_port_tmp_off, &dst_port_tmp, sizeof(dst_port_tmp), 0);
                 // bpf_probe_write(&udp->dest, &dst_port_tmp, sizeof(dst_port_tmp));
 
@@ -484,6 +520,8 @@ int tc_egress(struct __sk_buff *skb)
                 // set pack_ctr to pack_ctr + 1 and write it back
                 *pack_ctr = *pack_ctr + 1;
                 bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
+
+                bpf_printk("Done editing packet\n");
         
         }
 
