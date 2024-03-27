@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"os/exec"
 
+	"github.com/cilium/ebpf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
 
@@ -153,6 +154,16 @@ func (s *RelayServer) run() error {
 
 	clearBPFMaps()
 
+	number_of_clients, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/number_of_clients", &ebpf.LoadPinOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	client_ctr := uint32(0)
+
+	// set number of clients to 0
+	err = number_of_clients.Update(uint32(0), client_ctr, 0)
+
 	// separate goroutine that handles all connections, interrupts and message sendings
 	go func() {
 
@@ -192,6 +203,13 @@ func (s *RelayServer) run() error {
 
 			case conn := <-s.conn_chan:
 				fmt.Println("R: New connection accepted")
+
+				client_ctr++
+				err = number_of_clients.Update(uint32(0), client_ctr, 0)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("R: Number of clients is now: %d\n", client_ctr)
 
 				if s.server_connection == nil {
 					tlsConf := &tls.Config{

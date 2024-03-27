@@ -70,6 +70,7 @@ clean:
 		rm -f /sys/fs/bpf/tc/globals/client_data; \
 		rm -f /sys/fs/bpf/tc/globals/number_of_clients; \
 		rm -f /sys/fs/bpf/tc/globals/client_id; \
+		rm -f /sys/fs/bpf/tc/globals/packet_counter; \
 	fi
 
 	rm -f $(BPF_TC_OBJ)

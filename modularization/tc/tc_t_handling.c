@@ -22,6 +22,7 @@
 #define MAC_LEN 6
 #define MAX_CLIENTS 1024
 #define RELAY_PORT 4242
+#define PORT_MARKER 6969
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -32,9 +33,12 @@ struct client_info_key_t {
 };
 
 struct client_info_t {
-        uint8_t mac[MAC_LEN];
-        uint32_t ip_addr;
-        uint16_t port;
+        uint8_t src_mac[MAC_LEN];
+        uint8_t dst_mac[MAC_LEN];
+        uint32_t src_ip_addr;
+        uint32_t dst_ip_addr;
+        uint16_t src_port;
+        uint16_t dst_port;
         uint8_t connection_id[CONN_ID_LEN];
 };
 
@@ -80,6 +84,14 @@ struct {
     __uint(max_entries, 1);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } id_counter SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, uint32_t);
+    __type(value, uint32_t);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} packet_counter SEC(".maps");
 
 __section("ingress_startup")
 int tc_ingress_startup(struct __sk_buff *skb)
@@ -146,10 +158,6 @@ int tc_ingress_startup(struct __sk_buff *skb)
                 // 0x01 - 0-RTT
                 // 0x02 - Handshake
                 // 0x03 - Retry
-                // For now we only care about 0-RTT packets
-                // if (packet_type != 0x01) {
-                //         return TC_ACT_OK;
-                // }
 
                 // Load connection id
                 uint8_t dst_connection_id_offset = 6;
@@ -161,27 +169,39 @@ int tc_ingress_startup(struct __sk_buff *skb)
                 bpf_probe_read_kernel(dst_connection_id, sizeof(dst_connection_id), payload + dst_connection_id_offset);
                 bpf_probe_read_kernel(src_connection_id, sizeof(src_connection_id), payload + src_connection_id_offset);
 
-                uint8_t mac[MAC_LEN];
-                bpf_probe_read_kernel(mac, sizeof(mac), eth->h_source);
-                uint32_t ip_addr;
-                bpf_probe_read_kernel(&ip_addr, sizeof(ip_addr), &ip->saddr);
-                uint16_t port;
-                bpf_probe_read_kernel(&port, sizeof(port), &udp->source);
+                uint8_t src_mac[MAC_LEN]; // mac address of the client
+                bpf_probe_read_kernel(src_mac, sizeof(src_mac), eth->h_source);
+                uint8_t dst_mac[MAC_LEN]; // mac address of the relay
+                bpf_probe_read_kernel(dst_mac, sizeof(dst_mac), eth->h_dest);
+                uint32_t src_ip_addr; // ip address of the client
+                bpf_probe_read_kernel(&src_ip_addr, sizeof(src_ip_addr), &ip->saddr);
+                uint32_t dst_ip_addr; // ip address of the relay
+                bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
+                uint16_t src_port; // port of the client
+                bpf_probe_read_kernel(&src_port, sizeof(src_port), &udp->source);
+                uint16_t dst_port; // port of the relay
+                bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
 
                 struct client_info_key_t key = {
-                        .ip_addr = ip_addr,
-                        .port = port
+                        .ip_addr = src_ip_addr, // identifying will be the ip of the client
+                        .port = src_port,       // and the port of the client
                 };
 
                 struct client_info_t value = {
-                        .mac = {0},
-                        .ip_addr = ip_addr,
-                        .port = port,
+                        .src_mac = {0},
+                        .dst_mac = {0},
+                        .src_ip_addr = dst_ip_addr, // the source ip will be the ip of the relay
+                        .dst_ip_addr = src_ip_addr, // the destination ip will be the ip of the client
+                        .src_port = dst_port, // the source port will be the port of the relay
+                        .dst_port = src_port, // the destination port will be the port of the client
                         .connection_id = {0},
                 };
 
                 for (int i = 0; i < MAC_LEN; i++) {
-                        value.mac[i] = mac[i];
+                        value.src_mac[i] = dst_mac[i]; // the source mac will be the mac of the relay
+                }
+                for (int i = 0; i < MAC_LEN; i++) {
+                        value.dst_mac[i] = src_mac[i]; // the destination mac will be the mac of the client
                 }
                 for (int i = 0; i < CONN_ID_LEN; i++) {
                         value.connection_id[i] = src_connection_id[i];
@@ -222,10 +242,89 @@ int tc_ingress_startup(struct __sk_buff *skb)
 __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
 {
+        void *data = (void *)(long)skb->data;
+        void *data_end = (void *)(long)skb->data_end;
+
+        if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
+                return TC_ACT_OK; // Not enough data
+        }
+
+        // Load ethernet header
+        struct ethhdr *eth = (struct ethhdr *)data;
+
+        // Load IP header
+        struct iphdr *ip = (struct iphdr *)(eth + 1);
+
+        // Check if the packet is UDP
+        if (ip->protocol != IPPROTO_UDP) {
+                return TC_ACT_OK;
+        }
+
+        // Load UDP header
+        struct udphdr *udp = (struct udphdr *)(ip + 1);
+
+        // Check if the packet is QUIC
+        if (udp->dest != htons(RELAY_PORT)) {
+                return TC_ACT_OK;
+        }
+
+        // Load UDP payload
+        void *payload = (void *)(udp + 1);
+        uint32_t payload_size = ntohs(udp->len) - sizeof(*udp);
+
+        if ((void *)payload + payload_size > data_end) {
+
+                bpf_printk("[ingress startup tc] payload is not in the buffer");
+
+                // We need to use bpf_skb_pull_data() to get the rest of the packet
+                if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
+                        bpf_printk("[ingress startup tc] failed to pull data");
+                        return TC_ACT_OK;
+                }
+                data_end = (void *)(long)skb->data_end;
+                data = (void *)(long)skb->data;
+        
+        }
+
+        uint8_t quic_flags;
+        bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
+        uint8_t header_form = (quic_flags & 0x80) >> 7;
+
+        // redirecting short header packets
+        if (header_form == 0) {
+
+                // get number of clients
+                uint32_t zero = 0;
+                uint32_t *num_clients = bpf_map_lookup_elem(&number_of_clients, &zero);
+                if (num_clients == NULL) {
+                        bpf_printk("No number of clients found\n");
+                        return TC_ACT_OK;
+                }
+
+                // set packet_counter to 0
+                uint32_t pack_ctr = 0;
+                bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
+
+                // set src_port to PORT_MARKER
+                uint16_t src_port = htons(PORT_MARKER);
+                // get offset of src_port
+                uint32_t src_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr);
+                bpf_skb_store_bytes(skb, src_port_off, &src_port, sizeof(src_port), 0);
+                // bpf_probe_write(&udp->source, &src_port, sizeof(src_port));
+
+                for (int i=0; i<MAX_CLIENTS; i++) {
+                        if (i >= *num_clients) {
+                                break;
+                        }
+                        bpf_redirect(veth2_egress_ifindex, 0);
+                }
+
+                return TC_ACT_SHOT;
+        
+        }
 
         // bpf_printk("[ingress tc]\n");
         return TC_ACT_OK;
-        return bpf_redirect(veth2_egress_ifindex, 0);
 
 }
 
@@ -254,37 +353,139 @@ int tc_egress(struct __sk_buff *skb)
 
         // TODO: also filter for direction so that connection establishment from client is not affected
 
-
-        // // go through all map entries
-        // struct client_info_key_t key, prev_key;
+        // // go through all entries in the map cliend_data
+        // uint32_t key = 0;
         // struct client_info_t *value;
-        // key = prev_key = (struct client_info_key_t){0};
-        // while(bpf_map_get_next_key(&client_data, &prev_key, &key) == 0) {
+        // for (int i = 0; i < MAX_CLIENTS; i++) {
         //         value = bpf_map_lookup_elem(&client_data, &key);
-        //         if(value == 0) {
-        //                 bpf_printk("No value found\n");
-        //         } else {
+        //         if(value != 0) {
         //                 bpf_printk("Value found\n");
+        //                 bpf_printk("Client id: %d\n", key);
+        //                 bpf_printk("MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", value->mac[0], value->mac[1], value->mac[2], value->mac[3], value->mac[4], value->mac[5]);
+        //                 bpf_printk("IP: %d\n", value->ip_addr);
+        //                 bpf_printk("Port: %d\n", value->port);
+        //                 bpf_printk("Connection id: %02x %02x %02x\n", value->connection_id[0], value->connection_id[1], value->connection_id[2]);
         //         }
-        //         prev_key=key;
+        //         key++;
         // }
 
-        // go through all entries in the map cliend_data
-        uint32_t key = 0;
-        struct client_info_t *value;
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-                value = bpf_map_lookup_elem(&client_data, &key);
-                if(value != 0) {
-                        bpf_printk("Value found\n");
-                        bpf_printk("Client id: %d\n", key);
-                        bpf_printk("MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", value->mac[0], value->mac[1], value->mac[2], value->mac[3], value->mac[4], value->mac[5]);
-                        bpf_printk("IP: %d\n", value->ip_addr);
-                        bpf_printk("Port: %d\n", value->port);
-                        bpf_printk("Connection id: %02x %02x %02x\n", value->connection_id[0], value->connection_id[1], value->connection_id[2]);
-                }
-                key++;
+
+        void *data = (void *)(long)skb->data;
+        void *data_end = (void *)(long)skb->data_end;
+
+        if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
+                return TC_ACT_OK; // Not enough data
         }
 
+        // Load ethernet header
+        struct ethhdr *eth = (struct ethhdr *)data;
+
+        // Load IP header
+        struct iphdr *ip = (struct iphdr *)(eth + 1);
+
+        // Check if the packet is UDP
+        if (ip->protocol != IPPROTO_UDP) {
+                return TC_ACT_OK;
+        }
+
+        // Load UDP header
+        struct udphdr *udp = (struct udphdr *)(ip + 1);
+
+        // Check if the packet is QUIC
+        if (udp->dest != htons(RELAY_PORT)) {
+                return TC_ACT_OK;
+        }
+
+        // Load UDP payload
+        void *payload = (void *)(udp + 1);
+        uint32_t payload_size = ntohs(udp->len) - sizeof(*udp);
+
+        if ((void *)payload + payload_size > data_end) {
+
+                bpf_printk("[ingress startup tc] payload is not in the buffer");
+
+                // We need to use bpf_skb_pull_data() to get the rest of the packet
+                if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
+                        bpf_printk("[ingress startup tc] failed to pull data");
+                        return TC_ACT_OK;
+                }
+                data_end = (void *)(long)skb->data_end;
+                data = (void *)(long)skb->data;
+        
+        }
+
+        uint8_t quic_flags;
+        bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
+        uint8_t header_form = (quic_flags & 0x80) >> 7;
+
+        // redirecting short header packets
+        if (header_form == 0) {
+
+                // check src_port for PORT_MARKER
+                uint16_t src_port;
+                bpf_probe_read_kernel(&src_port, sizeof(src_port), &udp->source);
+                if (src_port != htons(PORT_MARKER)) {
+                        return TC_ACT_OK;
+                }
+
+                // get packet_counter
+                uint32_t zero = 0;
+                uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+
+
+                // get pack_ctr-th client data
+                struct client_info_t *value;
+
+                // TODO this assumes that they are linear in the map (verify)
+                value = bpf_map_lookup_elem(&client_data, pack_ctr);
+
+                if (value == NULL) {
+                        bpf_printk("No client data found\n");
+                        return TC_ACT_SHOT;
+                }
+
+                // set src_mac to value->src_mac
+                uint32_t src_mac_off = 7 /* Präamble */ + 1 /* SFD */ + 6 /* DST MAC */;
+                bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0);
+                // bpf_probe_write(eth->h_source, value->src_mac, MAC_LEN);
+
+                // set dst_mac to value->dst_mac
+                uint32_t dst_mac_off = 7 /* Präamble */ + 1 /* SFD */;
+                bpf_skb_store_bytes(skb, dst_mac_off, value->dst_mac, MAC_LEN, 0);
+                // bpf_probe_write(eth->h_dest, value->dst_mac, MAC_LEN);
+
+                // set src_ip to value->src_ip_addr
+                uint32_t src_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */;
+                bpf_skb_store_bytes(skb, src_ip_off, &value->src_ip_addr, sizeof(value->src_ip_addr), 0);
+                // bpf_probe_write(&ip->saddr, &value->src_ip_addr, sizeof(value->src_ip_addr));
+
+                // set dst_ip to value->dst_ip_addr
+                uint32_t dst_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */ +  4 /* SRC IP */;
+                bpf_skb_store_bytes(skb, dst_ip_off, &value->dst_ip_addr, sizeof(value->dst_ip_addr), 0);
+                // bpf_probe_write(&ip->daddr, &value->dst_ip_addr, sizeof(value->dst_ip_addr));
+
+                // set src_port to value->src_port
+                uint16_t src_port_tmp = sizeof(struct ethhdr) + sizeof(struct iphdr);
+                uint32_t src_port_tmp_off = (void *)&udp->source - (void *)skb->data;
+                bpf_skb_store_bytes(skb, src_port_tmp_off, &src_port_tmp, sizeof(src_port_tmp), 0);
+                // bpf_probe_write(&udp->source, &src_port_tmp, sizeof(src_port_tmp));
+
+                // set dst_port to value->dst_port
+                uint16_t dst_port_tmp = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
+                uint32_t dst_port_tmp_off = (void *)&udp->dest - (void *)skb->data;
+                bpf_skb_store_bytes(skb, dst_port_tmp_off, &dst_port_tmp, sizeof(dst_port_tmp), 0);
+                // bpf_probe_write(&udp->dest, &dst_port_tmp, sizeof(dst_port_tmp));
+
+                // set connection_id to value->connection_id
+                uint32_t conn_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
+                bpf_skb_store_bytes(skb, conn_id_off, value->connection_id, CONN_ID_LEN, 0);
+                // bpf_probe_write(payload + 1, value->connection_id, CONN_ID_LEN);
+
+                // set pack_ctr to pack_ctr + 1 and write it back
+                *pack_ctr = *pack_ctr + 1;
+                bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
+        
+        }
 
         // bpf_printk("[egress tc]\n");
         return TC_ACT_OK;
