@@ -11,6 +11,8 @@
 
 // https://github.com/iproute2/iproute2.git
 
+// bpf_skb_store_bytes flag for CSUM: BPF_F_RECOMPUTE_CSUM
+
 
 #ifndef __section
 # define __section(NAME)                  \
@@ -24,6 +26,7 @@
 #define RELAY_PORT 4242
 #define SERVER_PORT 4242
 #define PORT_MARKER 6969
+#define SKB_FLAGS BPF_F_RECOMPUTE_CSUM
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -331,23 +334,64 @@ int tc_ingress(struct __sk_buff *skb)
 
                 bpf_printk("Short header - redirecting for %d clients\n", *num_clients);
 
-                // set packet_counter to 0
-                uint32_t pack_ctr = 0;
+                // set packet_counter to 1 // ARGH TODO probably not working bc of concurrency (maybe some hash map to look up ctr value for a packet?)
+                uint32_t pack_ctr = 1;
                 bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
 
-                // set src_port to PORT_MARKER
-                uint16_t src_port = htons(PORT_MARKER);
-                // get offset of src_port
-                uint32_t src_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr);
-                bpf_skb_store_bytes(skb, src_port_off, &src_port, sizeof(src_port), 0);
-                // bpf_probe_write(&udp->source, &src_port, sizeof(src_port));
+                // TODO this might be better approach than zero checksum
+                // // set src_port to PORT_MARKER
+                // uint16_t src_port = htons(PORT_MARKER);
+                // // get offset of src_port
+                // uint32_t src_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr);
+                // bpf_skb_store_bytes(skb, src_port_off, &src_port, sizeof(src_port), SKB_FLAGS);
+                // // bpf_probe_write(&udp->source, &src_port, sizeof(src_port));
+
+                // set ip checksum to 0
+                uint16_t zero_ip_checksum = 0;
+                uint32_t ip_checksum_off = sizeof(struct ethhdr) + 10 /* Everything before checksum */;
+                bpf_skb_store_bytes(skb, ip_checksum_off, &zero_ip_checksum, sizeof(zero_ip_checksum), SKB_FLAGS);
+
+                // set udp checksum to 0
+                uint16_t zero_checksum = 0;
+                uint32_t checksum_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 6 /* Everything before checksum */;
+                bpf_skb_store_bytes(skb, checksum_off, &zero_checksum, sizeof(zero_checksum), SKB_FLAGS);
+
+                // { //ARGH TODO remove (only for checking that checksums are 0)
+                //         void *data = (void *)(long)skb->data;
+                //         void *data_end = (void *)(long)skb->data_end;
+
+                //         // TODO hacky for now since i know the payload / packet size
+                //         uint32_t sz = skb->data_end - skb->data;
+                //         if (sz > 100) {
+                //                 return TC_ACT_OK;
+                //         }
+
+                //         if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
+                //                 return TC_ACT_OK; // Not enough data
+                //         }
+
+                //         // Load ethernet header
+                //         struct ethhdr *eth = (struct ethhdr *)data;
+
+                //         // Load IP header
+                //         struct iphdr *ip = (struct iphdr *)(eth + 1);
+
+                //         // Check if the packet is UDP
+                //         if (ip->protocol != IPPROTO_UDP) {
+                //                 return TC_ACT_OK;
+                //         }
+
+                //         // Load UDP header
+                //         struct udphdr *udp = (struct udphdr *)(ip + 1);
+                //         bpf_printk("redirected: %d %d\n", udp->check, ip->check);
+                // }
+
 
                 for (int i=0; i<MAX_CLIENTS; i++) {
                         if (i >= *num_clients) {
                                 break;
                         }
-                        bpf_printk("DEBUG: Redirecting packet\n");
-                        bpf_redirect(veth2_egress_ifindex, 0);
+                        bpf_clone_redirect(skb, veth2_egress_ifindex, 0); // TODO: bpf_redirect or bpf_clone_redirect?
                 }
 
                 return TC_ACT_SHOT;
@@ -363,16 +407,6 @@ __section("egress")
 int tc_egress(struct __sk_buff *skb)
 {
 
-        // void *data = (void *)(long)skb->data;
-        // void *data_end = (void *)(long)skb->data_end;
-
-        // if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
-        //         return TC_ACT_OK; // Not enough data
-        // }
-
-        // // Load ethernet header
-        // struct ethhdr *eth = (struct ethhdr *)data;
-
         // Before redirecting we need to: 
 
         //      1) change src ethernet 
@@ -384,27 +418,11 @@ int tc_egress(struct __sk_buff *skb)
 
         // TODO: also filter for direction so that connection establishment from client is not affected
 
-        // // go through all entries in the map cliend_data
-        // uint32_t key = 0;
-        // struct client_info_t *value;
-        // for (int i = 0; i < MAX_CLIENTS; i++) {
-        //         value = bpf_map_lookup_elem(&client_data, &key);
-        //         if(value != 0) {
-        //                 bpf_printk("Value found\n");
-        //                 bpf_printk("Client id: %d\n", key);
-        //                 bpf_printk("MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", value->mac[0], value->mac[1], value->mac[2], value->mac[3], value->mac[4], value->mac[5]);
-        //                 bpf_printk("IP: %d\n", value->ip_addr);
-        //                 bpf_printk("Port: %d\n", value->port);
-        //                 bpf_printk("Connection id: %02x %02x %02x\n", value->connection_id[0], value->connection_id[1], value->connection_id[2]);
-        //         }
-        //         key++;
-        // }
-
-
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
 
         if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
+                bpf_printk("Not enough data\n");
                 return TC_ACT_OK; // Not enough data
         }
 
@@ -416,6 +434,7 @@ int tc_egress(struct __sk_buff *skb)
 
         // Check if the packet is UDP
         if (ip->protocol != IPPROTO_UDP) {
+                bpf_printk("Not UDP\n");
                 return TC_ACT_OK;
         }
 
@@ -424,8 +443,30 @@ int tc_egress(struct __sk_buff *skb)
 
         // Check if the packet is QUIC
         if (udp->source != htons(RELAY_PORT) && udp->source != htons(PORT_MARKER)) { // TODO change to SERVER_PORT or PORT_MARKER once it is sent?
+                bpf_printk("Not QUIC\n");
                 return TC_ACT_OK;
         }
+
+        // TODO: this might be better than zero checksum
+        // // check src_port for PORT_MARKER
+        // uint16_t src_port;
+        // bpf_probe_read_kernel(&src_port, sizeof(src_port), &udp->source);
+        // if (src_port != htons(PORT_MARKER)) {
+        //         return TC_ACT_OK;
+        // }
+
+        // check if ip checksum is 0
+        if (ip->check != 0) {
+                bpf_printk("IP checksum not 0\n");
+                return TC_ACT_OK;
+        }
+
+        // check if udp checksum is 0
+        if (udp->check != 0) {
+                bpf_printk("UDP checksum not 0\n");
+                return TC_ACT_OK;
+        }
+
 
         // Load UDP payload
         void *payload = (void *)(udp + 1);
@@ -452,12 +493,7 @@ int tc_egress(struct __sk_buff *skb)
         // redirecting short header packets
         if (header_form == 0) {
 
-                // check src_port for PORT_MARKER
-                uint16_t src_port;
-                bpf_probe_read_kernel(&src_port, sizeof(src_port), &udp->source);
-                if (src_port != htons(PORT_MARKER)) {
-                        return TC_ACT_OK;
-                }
+                bpf_printk("Received redirected short header!\n");
 
                 // get packet_counter
                 uint32_t zero = 0;
@@ -481,40 +517,47 @@ int tc_egress(struct __sk_buff *skb)
                 }
 
                 // set src_mac to value->src_mac
-                uint32_t src_mac_off = 7 /* Präamble */ + 1 /* SFD */ + 6 /* DST MAC */;
-                bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0);
+                uint32_t src_mac_off = 6 /* DST MAC */;
+                bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, SKB_FLAGS);
                 // bpf_probe_write(eth->h_source, value->src_mac, MAC_LEN);
 
+                // TODO wrong? not the mac from the bridge inside the map?
                 // set dst_mac to value->dst_mac
-                uint32_t dst_mac_off = 7 /* Präamble */ + 1 /* SFD */;
-                bpf_skb_store_bytes(skb, dst_mac_off, value->dst_mac, MAC_LEN, 0);
+                uint32_t dst_mac_off = 0;
+                value->dst_mac[0] = 0xd6; // TODO: remove hardcode (mac of client)
+                value->dst_mac[1] = 0x06;
+                value->dst_mac[2] = 0xcb;
+                value->dst_mac[3] = 0x05;
+                value->dst_mac[4] = 0x65;
+                value->dst_mac[5] = 0x62;
+                bpf_skb_store_bytes(skb, dst_mac_off, value->dst_mac, MAC_LEN, SKB_FLAGS);
                 // bpf_probe_write(eth->h_dest, value->dst_mac, MAC_LEN);
 
                 // set src_ip to value->src_ip_addr
                 uint32_t src_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */;
-                bpf_skb_store_bytes(skb, src_ip_off, &value->src_ip_addr, sizeof(value->src_ip_addr), 0);
+                bpf_skb_store_bytes(skb, src_ip_off, &value->src_ip_addr, sizeof(value->src_ip_addr), SKB_FLAGS);
                 // bpf_probe_write(&ip->saddr, &value->src_ip_addr, sizeof(value->src_ip_addr));
 
                 // set dst_ip to value->dst_ip_addr
                 uint32_t dst_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */ +  4 /* SRC IP */;
-                bpf_skb_store_bytes(skb, dst_ip_off, &value->dst_ip_addr, sizeof(value->dst_ip_addr), 0);
+                bpf_skb_store_bytes(skb, dst_ip_off, &value->dst_ip_addr, sizeof(value->dst_ip_addr), SKB_FLAGS);
                 // bpf_probe_write(&ip->daddr, &value->dst_ip_addr, sizeof(value->dst_ip_addr));
 
                 // set src_port to value->src_port
                 uint16_t src_port_tmp = value->src_port;
                 uint32_t src_port_tmp_off = sizeof(struct ethhdr) + sizeof(struct iphdr);
-                bpf_skb_store_bytes(skb, src_port_tmp_off, &src_port_tmp, sizeof(src_port_tmp), 0);
+                bpf_skb_store_bytes(skb, src_port_tmp_off, &src_port_tmp, sizeof(src_port_tmp), SKB_FLAGS);
                 // bpf_probe_write(&udp->source, &src_port_tmp, sizeof(src_port_tmp));
 
                 // set dst_port to value->dst_port
                 uint16_t dst_port_tmp = value->dst_port;
                 uint32_t dst_port_tmp_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
-                bpf_skb_store_bytes(skb, dst_port_tmp_off, &dst_port_tmp, sizeof(dst_port_tmp), 0);
+                bpf_skb_store_bytes(skb, dst_port_tmp_off, &dst_port_tmp, sizeof(dst_port_tmp), SKB_FLAGS);
                 // bpf_probe_write(&udp->dest, &dst_port_tmp, sizeof(dst_port_tmp));
 
                 // set connection_id to value->connection_id
-                uint32_t conn_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
-                bpf_skb_store_bytes(skb, conn_id_off, value->connection_id, CONN_ID_LEN, 0);
+                uint32_t conn_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */;
+                bpf_skb_store_bytes(skb, conn_id_off, value->connection_id, CONN_ID_LEN, SKB_FLAGS);
                 // bpf_probe_write(payload + 1, value->connection_id, CONN_ID_LEN);
 
                 // set pack_ctr to pack_ctr + 1 and write it back
@@ -525,7 +568,7 @@ int tc_egress(struct __sk_buff *skb)
         
         }
 
-        // bpf_printk("[egress tc]\n");
+        bpf_printk("Long header\n");
         return TC_ACT_OK;
 }
 

@@ -19,7 +19,7 @@ import (
 const server_addr = "192.168.10.1:4242"
 const relay_addr = "192.168.11.2:4242"
 
-const bpf_enabled = false
+const bpf_enabled = true
 
 type StreamingStream struct {
 	stream     quic.Stream
@@ -165,11 +165,18 @@ func (s *RelayServer) run() error {
 		if err != nil {
 			panic(err)
 		}
-
 		client_ctr := uint32(0)
-
 		// set number of clients to 0
 		err = number_of_clients.Update(uint32(0), client_ctr, 0)
+		if err != nil {
+			panic(err)
+		}
+
+		id_counter, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/id_counter", &ebpf.LoadPinOptions{})
+		if err != nil {
+			panic(err)
+		}
+		err = id_counter.Update(uint32(0), uint32(0), 0)
 		if err != nil {
 			panic(err)
 		}
@@ -277,7 +284,7 @@ func (s *RelayServer) run() error {
 // TODO this is probably not the most elegant way to clear the BPF maps
 func clearBPFMaps() {
 
-	paths := []string{"client_data", "client_id", "id_counter", "number_of_clients"}
+	paths := []string{"client_data", "client_id", "id_counter", "number_of_clients", "connection_established", "packet_counter"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
@@ -299,6 +306,9 @@ func passOnTraffic(relay *RelayServer) error {
 			return err
 		}
 		fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
+		// if bpf_enabled {
+		// 	continue
+		// }
 		for _, send_stream := range relay.stream_list {
 			_, err = send_stream.Write(buf[:n])
 			if err != nil {
