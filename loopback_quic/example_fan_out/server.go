@@ -19,7 +19,7 @@ import (
 const server_addr = "192.168.10.1:4242"
 const relay_addr = "192.168.11.2:4242"
 
-const bpf_enabled = true
+var bpf_enabled = true
 
 type StreamingStream struct {
 	stream     quic.Stream

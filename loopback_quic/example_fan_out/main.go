@@ -44,8 +44,14 @@ func main_advanced() {
 
 	args := os.Args
 	if len(args) != 2 {
-		fmt.Printf("Usage: go run *.go (server|client|relay)\n", args[0])
-		return
+
+		//TODO remove first case
+		if len(args) == 3 && args[1] == "relay" {
+			bpf_enabled = false
+		} else {
+			fmt.Printf("Usage: go run *.go (server|client|relay)\n", args[0])
+			return
+		}
 	}
 
 	if args[1] == "server" {
