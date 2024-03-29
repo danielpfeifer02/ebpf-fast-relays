@@ -25,9 +25,6 @@
 #define MAX_CLIENTS 1024
 #define RELAY_PORT 4242
 #define SERVER_PORT 4242
-#define PORT_MARKER 6969
-#define SKB_FLAGS 0
-//BPF_F_RECOMPUTE_CSUM
 
 #define IP_CSUM_OFF (ETH_HLEN + offsetof(struct iphdr, check))
 
@@ -83,7 +80,7 @@ struct {
 
 // this map is used to get the next client id
 // TODO: keeping this consistent will likely happen
-// in userspace
+// TODO: in userspace
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, uint32_t);
@@ -112,8 +109,6 @@ __section("ingress_startup")
 int tc_ingress_startup(struct __sk_buff *skb)
 {
 
-        // return TC_ACT_OK; // ! remove
-
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
 
@@ -138,6 +133,13 @@ int tc_ingress_startup(struct __sk_buff *skb)
         // Check if the packet is QUIC
         if (udp->dest != htons(RELAY_PORT)) {
                 return TC_ACT_OK;
+        }
+
+        // TODO: for now just drop QUIC answers to avoid protocol violation
+        uint32_t zero = 0;
+        uint8_t *conn_established = bpf_map_lookup_elem(&connection_established, &zero);
+        if (conn_established == NULL || *conn_established == 1) {
+                return TC_ACT_SHOT;
         }
 
         // Load UDP payload
@@ -247,20 +249,14 @@ int tc_ingress_startup(struct __sk_buff *skb)
                 // Update the client data map
                 bpf_map_update_elem(&client_data, cid, &value, BPF_ANY);
 
-        } else {
-                // Short header
-                // bpf_printk("Short header\n");
         }
 
-        // bpf_printk("[ingress startup tc]\n");
         return TC_ACT_OK;
 }
 
 __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
 {
-
-        // return TC_ACT_OK; // ! remove
 
         // load connection_established map
         uint32_t zero = 0;
@@ -277,11 +273,6 @@ int tc_ingress(struct __sk_buff *skb)
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
 
-        // TODO hacky for now since i know the payload / packet size
-        uint32_t sz = skb->data_end - skb->data;
-        if (sz > 100) {
-                return TC_ACT_OK;
-        }
 
         if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
                 return TC_ACT_OK; // Not enough data
@@ -341,60 +332,15 @@ int tc_ingress(struct __sk_buff *skb)
 
                 bpf_printk("Short header - redirecting for %d clients\n", *num_clients);
 
-                // set packet_counter to 1 // ARGH TODO probably not working bc of concurrency (maybe some hash map to look up ctr value for a packet?)
+                // TODO probably not working bc of concurrency (maybe some hash map to look up ctr value for a packet or save inside of packet bytes?)
+                // set packet_counter to 1 
                 uint32_t pack_ctr = 1;
                 bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
 
-                // TODO this might be better approach than zero checksum
-                // // set src_port to PORT_MARKER
-                // uint16_t src_port = htons(PORT_MARKER);
-                // // get offset of src_port
-                // uint32_t src_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr);
-                // bpf_skb_store_bytes(skb, src_port_off, &src_port, sizeof(src_port), 0);
-                // // bpf_probe_write(&udp->source, &src_port, sizeof(src_port));
-
-                // ! TODO not working? dropped by my system?
-                // // set ip checksum to 0
-                // uint16_t zero_ip_checksum = 0;
-                // uint32_t ip_checksum_off = sizeof(struct ethhdr) + 10 /* Everything before checksum */;
-                // bpf_skb_store_bytes(skb, ip_checksum_off, &zero_ip_checksum, sizeof(zero_ip_checksum), 0);
-
-                // // set udp checksum to 0
+                // set udp checksum to 0
                 uint16_t zero_checksum = 0;
                 uint32_t checksum_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 6 /* Everything before checksum */;
                 bpf_skb_store_bytes(skb, checksum_off, &zero_checksum, sizeof(zero_checksum), 0);
-                // !
-
-                // { //ARGH TODO remove (only for checking that checksums are 0)
-                //         void *data = (void *)(long)skb->data;
-                //         void *data_end = (void *)(long)skb->data_end;
-
-                //         // TODO hacky for now since i know the payload / packet size
-                //         uint32_t sz = skb->data_end - skb->data;
-                //         if (sz > 100) {
-                //                 return TC_ACT_OK;
-                //         }
-
-                //         if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
-                //                 return TC_ACT_OK; // Not enough data
-                //         }
-
-                //         // Load ethernet header
-                //         struct ethhdr *eth = (struct ethhdr *)data;
-
-                //         // Load IP header
-                //         struct iphdr *ip = (struct iphdr *)(eth + 1);
-
-                //         // Check if the packet is UDP
-                //         if (ip->protocol != IPPROTO_UDP) {
-                //                 return TC_ACT_OK;
-                //         }
-
-                //         // Load UDP header
-                //         struct udphdr *udp = (struct udphdr *)(ip + 1);
-                //         bpf_printk("redirected: %d %d\n", udp->check, ip->check);
-                // }
-
 
                 for (int i=0; i<MAX_CLIENTS; i++) {
                         if (i >= *num_clients) {
@@ -452,46 +398,10 @@ int tc_egress(struct __sk_buff *skb)
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
         // Check if the packet is QUIC
-        if (udp->source != htons(RELAY_PORT) && udp->source != htons(PORT_MARKER)) { // TODO change to SERVER_PORT or PORT_MARKER once it is sent?
+        if (udp->source != htons(RELAY_PORT)) {
                 bpf_printk("Not QUIC\n");
                 return TC_ACT_OK;
         }
-
-        // TODO: this might be better than zero checksum
-        // // check src_port for PORT_MARKER
-        // uint16_t src_port;
-        // bpf_probe_read_kernel(&src_port, sizeof(src_port), &udp->source);
-        // if (src_port != htons(PORT_MARKER)) {
-        //         return TC_ACT_OK;
-        // }
-
-        // ! nochmal anschauen was gneau passiert?
-        // return TC_ACT_OK; // TODO understand?
-        // // set ip->check to 0
-        // uint16_t zero_ip_checksum = 0;
-        // uint32_t ip_checksum_off = sizeof(struct ethhdr) + 10 /* Everything before checksum */;
-        // bpf_skb_store_bytes(skb, ip_checksum_off, &zero_ip_checksum, sizeof(zero_ip_checksum), 0);
-
-        // // set udp checksum to 0
-        // uint16_t zero_checksum = 0;
-        // uint32_t checksum_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 6 /* Everything before checksum */;
-        // bpf_skb_store_bytes(skb, checksum_off, &zero_checksum, sizeof(zero_checksum), 0);
-        // return TC_ACT_OK; // TODO understand?
-        // ! IT MIGHT BE THE IP CHECKSUM THAT CAUSED THE DROP!!!!
-
-
-        // // check if ip checksum is 0
-        // if (ip->check != 0) {
-        //         bpf_printk("IP checksum not 0\n");
-        //         return TC_ACT_OK;
-        // }
-
-        // // check if udp checksum is 0
-        // if (udp->check != 0) {
-        //         bpf_printk("UDP checksum not 0\n");
-        //         return TC_ACT_OK;
-        // }
-
 
         // Load UDP payload
         void *payload = (void *)(udp + 1);
@@ -534,8 +444,8 @@ int tc_egress(struct __sk_buff *skb)
                 struct client_info_t *value;
 
                 // TODO this assumes that they are linear in the map (verify)
+                // TODO remove dependency on packet_counter
                 value = bpf_map_lookup_elem(&client_data, pack_ctr);
-
                 if (value == NULL) {
                         bpf_printk("No client data found\n");
                         return TC_ACT_SHOT;
@@ -544,59 +454,43 @@ int tc_egress(struct __sk_buff *skb)
                 // set src_mac to value->src_mac
                 uint32_t src_mac_off = 6 /* DST MAC */;
                 bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0);
-                // bpf_probe_write(eth->h_source, value->src_mac, MAC_LEN);
 
-                // TODO wrong? not the mac from the bridge inside the map?
+                // TODO Not needed? (Not correct anyway since src_mac was mac from client and not from bridge)
                 // set dst_mac to value->dst_mac
-                uint32_t dst_mac_off = 0;
-                value->dst_mac[0] = 0xd6; // TODO: remove hardcode (mac of client)
-                value->dst_mac[1] = 0x06;
-                value->dst_mac[2] = 0xcb;
-                value->dst_mac[3] = 0x05;
-                value->dst_mac[4] = 0x65;
-                value->dst_mac[5] = 0x62;
-                bpf_skb_store_bytes(skb, dst_mac_off, value->dst_mac, MAC_LEN, 0);
-                // bpf_probe_write(eth->h_dest, value->dst_mac, MAC_LEN);
+                // uint32_t dst_mac_off = 0;
+                // bpf_skb_store_bytes(skb, dst_mac_off, value->dst_mac, MAC_LEN, 0);
 
+                // ^ TODO turn ip addr setting to function: https://elixir.bootlin.com/linux/v4.9/source/samples/bpf/tcbpf1_kern.c#L51
                 // set src_ip to value->src_ip_addr
                 uint32_t src_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */;
                 uint32_t old_src_ip;
                 bpf_probe_read_kernel(&old_src_ip, sizeof(old_src_ip), &ip->saddr);
-                bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_src_ip, value->src_ip_addr, sizeof(value->src_ip_addr)); // todo make function like: https://elixir.bootlin.com/linux/v4.9/source/samples/bpf/tcbpf1_kern.c#L51
+                bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_src_ip, value->src_ip_addr, sizeof(value->src_ip_addr));
                 bpf_skb_store_bytes(skb, src_ip_off, &value->src_ip_addr, sizeof(value->src_ip_addr), 0);
-                // bpf_probe_write(&ip->saddr, &value->src_ip_addr, sizeof(value->src_ip_addr));
 
                 // set dst_ip to value->dst_ip_addr
                 uint32_t dst_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */ +  4 /* SRC IP */;
-                // value->dst_ip_addr = 17541312; // TODO: remove hardcode (ip of client)
                 uint32_t old_dst_ip;
                 bpf_probe_read_kernel(&old_dst_ip, sizeof(old_dst_ip), &ip->daddr);
                 bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_dst_ip, value->dst_ip_addr, sizeof(value->dst_ip_addr));
                 bpf_skb_store_bytes(skb, dst_ip_off, &value->dst_ip_addr, sizeof(value->dst_ip_addr), 0);
-                // bpf_probe_write(&ip->daddr, &value->dst_ip_addr, sizeof(value->dst_ip_addr));
+                // ^
 
                 // set src_port to value->src_port
                 uint16_t src_port_tmp = value->src_port;
                 uint32_t src_port_tmp_off = sizeof(struct ethhdr) + sizeof(struct iphdr);
                 bpf_skb_store_bytes(skb, src_port_tmp_off, &src_port_tmp, sizeof(src_port_tmp), 0);
-                // bpf_probe_write(&udp->source, &src_port_tmp, sizeof(src_port_tmp));
 
                 // set dst_port to value->dst_port
                 uint16_t dst_port_tmp = value->dst_port;
                 uint32_t dst_port_tmp_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
                 bpf_skb_store_bytes(skb, dst_port_tmp_off, &dst_port_tmp, sizeof(dst_port_tmp), 0);
-                // bpf_probe_write(&udp->dest, &dst_port_tmp, sizeof(dst_port_tmp));
 
                 // set connection_id to value->connection_id
                 uint32_t conn_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */;
                 bpf_skb_store_bytes(skb, conn_id_off, value->connection_id, CONN_ID_LEN, 0);
-                // bpf_probe_write(payload + 1, value->connection_id, CONN_ID_LEN);
 
-                //!uint16_t zero_ip_checksum = 0x52a3; // ! todo remove
-                //!uint32_t ip_checksum_off = sizeof(struct ethhdr) + 10 /* Everything before checksum */;
-                //!bpf_skb_store_bytes(skb, ip_checksum_off, &zero_ip_checksum, sizeof(zero_ip_checksum), 0);
-
-
+                // TODO get rid of packet_counter and store lut index in packet (possible bc of clone_redirect?)
                 // set pack_ctr to pack_ctr + 1 and write it back
                 *pack_ctr = *pack_ctr + 1;
                 bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
