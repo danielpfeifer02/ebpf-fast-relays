@@ -21,7 +21,7 @@ tc: $(BPF_TC_OBJ)
 	tc qdisc add dev ${DEV_EG} clsact
 	tc filter add dev ${DEV_IN} ingress bpf da obj ${BPF_TC_OBJ} sec ingress
 	tc filter add dev ${DEV_EG} egress bpf da obj ${BPF_TC_OBJ} sec egress
-	tc filter add dev ${DEV_EG} ingress bpf da obj ${BPF_TC_OBJ} sec ingress_startup
+	tc filter add dev ${DEV_EG} ingress bpf da obj ${BPF_TC_OBJ} sec ingress_from_client
 	tc filter show dev ${DEV_IN} ingress
 	tc filter show dev ${DEV_EG} egress
 

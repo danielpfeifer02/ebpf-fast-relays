@@ -105,8 +105,8 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_established SEC(".maps");
 
-__section("ingress_startup")
-int tc_ingress_startup(struct __sk_buff *skb)
+__section("ingress_from_client")
+int tc_ingress_from_client(struct __sk_buff *skb)
 {
 
         void *data = (void *)(long)skb->data;
