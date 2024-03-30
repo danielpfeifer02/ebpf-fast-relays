@@ -9,7 +9,11 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"os/exec"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
@@ -20,6 +24,18 @@ const server_addr = "192.168.10.1:4242"
 const relay_addr = "192.168.11.2:4242"
 
 var bpf_enabled = true
+
+type pn_struct struct {
+	pn      uint32
+	changed uint8
+	padding [3]uint8
+}
+
+type client_key_struct struct {
+	ipaddr  uint32
+	port    uint16
+	padding [2]uint8
+}
 
 type StreamingStream struct {
 	stream     quic.Stream
@@ -157,6 +173,7 @@ func (s *RelayServer) run() error {
 
 	// Just for the compiler to not complain
 	var number_of_clients *ebpf.Map
+	var client_pn *ebpf.Map
 	var client_ctr uint32
 	if bpf_enabled {
 		clearBPFMaps()
@@ -187,6 +204,11 @@ func (s *RelayServer) run() error {
 		}
 
 		err = connection_map.Update(uint32(0), uint8(0), 0)
+		if err != nil {
+			panic(err)
+		}
+
+		client_pn, err = ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
 		if err != nil {
 			panic(err)
 		}
@@ -230,15 +252,43 @@ func (s *RelayServer) run() error {
 				fmt.Println("R: New stream added")
 
 			case conn := <-s.conn_chan:
-				fmt.Println("R: New connection accepted")
+
+				// TODO: why ip address of bridge instead of client?
+				ipaddr, port := getIPAndPort(conn)
+				fmt.Println("R: New connection accepted (from %s at port %d)", ipaddr.String(), port)
 
 				if bpf_enabled {
+
 					client_ctr++
 					err = number_of_clients.Update(uint32(0), client_ctr, 0)
 					if err != nil {
 						panic(err)
 					}
 					fmt.Printf("R: Number of clients is now: %d\n", client_ctr)
+
+					// resetting client_pn
+					zero_pn := pn_struct{
+						pn:      uint32(0),
+						changed: uint8(0),
+						padding: [3]uint8{0, 0, 0},
+					}
+
+					key := client_key_struct{
+						ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+						port:    swapEndianness16(uint16(port)),
+						padding: [2]uint8{0, 0},
+					}
+
+					err = client_pn.Update(key, zero_pn, 0)
+					if err != nil {
+						fmt.Println("Error updating client_pn")
+						panic(err)
+					}
+
+					fmt.Println("R: Client packet number map reset")
+
+					go packetNumberHandler(conn)
+
 				}
 
 				if s.server_connection == nil {
@@ -281,10 +331,68 @@ func (s *RelayServer) run() error {
 	return nil
 }
 
+func packetNumberHandler(conn quic.Connection) {
+
+	client_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	ipaddr, port := getIPAndPort(conn)
+	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+	key := client_key_struct{
+		ipaddr:  ipaddr_key,
+		port:    port_key,
+		padding: [2]uint8{0, 0},
+	}
+	val := &pn_struct{}
+
+	for {
+
+		err := client_pn.Lookup(key, val)
+		if err != nil {
+			panic(err)
+		}
+
+		if val.changed == 1 {
+			fmt.Println("R: Packet number changed! Updating...")
+
+			conn.SetPacketNumber(int64(val.pn))
+
+			val.changed = 0
+			err = client_pn.Update(key, val, 0)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+	}
+}
+
+func getIPAndPort(conn quic.Connection) (net.IP, uint16) {
+	tup := strings.Split(conn.RemoteAddr().String(), ":")
+	ipaddr := net.ParseIP(tup[0])
+	if ipaddr == nil {
+		panic("Invalid IP address")
+	}
+	port, err := strconv.Atoi(tup[1])
+	if err != nil {
+		panic(err)
+	}
+	return ipaddr, uint16(port)
+}
+
 // TODO this is probably not the most elegant way to clear the BPF maps
 func clearBPFMaps() {
 
-	paths := []string{"client_data", "client_id", "id_counter", "number_of_clients", "connection_established", "packet_counter"}
+	paths := []string{"client_data",
+		"client_id",
+		"id_counter",
+		"number_of_clients",
+		"connection_established",
+		"packet_counter",
+		"client_pn"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
@@ -298,21 +406,35 @@ func clearBPFMaps() {
 	}
 }
 
+func ipToInt32(ip net.IP) uint32 {
+	ip = ip.To4() // Convert to IPv4
+	if ip == nil {
+		panic("Trying to convert an invalid IPv4 address")
+	}
+	// Convert IPv4 address to integer
+	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+}
+
+func swapEndianness16(val uint16) uint16 {
+	return (val&0xFF)<<8 | (val&0xFF00)>>8
+}
+
+func swapEndianness32(val uint32) uint32 {
+	return (val&0xFF)<<24 | (val&0xFF00)<<8 | (val&0xFF0000)>>8 | (val&0xFF000000)>>24
+}
+
 func passOnTraffic(relay *RelayServer) error {
 	for {
 		buf := make([]byte, 1024)
 		n, err := relay.server_stream.Read(buf)
 		if err != nil {
-			return err
+			panic(err)
 		}
 		fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
-		// if bpf_enabled {
-		// 	continue
-		// }
 		for _, send_stream := range relay.stream_list {
 			_, err = send_stream.Write(buf[:n])
 			if err != nil {
-				return err
+				panic(err)
 			}
 		}
 	}
@@ -329,8 +451,9 @@ func connectionAcceptWrapper(listener *quic.Listener, channel chan quic.Connecti
 }
 
 func streamAcceptWrapperRelay(connection quic.Connection, s *RelayServer) {
+	ctx := context.TODO()
 	for {
-		stream, err := connection.AcceptStream(context.TODO())
+		stream, err := connection.AcceptStream(ctx)
 		if err != nil {
 			panic(err)
 		}
@@ -385,6 +508,7 @@ func generateTLSConfig() *tls.Config {
 
 func generateQUICConfig() *quic.Config {
 	return &quic.Config{
-		Tracer: qlog.DefaultTracer,
+		Tracer:         qlog.DefaultTracer,
+		MaxIdleTimeout: 5 * time.Minute,
 	}
 }

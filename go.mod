@@ -4,12 +4,12 @@ go 1.21.0
 
 toolchain go1.22.0
 
-require github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-4
+require github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-6
 
 require github.com/cilium/ebpf v0.13.2
 
 // github.com/danielpfeifer02/quic-go-no-crypto v0.41.0-1
-// github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-4
+// github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-5
 
 require (
 	github.com/francoispqt/gojay v1.2.13 // indirect

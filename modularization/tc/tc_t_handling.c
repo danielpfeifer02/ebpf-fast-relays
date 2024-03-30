@@ -34,6 +34,7 @@
 struct client_info_key_t {
         uint32_t ip_addr;
         uint16_t port;
+        uint8_t padding[2];
 };
 
 struct client_info_t {
@@ -44,6 +45,12 @@ struct client_info_t {
         uint16_t src_port;
         uint16_t dst_port;
         uint8_t connection_id[CONN_ID_LEN];
+};
+
+struct pn_value_t {
+        uint32_t packet_number;
+        uint8_t changed;
+        uint8_t padding[3];
 };
 
 // map for storing client information
@@ -67,6 +74,18 @@ struct {
     __uint(max_entries, MAX_CLIENTS);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } client_id SEC(".maps");
+
+// this map will be used to update the packet
+// number of a client after the bpf program
+// sent out packets which are unknown to the
+// user-space program
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_info_key_t);
+    __type(value, struct pn_value_t);
+    __uint(max_entries, MAX_CLIENTS);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} client_pn SEC(".maps");
 
 // this map is used to get the number of clients
 // this will be set mainly from userspace
@@ -248,6 +267,14 @@ int tc_ingress_from_client(struct __sk_buff *skb)
 
                 // Update the client data map
                 bpf_map_update_elem(&client_data, cid, &value, BPF_ANY);
+
+
+                // just a test 
+                struct pn_value_t pn_value = {
+                        .packet_number = 123,
+                        .changed = 1,
+                };
+                bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
 
         }
 

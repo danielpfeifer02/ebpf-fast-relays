@@ -32,9 +32,10 @@ func (c *StreamingClient) run() {
 			stream := c.stream_list[0]
 
 			buf := make([]byte, 1024)
+			fmt.Println("C: Reading from stream")
 			n, err := stream.Read(buf)
 			if err != nil {
-				return
+				panic(err)
 			}
 
 			fmt.Printf("Client got: %s\n", buf[:n])
