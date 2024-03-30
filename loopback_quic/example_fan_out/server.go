@@ -26,15 +26,15 @@ const relay_addr = "192.168.11.2:4242"
 var bpf_enabled = true
 
 type pn_struct struct {
-	pn      uint32
-	changed uint8
-	padding [3]uint8
+	Pn      uint32
+	Changed uint8
+	Padding [3]uint8
 }
 
 type client_key_struct struct {
-	ipaddr  uint32
-	port    uint16
-	padding [2]uint8
+	Ipaddr  uint32
+	Port    uint16
+	Padding [2]uint8
 }
 
 type StreamingStream struct {
@@ -247,6 +247,8 @@ func (s *RelayServer) run() error {
 					}
 					s.server_stream = server_stream
 					go passOnTraffic(s)
+
+					go publishConnectionEstablished()
 				}
 
 				fmt.Println("R: New stream added")
@@ -268,15 +270,15 @@ func (s *RelayServer) run() error {
 
 					// resetting client_pn
 					zero_pn := pn_struct{
-						pn:      uint32(0),
-						changed: uint8(0),
-						padding: [3]uint8{0, 0, 0},
+						Pn:      uint32(0),
+						Changed: uint8(0),
+						Padding: [3]uint8{0, 0, 0},
 					}
 
 					key := client_key_struct{
-						ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
-						port:    swapEndianness16(uint16(port)),
-						padding: [2]uint8{0, 0},
+						Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+						Port:    swapEndianness16(uint16(port)),
+						Padding: [2]uint8{0, 0},
 					}
 
 					err = client_pn.Update(key, zero_pn, 0)
@@ -303,17 +305,6 @@ func (s *RelayServer) run() error {
 					}
 					s.server_connection = conn_to_server
 					fmt.Print("R: Connected to server\n")
-
-					if bpf_enabled {
-						connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
-						if err != nil {
-							panic(err)
-						}
-						err = connection_map.Update(uint32(0), uint8(1), 0)
-						if err != nil {
-							panic(err)
-						}
-					}
 				}
 
 				go streamAcceptWrapperRelay(conn, s)
@@ -331,6 +322,20 @@ func (s *RelayServer) run() error {
 	return nil
 }
 
+func publishConnectionEstablished() {
+	time.Sleep(1 * time.Second)
+	if bpf_enabled {
+		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
+		if err != nil {
+			panic(err)
+		}
+		err = connection_map.Update(uint32(0), uint8(1), 0)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
 func packetNumberHandler(conn quic.Connection) {
 
 	client_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
@@ -342,9 +347,9 @@ func packetNumberHandler(conn quic.Connection) {
 	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
 	port_key := swapEndianness16(port)
 	key := client_key_struct{
-		ipaddr:  ipaddr_key,
-		port:    port_key,
-		padding: [2]uint8{0, 0},
+		Ipaddr:  ipaddr_key,
+		Port:    port_key,
+		Padding: [2]uint8{0, 0},
 	}
 	val := &pn_struct{}
 
@@ -355,16 +360,25 @@ func packetNumberHandler(conn quic.Connection) {
 			panic(err)
 		}
 
-		if val.changed == 1 {
+		if val.Changed == 1 {
 			fmt.Println("R: Packet number changed! Updating...")
 
-			conn.SetPacketNumber(int64(val.pn))
+			conn.SetPacketNumber(int64(val.Pn))
 
-			val.changed = 0
+			val.Changed = 0
 			err = client_pn.Update(key, val, 0)
 			if err != nil {
 				panic(err)
 			}
+
+			tmp := &pn_struct{}
+			err := client_pn.Lookup(key, tmp)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("R: Updated packet number to %d (%d)\n", tmp.Pn, tmp.Changed)
+
+			// time.Sleep(10 * time.Millisecond)
 		}
 
 	}
@@ -430,13 +444,14 @@ func passOnTraffic(relay *RelayServer) error {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
-		for _, send_stream := range relay.stream_list {
-			_, err = send_stream.Write(buf[:n])
-			if err != nil {
-				panic(err)
-			}
-		}
+		fmt.Printf("Relay got from server: %s\nThis should not happen!\n", buf[:n])
+		// fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
+		// for _, send_stream := range relay.stream_list {
+		// 	_, err = send_stream.Write(buf[:n])
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
+		// }
 	}
 }
 

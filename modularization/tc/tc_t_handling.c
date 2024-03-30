@@ -23,10 +23,14 @@
 #define CONN_ID_LEN 16
 #define MAC_LEN 6
 #define MAX_CLIENTS 1024
-#define RELAY_PORT 4242
-#define SERVER_PORT 4242
+
+// TODO: why is 4242 observable in WireShark and 6969 not?
+#define RELAY_PORT htons(4242)
+#define SERVER_PORT htons(4242)
+#define PORT_MARKER htons(6969)
 
 #define IP_CSUM_OFF (ETH_HLEN + offsetof(struct iphdr, check))
+
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -150,7 +154,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
         // Check if the packet is QUIC
-        if (udp->dest != htons(RELAY_PORT)) {
+        if (udp->dest != RELAY_PORT) {
                 return TC_ACT_OK;
         }
 
@@ -268,14 +272,6 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 // Update the client data map
                 bpf_map_update_elem(&client_data, cid, &value, BPF_ANY);
 
-
-                // just a test 
-                struct pn_value_t pn_value = {
-                        .packet_number = 123,
-                        .changed = 1,
-                };
-                bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
-
         }
 
         return TC_ACT_OK;
@@ -320,7 +316,7 @@ int tc_ingress(struct __sk_buff *skb)
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
         // Check if the packet is QUIC
-        if (udp->source != htons(SERVER_PORT)) {
+        if (udp->source != SERVER_PORT) {
                 return TC_ACT_OK;
         }
 
@@ -374,6 +370,11 @@ int tc_ingress(struct __sk_buff *skb)
                                 break;
                         }
                         // TODO set some part of the packet to "i" so that we can identify at egress
+
+                        uint16_t dst_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
+                        uint16_t mrk = PORT_MARKER;
+                        bpf_skb_store_bytes(skb, dst_port_off, &mrk, sizeof(mrk), 0);
+
                         bpf_clone_redirect(skb, veth2_egress_ifindex, 0); // TODO: bpf_redirect or bpf_clone_redirect?
                 }
 
@@ -425,8 +426,20 @@ int tc_egress(struct __sk_buff *skb)
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
         // Check if the packet is QUIC
-        if (udp->source != htons(RELAY_PORT)) {
+        if (udp->source != RELAY_PORT) {
                 bpf_printk("Not QUIC\n");
+                return TC_ACT_OK;
+        }
+
+        // UDP checksum needs to be 0
+        if (udp->check != 0) {
+                bpf_printk("Checksum not 0\n");
+                return TC_ACT_OK;
+        }
+
+        // check that the UDP dst port is the port marker
+        if (udp->dest != PORT_MARKER) {
+                bpf_printk("Not the correct port\n");
                 return TC_ACT_OK;
         }
 
@@ -522,11 +535,28 @@ int tc_egress(struct __sk_buff *skb)
                 *pack_ctr = *pack_ctr + 1;
                 bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
 
+
+                // setting the packet number so that user space can update it
+                struct client_info_key_t key = {
+                        .ip_addr = value->dst_ip_addr,
+                        .port = value->dst_port,
+                };
+                struct pn_value_t *old_pn = bpf_map_lookup_elem(&client_pn, &key);
+                if (old_pn == NULL) {
+                        bpf_printk("No packet number found\n");
+                        return TC_ACT_OK;
+                }
+                struct pn_value_t pn_value = {
+                        .packet_number = old_pn->packet_number + 100, // TODO: this should not be +100
+                        .changed = 1,
+                };
+                bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
+
+
                 bpf_printk("Done editing packet\n");
         
         }
 
-        bpf_printk("Long header\n");
         return TC_ACT_OK;
 }
 
