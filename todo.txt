@@ -1,0 +1,37 @@
+                                                                                           
+|                                                    dddddddd                                  
+|   TTTTTTTTTTTTTTTTTTTTTTT                          d::::::d                                  
+|   T:::::::::::::::::::::T                          d::::::d                                  
+|   T:::::::::::::::::::::T                          d::::::d                                  
+|   T:::::TT:::::::TT:::::T                          d:::::d                                   
+|   TTTTTT  T:::::T  TTTTTTooooooooooo       ddddddddd:::::d    ooooooooooo       ssssssssss   
+|           T:::::T      oo:::::::::::oo   dd::::::::::::::d  oo:::::::::::oo   ss::::::::::s  
+|           T:::::T     o:::::::::::::::o d::::::::::::::::d o:::::::::::::::oss:::::::::::::s 
+|           T:::::T     o:::::ooooo:::::od:::::::ddddd:::::d o:::::ooooo:::::os::::::ssss:::::s
+|           T:::::T     o::::o     o::::od::::::d    d:::::d o::::o     o::::o s:::::s  ssssss 
+|           T:::::T     o::::o     o::::od:::::d     d:::::d o::::o     o::::o   s::::::s      
+|           T:::::T     o::::o     o::::od:::::d     d:::::d o::::o     o::::o      s::::::s   
+|           T:::::T     o::::o     o::::od:::::d     d:::::d o::::o     o::::ossssss   s:::::s 
+|         TT:::::::TT   o:::::ooooo:::::od::::::ddddd::::::ddo:::::ooooo:::::os:::::ssss::::::s
+|         T:::::::::T   o:::::::::::::::o d:::::::::::::::::do:::::::::::::::os::::::::::::::s 
+|         T:::::::::T    oo:::::::::::oo   d:::::::::ddd::::d oo:::::::::::oo  s:::::::::::ss  
+|         TTTTTTTTTTT      ooooooooooo      ddddddddd   ddddd   ooooooooooo     sssssssssss    
+                                                                                           
+                                                                                           
+
+- Client sometimes gets the following error:
+
+    panic: PROTOCOL_VIOLATION (local): received ACK for an unsent packet
+
+    goroutine 1 [running]:
+    main.(*StreamingClient).run(0x8c62f48)
+        /home/danpfei02/Desktop/thesis/Adaptive_MoQ/loopback_quic/example_fan_out/client.go:38 +0x1fd
+    main.main_advanced()
+        /home/danpfei02/Desktop/thesis/Adaptive_MoQ/loopback_quic/example_fan_out/main.go:115 +0x3c9
+    main.main()
+        /home/danpfei02/Desktop/thesis/Adaptive_MoQ/loopback_quic/example_fan_out/main.go:37 +0x17
+    exit status 2
+
+
+- Sometimes passing the packet to userspace is too slow and the server already ends some copies. Can this be done faster?
+

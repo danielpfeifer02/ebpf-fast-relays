@@ -444,7 +444,7 @@ func passOnTraffic(relay *RelayServer) error {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("Relay got from server: %s\nThis should not happen!\n", buf[:n])
+		fmt.Printf("Relay got from server: %s\n(This is just for ACK creation!)\n", buf[:n])
 		// fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
 		// for _, send_stream := range relay.stream_list {
 		// 	_, err = send_stream.Write(buf[:n])

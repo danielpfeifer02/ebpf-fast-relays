@@ -361,9 +361,14 @@ int tc_ingress(struct __sk_buff *skb)
                 bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
 
                 // set udp checksum to 0
+                uint16_t old_checksum;
+                bpf_probe_read_kernel(&old_checksum, sizeof(old_checksum), &udp->check);
                 uint16_t zero_checksum = 0;
                 uint32_t checksum_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 6 /* Everything before checksum */;
                 bpf_skb_store_bytes(skb, checksum_off, &zero_checksum, sizeof(zero_checksum), 0);
+
+                uint16_t old_port;
+                bpf_probe_read_kernel(&old_port, sizeof(old_port), &udp->dest);
 
                 for (int i=0; i<MAX_CLIENTS; i++) {
                         if (i >= *num_clients) {
@@ -378,7 +383,15 @@ int tc_ingress(struct __sk_buff *skb)
                         bpf_clone_redirect(skb, veth2_egress_ifindex, 0); // TODO: bpf_redirect or bpf_clone_redirect?
                 }
 
-                return TC_ACT_SHOT;
+                // set udp port to RELAY_PORT again
+                uint16_t relay_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
+                bpf_skb_store_bytes(skb, relay_port_off, &old_port, sizeof(old_port), 0);
+
+                // set udp checksum back to old value
+                bpf_skb_store_bytes(skb, checksum_off, &old_checksum, sizeof(old_checksum), 0);
+
+                // hand over to userspace so that packet can be ACKed
+                return TC_ACT_OK;
         
         }
 
