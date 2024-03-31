@@ -365,6 +365,9 @@ func packetNumberHandler(conn quic.Connection) {
 
 			conn.SetPacketNumber(int64(val.Pn))
 
+			// TODO: should I set it to the actual value or does this suffice?
+			conn.SetHighestSent(int64(val.Pn) - 1)
+
 			val.Changed = 0
 			err = client_pn.Update(key, val, 0)
 			if err != nil {
