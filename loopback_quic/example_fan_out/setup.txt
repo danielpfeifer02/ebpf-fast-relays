@@ -1,0 +1,57 @@
+The (logical) setup of the server-relay-client connection looks like this:
+
+
+Logical setup:
+
+|                               interface: veth1                        interface: veth3
+|                               ip: 192.168.1.2/24                      ip: 192.168.1.4/24
+|             interface: veth0       \              interface: veth2       \
+|             ip: 192.168.1.1/24      \             ip: 192.168.1.3/24      \
+|__________  /                         \  _______  /                         \  __________ 
+|          |/                           \|       |/                           \|          |
+|  Server  |-------> veth0@veth1 ------->| Relay |-------> veth2@veth3 ------->|  Client  |
+|__________|<------- veth1@veth0 <-------|_______|<------- veth3@veth2 <-------|__________|
+
+
+
+
+
+Actual setup (using bridge and namespaces):
+|
+|______________________               _______________________________________              ______________________
+|   Server namespace   |             |            Relay namespace            |            |   Client namespace   |
+|     ____________     |             |    ______________   ______________    |            |     ____________     |
+|    |192.168.10.1|    |             |   | 192.168.10.2 | | 192.168.11.2 |   |            |    |192.168.11.1|    |
+|____|___veth0____|____|             |___|____veth1_____|_|____veth2_____|___|            |____|____veth3___|____|
+|           \                                  /                 \                                   /
+|            \                                /                   \                                 /
+|             \                              /                     \                               /
+|              \                            /                       \                             /
+|               \ ________________________ /_                      __\ _________________________ /
+|               /veth0-br|           |veth1-br\                   /veth2-br|            |veth3-br\
+|               |                          ___|                   |___                           |
+|               \_____v-net-0_____________|NAT/                   \NAT|_______________v-net-1____/
+|                       /                   \                     /                     /
+|               ip: 192.168.10.10            \                   /              ip: 192.168.11.10
+|               net: 192.168.10.0/24          \   ___________   /               net: 192.168.11.0/24
+|                                               /             \
+|                                              |   enp1s0f0    |
+|                                               \ ___________ /
+|                                                      |
+|                                                      |
+|                                                  (INTERNET)
+
+TODO:
+    create one sh script for both bridge creations
+
+
+
+This setup with bridges that allow additional internet access is needed since the namespaces will need to 
+execute go programs that require downloading some go packages initially. For that reason a simple direct
+veth connection between the namesapces would not work.
+
+
+TODO:
+set local addr of relay and client accordingly so that hooking to interface works correctly
+
+

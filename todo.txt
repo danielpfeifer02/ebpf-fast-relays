@@ -1,0 +1,24 @@
+                                                                                           
+|                                                    dddddddd                                  
+|   TTTTTTTTTTTTTTTTTTTTTTT                          d::::::d                                  
+|   T:::::::::::::::::::::T                          d::::::d                                  
+|   T:::::::::::::::::::::T                          d::::::d                                  
+|   T:::::TT:::::::TT:::::T                          d:::::d                                   
+|   TTTTTT  T:::::T  TTTTTTooooooooooo       ddddddddd:::::d    ooooooooooo       ssssssssss   
+|           T:::::T      oo:::::::::::oo   dd::::::::::::::d  oo:::::::::::oo   ss::::::::::s  
+|           T:::::T     o:::::::::::::::o d::::::::::::::::d o:::::::::::::::oss:::::::::::::s 
+|           T:::::T     o:::::ooooo:::::od:::::::ddddd:::::d o:::::ooooo:::::os::::::ssss:::::s
+|           T:::::T     o::::o     o::::od::::::d    d:::::d o::::o     o::::o s:::::s  ssssss 
+|           T:::::T     o::::o     o::::od:::::d     d:::::d o::::o     o::::o   s::::::s      
+|           T:::::T     o::::o     o::::od:::::d     d:::::d o::::o     o::::o      s::::::s   
+|           T:::::T     o::::o     o::::od:::::d     d:::::d o::::o     o::::ossssss   s:::::s 
+|         TT:::::::TT   o:::::ooooo:::::od::::::ddddd::::::ddo:::::ooooo:::::os:::::ssss::::::s
+|         T:::::::::T   o:::::::::::::::o d:::::::::::::::::do:::::::::::::::os::::::::::::::s 
+|         T:::::::::T    oo:::::::::::oo   d:::::::::ddd::::d oo:::::::::::oo  s:::::::::::ss  
+|         TTTTTTTTTTT      ooooooooooo      ddddddddd   ddddd   ooooooooooo     sssssssssss    
+                                                                                           
+
+
+- Sometimes passing the packet to userspace is too slow and the server already ends some copies. Can this be done faster / so that no retransmission happens?
+
+- Sending messages to all does not work after some time (mostly 1-4 messages in). What is the cause for this?
