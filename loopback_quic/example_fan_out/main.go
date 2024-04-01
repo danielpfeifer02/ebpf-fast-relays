@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
@@ -44,7 +45,16 @@ func main_advanced() {
 	crypto_turnoff.CRYPTO_TURNED_OFF = true
 	packet_setting.ALLOW_SETTING_PN = true
 
+	f, err := os.Create("./log.txt")
+	defer f.Close()
+	if err != nil {
+		panic(err)
+	}
+	log.SetOutput(f)
+	// os.Setenv("QUIC_GO_LOG_LEVEL", "DEBUG") // TODO: not working
+
 	os.Setenv("QLOGDIR", "./qlog")
+	os.Remove("tls.keylog")
 
 	args := os.Args
 	if len(args) != 2 {

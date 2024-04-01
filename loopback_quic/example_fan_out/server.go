@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -26,7 +27,7 @@ const relay_addr = "192.168.11.2:4242"
 var bpf_enabled = true
 
 type pn_struct struct {
-	Pn      uint32
+	Pn      uint16
 	Changed uint8
 	Padding [3]uint8
 }
@@ -72,7 +73,7 @@ func NewStreamingServer() *StreamingServer {
 func (s *StreamingServer) run() error {
 	// delete tls.keylog file if present
 	// os.Remove("tls.keylog")
-	listener, err := quic.ListenAddr(server_addr, generateTLSConfig(), generateQUICConfig())
+	listener, err := quic.ListenAddr(server_addr, generateTLSConfig(true), generateQUICConfig())
 	if err != nil {
 		return err
 	}
@@ -162,7 +163,7 @@ func NewRelayServer() *RelayServer {
 
 func (s *RelayServer) run() error {
 
-	listener, err := quic.ListenAddr(relay_addr, generateTLSConfig(), generateQUICConfig())
+	listener, err := quic.ListenAddr(relay_addr, generateTLSConfig(false), generateQUICConfig())
 	if err != nil {
 		fmt.Printf("\nError: %v\n", err)
 		return err
@@ -270,7 +271,7 @@ func (s *RelayServer) run() error {
 
 					// resetting client_pn
 					zero_pn := pn_struct{
-						Pn:      uint32(0),
+						Pn:      uint16(0),
 						Changed: uint8(0),
 						Padding: [3]uint8{0, 0, 0},
 					}
@@ -363,6 +364,7 @@ func packetNumberHandler(conn quic.Connection) {
 		if val.Changed == 1 {
 			fmt.Println("R: Packet number changed! Updating...")
 
+			// TODO: change internal type to int32 since pn cannot be larger than 2^32?
 			conn.SetPacketNumber(int64(val.Pn))
 
 			// TODO: should I set it to the actual value or does this suffice?
@@ -381,7 +383,7 @@ func packetNumberHandler(conn quic.Connection) {
 			}
 			fmt.Printf("R: Updated packet number to %d (%d)\n", tmp.Pn, tmp.Changed)
 
-			// time.Sleep(10 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 		}
 
 	}
@@ -491,7 +493,7 @@ func streamAcceptWrapperServer(connection quic.Connection, channel chan quic.Str
 }
 
 // Setup a bare-bones TLS config for the server
-func generateTLSConfig() *tls.Config {
+func generateTLSConfig(klf bool) *tls.Config {
 	key, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		panic(err)
@@ -509,17 +511,25 @@ func generateTLSConfig() *tls.Config {
 		panic(err)
 	}
 
+	if !klf {
+		return &tls.Config{
+			Certificates: []tls.Certificate{tlsCert},
+			NextProtos:   []string{"quic-streaming-example"},
+			CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
+		}
+	}
+
 	// Create a KeyLogWriter
-	// keyLogFile, err := os.OpenFile("tls.keylog", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	// if err != nil {
-	// 	panic(err)
-	// }
+	keyLogFile, err := os.OpenFile("tls.keylog", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		panic(err)
+	}
 	// defer keyLogFile.Close() // TODO why not close?
 
 	return &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"quic-streaming-example"},
-		// KeyLogWriter: keyLogFile,
+		KeyLogWriter: keyLogFile,
 		CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
 	}
 }
