@@ -18,6 +18,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
 	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 )
 
@@ -242,7 +243,7 @@ func (s *RelayServer) run() error {
 					if s.server_connection == nil {
 						panic("Server connection not initialized")
 					}
-					server_stream, err := s.server_connection.OpenStreamSyncWithPriority(context.Background(), quic.HighPriority)
+					server_stream, err := s.server_connection.OpenStreamSyncWithPriority(context.Background(), priority_setting.HighPriority)
 					if err != nil {
 						panic(err)
 					}

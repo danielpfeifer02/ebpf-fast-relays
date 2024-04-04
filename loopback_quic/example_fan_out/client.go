@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
 )
 
 type StreamingClient struct {
@@ -61,7 +62,7 @@ func (c *StreamingClient) connectToServer() error {
 
 	fmt.Println("C: Opening stream")
 	// Open a new stream with high priority
-	stream, err := conn.OpenStreamSyncWithPriority(context.Background(), quic.HighPriority)
+	stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.HighPriority)
 	if err != nil {
 		return err
 	}

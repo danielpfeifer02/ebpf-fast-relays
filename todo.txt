@@ -22,3 +22,5 @@
 - Sometimes passing the packet to userspace is too slow and the server already ends some copies. Can this be done faster / so that no retransmission happens?
 
 - Sending messages to all does not work after some time (mostly 1-4 messages in). Most likely this has something to do with the packet numbers since the packets arrive at veth3 (i.e. client side interface). It might be due to the retirement of the used connection id!
+
+- Fixing the packet number setting from within the bpf program to not rely on arbitrary / hard-coded values
