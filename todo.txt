@@ -24,3 +24,11 @@
 - Sending messages to all does not work after some time (mostly 1-4 messages in). Most likely this has something to do with the packet numbers since the packets arrive at veth3 (i.e. client side interface). It might be due to the retirement of the used connection id!
 
 - Fixing the packet number setting from within the bpf program to not rely on arbitrary / hard-coded values
+
+- Allow to dial addr of relay all the time (seems to only work in the beginning)
+
+- Check that fan out to different addresses works correctly (not only to one client)
+
+- implement packet number handling with handling function for quic-go + adapt bpf code
+
+- Sometimes relay gets an error that there are no connection ids left?

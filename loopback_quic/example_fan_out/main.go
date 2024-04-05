@@ -131,6 +131,7 @@ func main_advanced() {
 		// We only want these functions to be executed in the relay
 		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
 		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
+		packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber
 
 		clearScreen()
 

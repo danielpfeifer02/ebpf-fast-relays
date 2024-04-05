@@ -561,15 +561,15 @@ int tc_egress(struct __sk_buff *skb)
                         return TC_ACT_OK;
                 }
                 struct pn_value_t pn_value = {
-                        .packet_number = old_pn->packet_number + 100, // TODO: this should not be +100
+                        .packet_number = old_pn->packet_number + 1, // // TODO: this should not be +100
                         .changed = 1,
                 };
                 bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
 
-                // TODO: i thought this might fix the problem of not receiving at client but apparently it does not
-                // set packet number in packet to old_pn->packet_number + 50
+                // // TODO: i thought this might fix the problem of not receiving at client but apparently it does not
+                // // set packet number in packet to old_pn->packet_number + 50
                 uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
-                uint16_t new_pn = htons(old_pn->packet_number + 50); // TODO: this should not be +50
+                uint16_t new_pn = htons(old_pn->packet_number + 1); // // TODO: this should not be +50
                 bpf_skb_store_bytes(skb, pn_off, &new_pn, sizeof(new_pn), 0);
 
                 bpf_printk("Done editing packet\n");

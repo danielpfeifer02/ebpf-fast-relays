@@ -466,6 +466,8 @@ func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	}
 	id := &id_struct{}
 
+	// TODO: maybe not load maps each time but only once in the beginning
+
 	client_id, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_id", &ebpf.LoadPinOptions{})
 	if err != nil {
 		fmt.Println("Error loading client_id")
@@ -496,6 +498,41 @@ func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	}
 
 	fmt.Println("Successfully updated client_data for retired connection id")
+}
+
+func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
+
+	qconn := conn.(quic.Connection)
+	if qconn.RemoteAddr().String() == server_addr {
+		return
+	}
+	fmt.Println("Increased packet number", qconn.RemoteAddr().String())
+
+	new_pn := pn_struct{
+		Pn:      uint16(pn),
+		Changed: uint8(0),
+		Padding: [3]uint8{0, 0, 0},
+	}
+
+	ipaddr, port := getIPAndPort(qconn)
+	key := client_key_struct{
+		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+		Port:    swapEndianness16(uint16(port)),
+		Padding: [2]uint8{0, 0},
+	}
+
+	client_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
+	if err != nil {
+		panic(err)
+	}
+	err = client_pn.Update(key, new_pn, 0)
+	if err != nil {
+		fmt.Println("Error updating client_pn")
+		panic(err)
+	}
+
+	fmt.Println("Client packet number map updated")
+
 }
 
 func getIPAndPort(conn quic.Connection) (net.IP, uint16) {
