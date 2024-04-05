@@ -287,9 +287,11 @@ func (s *RelayServer) run() error {
 					fmt.Printf("R: Number of clients is now: %d\n", client_ctr)
 
 					// resetting client_pn
-					zero_pn := pn_struct{
-						Pn:      uint16(0),
-						Changed: uint8(0),
+					// the first pn has to be set to 1 since 0 is already implicitly used by the library (TODO: verify)
+					// since the map holds the *next usable pn* it needs to hold 1 in the beginning
+					one_pn := pn_struct{
+						Pn:      uint16(1),
+						Changed: uint8(1),
 						Padding: [3]uint8{0, 0, 0},
 					}
 
@@ -299,7 +301,7 @@ func (s *RelayServer) run() error {
 						Padding: [2]uint8{0, 0},
 					}
 
-					err = client_pn.Update(key, zero_pn, 0)
+					err = client_pn.Update(key, one_pn, 0)
 					if err != nil {
 						fmt.Println("Error updating client_pn")
 						panic(err)
@@ -371,6 +373,8 @@ func packetNumberHandler(conn quic.Connection) {
 	}
 	val := &pn_struct{}
 
+	old_val := int64(0)
+
 	for {
 
 		err := client_pn.Lookup(key, val)
@@ -385,7 +389,7 @@ func packetNumberHandler(conn quic.Connection) {
 			conn.SetPacketNumber(int64(val.Pn))
 
 			// TODO: should I set it to the actual value or does this suffice?
-			conn.SetHighestSent(int64(val.Pn) - 1)
+			conn.SetHighestSent(old_val)
 
 			val.Changed = 0
 			err = client_pn.Update(key, val, 0)
@@ -402,6 +406,8 @@ func packetNumberHandler(conn quic.Connection) {
 
 		}
 
+		old_val = int64(val.Pn)
+
 	}
 }
 
@@ -411,20 +417,29 @@ func packetNumberHandler(conn quic.Connection) {
 // TODO: make list of lists based on ip port pair
 
 // map with string as key and list of byte arrays as value
-var connection_ids map[string][][]byte
-
+var connection_ids map[[6]byte][][]byte
 var mutex = &sync.Mutex{}
+
+func getConnectionIDsKey(qconn quic.Connection) [6]byte {
+	ipaddr, port := getIPAndPort(qconn)
+	ipv4 := ipaddr.To4()
+	if ipv4 == nil {
+		panic("Invalid IP address")
+	}
+	return [6]byte{ipv4[0], ipv4[1], ipv4[2], ipv4[3], byte(port >> 8), byte(port & 0xFF)}
+}
 
 func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 	fmt.Println("Init connection id")
 
-	// add to connection_ids
-	key := conn.RemoteAddr().String()
+	qconn := conn.(quic.Connection)
+
+	key := getConnectionIDsKey(qconn)
 
 	// if key does not exist, create new list
 	mutex.Lock()
 	if connection_ids == nil {
-		connection_ids = make(map[string][][]byte)
+		connection_ids = make(map[[6]byte][][]byte)
 	}
 	if _, ok := connection_ids[key]; !ok {
 		connection_ids[key] = make([][]byte, 0)
@@ -436,13 +451,15 @@ func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
 func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
-	if conn.RemoteAddr().String() == server_addr {
+	qconn := conn.(quic.Connection)
+
+	if qconn.RemoteAddr().String() == server_addr {
 		return
 	}
 
-	fmt.Println("Retire connection id for connection:", conn.RemoteAddr().String())
+	fmt.Println("Retire connection id for connection:", qconn.RemoteAddr().String())
 
-	key := conn.RemoteAddr().String()
+	key := getConnectionIDsKey(qconn)
 	// remove from connection_ids
 	for i, v := range connection_ids[key] {
 		if string(v) == string(id) {
@@ -451,13 +468,12 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 		}
 	}
 
-	go func() {
+	go func(key [6]byte) {
 
 		// it might be the case that retirements happen in the same packet as initiations
 		// and that for a brief time there are no connection ids left
 		// then: just wait until there are connection ids again
 		// TODO: add failure after certain time
-		key := conn.RemoteAddr().String()
 		for {
 			if len(connection_ids[key]) > 0 {
 				break
@@ -485,7 +501,7 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 		}
 
 		fmt.Println("Successfully retired connection id")
-	}()
+	}(key)
 }
 
 func setBPFMapConnectionID(qconn quic.Connection, v []byte) {

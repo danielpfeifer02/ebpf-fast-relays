@@ -36,3 +36,5 @@
 - Able to send after relay has crashed due to protocol violation?? Some rouge go routine maybe? Or is it wanted given that the bpf program still runs and the maps hold the correct values?
 
 - only the first connection seems to receive the fanned out packet correctly: FIXED: make sure that conenction_ids map works correctly
+
+- setting the packet number creates protocol violations: I guess there might be some synchronizations necessary (e.g. similar to a mutex) to avoid using the same pn multiple times and to "stall" user-space packets if some need to be sent
