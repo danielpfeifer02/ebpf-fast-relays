@@ -18,6 +18,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
 	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 )
@@ -33,10 +34,24 @@ type pn_struct struct {
 	Padding [3]uint8
 }
 
+type id_struct struct {
+	Id uint32
+}
+
 type client_key_struct struct {
 	Ipaddr  uint32
 	Port    uint16
 	Padding [2]uint8
+}
+
+type client_data_struct struct {
+	SrcMac       [6]uint8
+	DstMac       [6]uint8
+	SrcIp        uint32
+	DstIp        uint32
+	SrcPort      uint16
+	DstPort      uint16
+	ConnectionID [16]uint8
 }
 
 type StreamingStream struct {
@@ -388,6 +403,99 @@ func packetNumberHandler(conn quic.Connection) {
 		}
 
 	}
+}
+
+// create a global list of connection ids (i.e. 20 byte long byte arrays)
+// when a new connection is initiated, add the connection id to the list
+// when a connection is retired, remove the connection id from the list
+// TODO: make list of lists based on ip port pair
+var connection_ids [][]byte
+
+func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
+	fmt.Println("Init connection id")
+
+	// add to connection_ids
+	connection_ids = append(connection_ids, id)
+}
+
+func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
+
+	if conn.RemoteAddr().String() == server_addr {
+		return
+	}
+
+	fmt.Println("Retire connection id for connection:", conn.RemoteAddr().String())
+
+	// remove from connection_ids
+	for i, v := range connection_ids {
+		if string(v) == string(id) {
+			connection_ids = append(connection_ids[:i], connection_ids[i+1:]...)
+			break
+		}
+	}
+
+	if len(connection_ids) == 0 {
+		panic("No connection ids left")
+	}
+
+	// TODO: add connection to signature so that we can update the bpf map
+	qconn := conn.(quic.Connection)
+
+	updated := false
+	for _, v := range connection_ids {
+		if true || v[0] == 0x01 {
+			setBPFMapConnectionID(qconn, v)
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		panic("No connection id with 0x01 found")
+	}
+}
+
+func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
+	ipaddr, port := getIPAndPort(qconn)
+	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+
+	key := client_key_struct{
+		Ipaddr:  ipaddr_key,
+		Port:    port_key,
+		Padding: [2]uint8{0, 0},
+	}
+	id := &id_struct{}
+
+	client_id, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_id", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading client_id")
+		panic(err)
+	}
+	err = client_id.Lookup(key, id)
+	if err != nil {
+		fmt.Println("Error looking up client_id")
+		panic(err)
+	}
+
+	client_data, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_data", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading client_data")
+		panic(err)
+	}
+	client_info := &client_data_struct{}
+	err = client_data.Lookup(id, client_info)
+	if err != nil {
+		fmt.Println("Error looking up client_data")
+		panic(err)
+	}
+	copy(client_info.ConnectionID[:], v)
+	err = client_data.Update(id, client_info, ebpf.UpdateAny)
+	if err != nil {
+		fmt.Println("Error updating client_data")
+		panic(err)
+	}
+
+	fmt.Println("Successfully updated client_data for retired connection id")
 }
 
 func getIPAndPort(conn quic.Connection) (net.IP, uint16) {

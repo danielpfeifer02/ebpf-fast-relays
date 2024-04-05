@@ -38,37 +38,6 @@ func main() {
 	main_advanced()
 }
 
-// create a global list of connection ids (i.e. 20 byte long byte arrays)
-// when a new connection is initiated, add the connection id to the list
-// when a connection is retired, remove the connection id from the list
-// TODO: make list of lists based on ip port pair
-var connection_ids [][]byte
-
-func initConnectionId(id []byte, l uint8) {
-	fmt.Println("Init connection id")
-
-	// add to connection_ids
-	connection_ids = append(connection_ids, id)
-}
-
-func retireConnectionId(id []byte, l uint8) {
-	fmt.Println("Retire connection id")
-
-	// remove from connection_ids
-	for i, v := range connection_ids {
-		if string(v) == string(id) {
-			connection_ids = append(connection_ids[:i], connection_ids[i+1:]...)
-			break
-		}
-	}
-
-	if len(connection_ids) == 0 {
-		panic("No connection ids left")
-	}
-
-	// TODO: add connection to signature so that we can update the bpf map
-}
-
 // TODO: fix timeout issues when there is no stuff happening
 
 func main_advanced() {
@@ -76,8 +45,6 @@ func main_advanced() {
 	crypto_turnoff.CRYPTO_TURNED_OFF = true
 	packet_setting.ALLOW_SETTING_PN = true
 	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
-	packet_setting.ConnectionInitiationBPFHandler = initConnectionId
-	packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
 
 	f, err := os.Create("./log.txt")
 	defer f.Close()
@@ -159,6 +126,11 @@ func main_advanced() {
 		client.run()
 
 	} else if args[1] == "relay" {
+
+		// TODO: better set here or in server.go?
+		// We only want these functions to be executed in the relay
+		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
+		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
 
 		clearScreen()
 
