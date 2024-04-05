@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -215,15 +216,15 @@ func (s *RelayServer) run() error {
 			panic(err)
 		}
 
-		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
-		if err != nil {
-			panic(err)
-		}
+		// connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
+		// if err != nil {
+		// 	panic(err)
+		// }
 
-		err = connection_map.Update(uint32(0), uint8(0), 0)
-		if err != nil {
-			panic(err)
-		}
+		// err = connection_map.Update(uint32(0), uint8(0), 0)
+		// if err != nil {
+		// 	panic(err)
+		// }
 
 		client_pn, err = ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
 		if err != nil {
@@ -274,7 +275,7 @@ func (s *RelayServer) run() error {
 
 				// TODO: why ip address of bridge instead of client?
 				ipaddr, port := getIPAndPort(conn)
-				fmt.Println("R: New connection accepted (from %s at port %d)", ipaddr.String(), port)
+				fmt.Printf("R: New connection accepted (from %s at port %d)\n", ipaddr.String(), port)
 
 				if bpf_enabled {
 
@@ -340,17 +341,17 @@ func (s *RelayServer) run() error {
 }
 
 func publishConnectionEstablished() {
-	time.Sleep(1 * time.Second)
-	if bpf_enabled {
-		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
-		if err != nil {
-			panic(err)
-		}
-		err = connection_map.Update(uint32(0), uint8(1), 0)
-		if err != nil {
-			panic(err)
-		}
-	}
+	// time.Sleep(1 * time.Second)
+	// if bpf_enabled {
+	// 	connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	err = connection_map.Update(uint32(0), uint8(1), 0)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// }
 }
 
 func packetNumberHandler(conn quic.Connection) {
@@ -399,7 +400,6 @@ func packetNumberHandler(conn quic.Connection) {
 			}
 			fmt.Printf("R: Updated packet number to %d (%d)\n", tmp.Pn, tmp.Changed)
 
-			time.Sleep(50 * time.Millisecond)
 		}
 
 	}
@@ -410,6 +410,7 @@ func packetNumberHandler(conn quic.Connection) {
 // when a connection is retired, remove the connection id from the list
 // TODO: make list of lists based on ip port pair
 var connection_ids [][]byte
+var mutex = &sync.Mutex{}
 
 func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 	fmt.Println("Init connection id")
@@ -434,24 +435,40 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 		}
 	}
 
-	if len(connection_ids) == 0 {
-		panic("No connection ids left")
-	}
+	go func() {
 
-	// TODO: add connection to signature so that we can update the bpf map
-	qconn := conn.(quic.Connection)
-
-	updated := false
-	for _, v := range connection_ids {
-		if true || v[0] == 0x01 {
-			setBPFMapConnectionID(qconn, v)
-			updated = true
-			break
+		// it might be the case that retirements happen in the same packet as initiations
+		// and that for a brief time there are no connection ids left
+		// then: just wait until there are connection ids again
+		// TODO: add failure after certain time
+		for {
+			if len(connection_ids) > 0 {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
-	}
-	if !updated {
-		panic("No connection id with 0x01 found")
-	}
+
+		if len(connection_ids) == 0 {
+			panic("No connection ids left")
+		}
+
+		// TODO: add connection to signature so that we can update the bpf map
+		qconn := conn.(quic.Connection)
+
+		updated := false
+		for _, v := range connection_ids {
+			if true || v[0] == 0x01 {
+				setBPFMapConnectionID(qconn, v)
+				updated = true
+				break
+			}
+		}
+		if !updated {
+			panic("No connection id with 0x01 found")
+		}
+
+		fmt.Println("Successfully retired connection id")
+	}()
 }
 
 func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
@@ -608,7 +625,9 @@ func passOnTraffic(relay *RelayServer) error {
 
 func connectionAcceptWrapper(listener *quic.Listener, channel chan quic.Connection) {
 	for {
+		fmt.Println("before")
 		conn, err := listener.Accept(context.Background())
+		fmt.Println("after")
 		if err != nil {
 			panic(err)
 		}

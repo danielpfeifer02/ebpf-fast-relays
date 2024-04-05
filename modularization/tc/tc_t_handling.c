@@ -122,13 +122,14 @@ struct {
 } packet_counter SEC(".maps");
 
 struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __type(key, uint32_t);
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_info_key_t);
     __type(value, uint8_t);
     __uint(max_entries, 1);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_established SEC(".maps");
 
+// TODO: is this side even necessary?
 __section("ingress_from_client")
 int tc_ingress_from_client(struct __sk_buff *skb)
 {
@@ -160,11 +161,17 @@ int tc_ingress_from_client(struct __sk_buff *skb)
         }
 
         // TODO: for now just drop QUIC answers to avoid protocol violation
-        uint32_t zero = 0;
-        uint8_t *conn_established = bpf_map_lookup_elem(&connection_established, &zero);
-        if (conn_established == NULL || *conn_established == 1) {
-                return TC_ACT_SHOT;
+        struct client_info_key_t key = {
+                .ip_addr = ip->saddr,
+                .port = udp->source,
+        };
+        uint8_t *conn_established = bpf_map_lookup_elem(&connection_established, &key);
+        if (conn_established != NULL && *conn_established == 1) {
+                return TC_ACT_OK;
         }
+        uint8_t established = 1;
+        bpf_map_update_elem(&connection_established, &key, &established, BPF_ANY);
+
 
         // Load UDP payload
         void *payload = (void *)(udp + 1);
@@ -282,17 +289,19 @@ __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
 {
 
-        // load connection_established map
-        uint32_t zero = 0;
-        uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &zero);
-        if (conn_est == NULL) {
-                bpf_printk("No connection established found\n");
-                return TC_ACT_OK;
-        }
-        if (*conn_est == 0) {
-                bpf_printk("Connection not established\n");
-                return TC_ACT_OK;
-        }
+        // return TC_ACT_OK;
+
+        // // // load connection_established map
+        // // uint32_t zero = 0;
+        // // uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &zero);
+        // // if (conn_est == NULL) {
+        // //         bpf_printk("No connection established found\n");
+        // //         return TC_ACT_OK;
+        // // }
+        // // if (*conn_est == 0) {
+        // //         bpf_printk("Connection not established\n");
+        // //         return TC_ACT_OK;
+        // // }
 
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;

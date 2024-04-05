@@ -51,7 +51,7 @@ func (c *StreamingClient) connectToServer() error {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-streaming-example"},
 	}
-	fmt.Println("C: Dialing address")
+	fmt.Println("C: Dialing address", relay_addr)
 	// client_addr := net.IPv4(192, 168, 1, 4)
 	// conn, err := quic.DialAddrExt(context.Background(), relay_addr, "veth3", tlsConf, generateQUICConfig())
 	conn, err := quic.DialAddr(context.Background(), relay_addr, tlsConf, generateQUICConfig())
