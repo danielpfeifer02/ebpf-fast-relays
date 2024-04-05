@@ -34,3 +34,5 @@
 - Sometimes relay gets an error that there are no connection ids left?
 
 - Able to send after relay has crashed due to protocol violation?? Some rouge go routine maybe? Or is it wanted given that the bpf program still runs and the maps hold the correct values?
+
+- only the first connection seems to receive the fanned out packet correctly: FIXED: make sure that conenction_ids map works correctly

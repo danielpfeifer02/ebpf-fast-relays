@@ -409,14 +409,29 @@ func packetNumberHandler(conn quic.Connection) {
 // when a new connection is initiated, add the connection id to the list
 // when a connection is retired, remove the connection id from the list
 // TODO: make list of lists based on ip port pair
-var connection_ids [][]byte
+
+// map with string as key and list of byte arrays as value
+var connection_ids map[string][][]byte
+
 var mutex = &sync.Mutex{}
 
 func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 	fmt.Println("Init connection id")
 
 	// add to connection_ids
-	connection_ids = append(connection_ids, id)
+	key := conn.RemoteAddr().String()
+
+	// if key does not exist, create new list
+	mutex.Lock()
+	if connection_ids == nil {
+		connection_ids = make(map[string][][]byte)
+	}
+	if _, ok := connection_ids[key]; !ok {
+		connection_ids[key] = make([][]byte, 0)
+	}
+	mutex.Unlock()
+
+	connection_ids[key] = append(connection_ids[key], id)
 }
 
 func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
@@ -427,10 +442,11 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 
 	fmt.Println("Retire connection id for connection:", conn.RemoteAddr().String())
 
+	key := conn.RemoteAddr().String()
 	// remove from connection_ids
-	for i, v := range connection_ids {
+	for i, v := range connection_ids[key] {
 		if string(v) == string(id) {
-			connection_ids = append(connection_ids[:i], connection_ids[i+1:]...)
+			connection_ids[key] = append(connection_ids[key][:i], connection_ids[key][i+1:]...)
 			break
 		}
 	}
@@ -441,14 +457,15 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 		// and that for a brief time there are no connection ids left
 		// then: just wait until there are connection ids again
 		// TODO: add failure after certain time
+		key := conn.RemoteAddr().String()
 		for {
-			if len(connection_ids) > 0 {
+			if len(connection_ids[key]) > 0 {
 				break
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
 
-		if len(connection_ids) == 0 {
+		if len(connection_ids[key]) == 0 {
 			panic("No connection ids left")
 		}
 
@@ -456,7 +473,7 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 		qconn := conn.(quic.Connection)
 
 		updated := false
-		for _, v := range connection_ids {
+		for _, v := range connection_ids[key] {
 			if true || v[0] == 0x01 {
 				setBPFMapConnectionID(qconn, v)
 				updated = true

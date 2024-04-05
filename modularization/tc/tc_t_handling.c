@@ -570,7 +570,7 @@ int tc_egress(struct __sk_buff *skb)
                         return TC_ACT_OK;
                 }
                 struct pn_value_t pn_value = {
-                        .packet_number = old_pn->packet_number + 1, // // TODO: this should not be +100
+                        .packet_number = old_pn->packet_number + 2, // // TODO: this should not be +100
                         .changed = 1,
                 };
                 bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
