@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"runtime"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
@@ -21,6 +22,8 @@ func NewStreamingClient() *StreamingClient {
 
 // TODO structure better
 func (c *StreamingClient) run() {
+
+	fmt.Println("Number of goroutines:", runtime.NumGoroutine())
 
 	// for now only one stream is supported
 	for {

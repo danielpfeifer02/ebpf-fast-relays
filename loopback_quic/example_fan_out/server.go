@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,13 +47,15 @@ type client_key_struct struct {
 }
 
 type client_data_struct struct {
-	SrcMac       [6]uint8
-	DstMac       [6]uint8
-	SrcIp        uint32
-	DstIp        uint32
-	SrcPort      uint16
-	DstPort      uint16
-	ConnectionID [16]uint8
+	SrcMac            [6]uint8
+	DstMac            [6]uint8
+	SrcIp             uint32
+	DstIp             uint32
+	SrcPort           uint16
+	DstPort           uint16
+	ConnectionID      [16]uint8
+	PriorityDropLimit uint8
+	Padding           [3]uint8
 }
 
 type StreamingStream struct {
@@ -88,6 +91,9 @@ func NewStreamingServer() *StreamingServer {
 }
 
 func (s *StreamingServer) run() error {
+
+	fmt.Println("Number of goroutines:", runtime.NumGoroutine())
+
 	// delete tls.keylog file if present
 	// os.Remove("tls.keylog")
 	listener, err := quic.ListenAddr(server_addr, generateTLSConfig(true), generateQUICConfig())
@@ -179,6 +185,8 @@ func NewRelayServer() *RelayServer {
 }
 
 func (s *RelayServer) run() error {
+
+	fmt.Println("Number of goroutines:", runtime.NumGoroutine())
 
 	listener, err := quic.ListenAddr(relay_addr, generateTLSConfig(false), generateQUICConfig())
 	if err != nil {
@@ -548,6 +556,37 @@ func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	}
 
 	fmt.Println("Successfully updated client_data for retired connection id")
+	fmt.Printf("Priority drop limit of stream is %d\n", client_info.PriorityDropLimit)
+
+	// ^ for testing purposes only
+	go func(client_data *ebpf.Map) {
+		wait := time.Duration(6)
+
+		for i := 0; i < 3; i++ {
+			time.Sleep(wait * time.Second)
+			fmt.Println("\n\n\nSetting priority drop limit to 2 (i.e. dropping all packets since highest prio is 1)\n\n\n")
+			client_info := &client_data_struct{}
+			err = client_data.Lookup(id, client_info)
+			if err != nil {
+				fmt.Println("Error looking up client_data")
+				panic(err)
+			}
+			client_info.PriorityDropLimit = 2
+			err = client_data.Update(id, client_info, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating client_data")
+				panic(err)
+			}
+			time.Sleep(wait * time.Second)
+			fmt.Println("\n\n\nSetting priority drop limit back to 0\n\n\n")
+			client_info.PriorityDropLimit = 0
+			err = client_data.Update(id, client_info, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating client_data")
+				panic(err)
+			}
+		}
+	}(client_data)
 }
 
 func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {

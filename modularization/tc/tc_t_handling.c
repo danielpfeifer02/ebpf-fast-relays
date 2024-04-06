@@ -49,6 +49,7 @@ struct client_info_t {
         uint16_t src_port;
         uint16_t dst_port;
         uint8_t connection_id[CONN_ID_LEN];
+        uint8_t priority_drop_limit; // this is the smallest priority that is still accepted
 };
 
 struct pn_value_t {
@@ -232,10 +233,19 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 uint16_t dst_port; // port of the relay
                 bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
 
+                // uint8_t prio;
+                // bpf_probe_read_kernel(&prio, sizeof(prio), payload + 1 /* Long header flags */ 
+                //                                                    + 4 /* Version */ 
+                //                                                    + 1 /* DST CONN ID Len */ 
+                //                                                    + CONN_ID_LEN /* DST CONN ID */
+                //                                                    + 1 /* SRC CONN ID Len */);
+                // bpf_printk("PRIO: %02x\n", prio);
+
                 struct client_info_key_t key = {
                         .ip_addr = src_ip_addr, // identifying will be the ip of the client
                         .port = src_port,       // and the port of the client
                 };
+
 
                 struct client_info_t value = {
                         .src_mac = {0},
@@ -245,6 +255,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                         .src_port = dst_port, // the source port will be the port of the relay
                         .dst_port = src_port, // the destination port will be the port of the client
                         .connection_id = {0},
+                        .priority_drop_limit = 0,
                 };
 
                 for (int i = 0; i < MAC_LEN; i++) {
@@ -366,6 +377,7 @@ int tc_ingress(struct __sk_buff *skb)
                 bpf_printk("Short header - redirecting for %d clients\n", *num_clients);
 
                 // TODO probably not working bc of concurrency (maybe some hash map to look up ctr value for a packet or save inside of packet bytes?)
+                // ! TODO change from packet ctr to aving index inside of packet
                 // set packet_counter to 1 
                 uint32_t pack_ctr = 1;
                 bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
@@ -513,6 +525,27 @@ int tc_egress(struct __sk_buff *skb)
                         bpf_printk("No client data found\n");
                         return TC_ACT_SHOT;
                 }
+
+
+                uint8_t client_prio_drop_limit = value->priority_drop_limit;
+                uint8_t packet_prio; 
+                bpf_probe_read_kernel(&packet_prio, sizeof(packet_prio), payload + 1 /* Short header flags */);
+
+                bpf_printk("Threshold: %02x - Packet prio: %02x\n", client_prio_drop_limit, packet_prio);
+
+                // ! Seems to not be working? Something wrong with the state of the client data map?
+                // ! maybe it is the packet number change which does not have any effect since the packet is dropped
+                // // ! i think it is because the ACK of the packet from the server leaves through the same interface and 
+                // // ! is also dropped once the prio threshold is adapted?
+                // ! something with the client data is wrong since the packet arrives at the client interface 
+                // ! but is dropped apparently
+                // ! i think its the packet number bc if nothing is tired to be sent during the phase of prio dropping
+                // ! it works normally afterwards
+                if (packet_prio < client_prio_drop_limit) {
+                        bpf_printk("Packet prio lower than client prio Threshold\n");
+                        return TC_ACT_SHOT;
+                }
+
 
                 // set src_mac to value->src_mac
                 uint32_t src_mac_off = 6 /* DST MAC */;

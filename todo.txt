@@ -38,3 +38,9 @@
 - only the first connection seems to receive the fanned out packet correctly: FIXED: make sure that conenction_ids map works correctly
 
 - setting the packet number creates protocol violations: I guess there might be some synchronizations necessary (e.g. similar to a mutex) to avoid using the same pn multiple times and to "stall" user-space packets if some need to be sent
+
+- incoporate priorities to fan out / filtering
+
+- determine how to filter packets that have been replicated but don't need to be sent to client (bc of priority dropping). Maybe add an index to the packet and drop every index after ... (after what?)
+
+- remove usage of packet_counter and change to saving the index in the packet (maybe in the checksum or so?)
