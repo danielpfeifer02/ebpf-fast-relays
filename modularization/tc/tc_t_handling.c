@@ -466,16 +466,20 @@ int tc_egress(struct __sk_buff *skb)
                 return TC_ACT_OK;
         }
 
+        uint8_t not_quic = 0;
+
         // UDP checksum needs to be 0
         if (udp->check != 0) {
                 bpf_printk("Checksum not 0\n");
-                return TC_ACT_OK;
+                // return TC_ACT_OK;
+                not_quic = 1;
         }
 
         // check that the UDP dst port is the port marker
         if (udp->dest != PORT_MARKER) {
                 bpf_printk("Not the correct port\n");
-                return TC_ACT_OK;
+                // return TC_ACT_OK;
+                not_quic = 1;
         }
 
         // Load UDP payload
@@ -502,6 +506,45 @@ int tc_egress(struct __sk_buff *skb)
 
         // redirecting short header packets
         if (header_form == 0) {
+
+                // When a short header packet arrives at the egress interface
+                // which is sent from user space we update the packet number
+                // ! TODO seems to have fixed the error after prio dropping
+                if (not_quic) {
+
+                        // read dst ip and port
+                        uint32_t dst_ip_addr;
+                        bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
+                        uint16_t dst_port;
+                        bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
+
+                        // now we have to update the packet number
+                        struct client_info_key_t key = {
+                                .ip_addr = dst_ip_addr,
+                                .port = dst_port,
+                        };
+                        
+                        // ! assume 2 byte packet number for now
+                        uint16_t old_pn;
+                        bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
+                                                                        + 1 /* Short header bits */
+                                                                        + CONN_ID_LEN /* Connection ID */);
+
+                        old_pn = ntohs(old_pn);
+
+                        bpf_printk("Old packet number: %02x\n", old_pn);
+
+                        struct pn_value_t pn_value = {
+                                .packet_number = old_pn + 1,
+                                .changed = 0,
+                        };
+                        bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
+
+                        return TC_ACT_OK;
+                }
+
+                
+
 
                 bpf_printk("Received redirected short header!\n");
 
@@ -543,6 +586,8 @@ int tc_egress(struct __sk_buff *skb)
                 // ! it works normally afterwards
                 if (packet_prio < client_prio_drop_limit) {
                         bpf_printk("Packet prio lower than client prio Threshold\n");
+                        *pack_ctr = *pack_ctr + 1;
+                        bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
                         return TC_ACT_SHOT;
                 }
 
@@ -616,6 +661,8 @@ int tc_egress(struct __sk_buff *skb)
 
                 bpf_printk("Done editing packet\n");
         
+        } else {
+                // ! TODO: update packet number for long header packets
         }
 
         return TC_ACT_OK;

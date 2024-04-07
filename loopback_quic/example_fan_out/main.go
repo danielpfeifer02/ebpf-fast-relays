@@ -54,7 +54,7 @@ func main_advanced() {
 	log.SetOutput(f)
 	// os.Setenv("QUIC_GO_LOG_LEVEL", "DEBUG") // TODO: not working
 
-	os.Setenv("QLOGDIR", "./qlog")
+	// os.Setenv("QLOGDIR", "./qlog")
 	os.Remove("tls.keylog")
 
 	args := os.Args
@@ -99,11 +99,11 @@ func main_advanced() {
 			switch choice {
 			case 1:
 				fmt.Println("Sending high-prio message to all clients")
-				server.sendToAllHigh("foobar high")
+				server.sendToAllHigh("foobar high\n")
 				time.Sleep(sleeping_time)
 			case 2:
 				fmt.Println("Sending low-prio message to all clients")
-				server.sendToAllLow("foobar low")
+				server.sendToAllLow("foobar low\n")
 				time.Sleep(sleeping_time)
 			case 3:
 				fmt.Println("Exiting")
@@ -118,6 +118,7 @@ func main_advanced() {
 		}
 
 	} else if args[1] == "client" {
+		os.Setenv("QLOGDIR", "./qlog")
 
 		clearScreen()
 
@@ -131,6 +132,7 @@ func main_advanced() {
 		// We only want these functions to be executed in the relay
 		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
 		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
+		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
 		packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber
 
 		clearScreen()

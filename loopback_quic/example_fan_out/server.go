@@ -165,6 +165,7 @@ type RelayServer struct {
 	conn_chan         chan quic.Connection
 	stream_chan       chan quic.Stream
 	interrupt_chan    chan bool
+	connection_list   []quic.Connection
 	stream_list       []quic.Stream
 	server_connection quic.Connection
 	server_stream     quic.Stream
@@ -178,6 +179,7 @@ func NewRelayServer() *RelayServer {
 		conn_chan:         make(chan quic.Connection),
 		stream_chan:       make(chan quic.Stream),
 		interrupt_chan:    make(chan bool),
+		connection_list:   make([]quic.Connection, 0),
 		stream_list:       make([]quic.Stream, 0),
 		server_connection: nil,
 		server_stream:     nil,
@@ -239,6 +241,88 @@ func (s *RelayServer) run() error {
 			panic(err)
 		}
 	}
+
+	// ^ for testing purposes only
+	go func(relay *RelayServer) {
+
+		for {
+			if len(relay.connection_list) > 0 {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+
+		ipaddr, port := getIPAndPort(relay.connection_list[0])
+		ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+		port_key := swapEndianness16(port)
+
+		key := client_key_struct{
+			Ipaddr:  ipaddr_key,
+			Port:    port_key,
+			Padding: [2]uint8{0, 0},
+		}
+		id := &id_struct{}
+
+		// TODO: maybe not load maps each time but only once in the beginning
+
+		client_id, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_id", &ebpf.LoadPinOptions{})
+		if err != nil {
+			fmt.Println("Error loading client_id")
+			panic(err)
+		}
+		err = client_id.Lookup(key, id)
+		if err != nil {
+			fmt.Println("Error looking up client_id")
+			panic(err)
+		}
+
+		client_data, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_data", &ebpf.LoadPinOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		wait := time.Duration(4)
+
+		for i := 0; i < 3; i++ {
+			time.Sleep(wait * time.Second)
+			fmt.Println("\n\n\nSetting priority drop limit to 2 (i.e. dropping all packets since highest prio is 1)\n\n\n")
+			client_info := &client_data_struct{}
+			err = client_data.Lookup(id, client_info)
+			if err != nil {
+				fmt.Println("Error looking up client_data")
+				panic(err)
+			}
+			client_info.PriorityDropLimit = 2
+			err = client_data.Update(id, client_info, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating client_data")
+				panic(err)
+			}
+			time.Sleep(wait * time.Second)
+			fmt.Println("\n\n\nSetting priority drop limit back to 0\n\n\n")
+			err = client_data.Lookup(id, client_info)
+			if err != nil {
+				fmt.Println("Error looking up client_data")
+				panic(err)
+			}
+			client_info.PriorityDropLimit = 0
+			err = client_data.Update(id, client_info, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating client_data")
+				panic(err)
+			}
+
+			if i >= 1 {
+				fmt.Printf("Sending info to client\n")
+				for _, send_stream := range relay.stream_list {
+					_, err = send_stream.Write([]byte("You get the traffic again now!\n"))
+					if err != nil {
+						panic(err)
+					}
+				}
+			}
+		}
+	}(s)
 
 	// separate goroutine that handles all connections, interrupts and message sendings
 	go func() {
@@ -334,6 +418,8 @@ func (s *RelayServer) run() error {
 					s.server_connection = conn_to_server
 					fmt.Print("R: Connected to server\n")
 				}
+
+				s.connection_list = append(s.connection_list, conn)
 
 				go streamAcceptWrapperRelay(conn, s)
 			}
@@ -512,6 +598,14 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 	}(key)
 }
 
+func updateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
+	qconn := conn.(quic.Connection)
+	if qconn.RemoteAddr().String() == server_addr {
+		return
+	}
+	setBPFMapConnectionID(qconn, id)
+}
+
 func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	ipaddr, port := getIPAndPort(qconn)
 	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
@@ -557,36 +651,6 @@ func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 
 	fmt.Println("Successfully updated client_data for retired connection id")
 	fmt.Printf("Priority drop limit of stream is %d\n", client_info.PriorityDropLimit)
-
-	// ^ for testing purposes only
-	go func(client_data *ebpf.Map) {
-		wait := time.Duration(6)
-
-		for i := 0; i < 3; i++ {
-			time.Sleep(wait * time.Second)
-			fmt.Println("\n\n\nSetting priority drop limit to 2 (i.e. dropping all packets since highest prio is 1)\n\n\n")
-			client_info := &client_data_struct{}
-			err = client_data.Lookup(id, client_info)
-			if err != nil {
-				fmt.Println("Error looking up client_data")
-				panic(err)
-			}
-			client_info.PriorityDropLimit = 2
-			err = client_data.Update(id, client_info, ebpf.UpdateAny)
-			if err != nil {
-				fmt.Println("Error updating client_data")
-				panic(err)
-			}
-			time.Sleep(wait * time.Second)
-			fmt.Println("\n\n\nSetting priority drop limit back to 0\n\n\n")
-			client_info.PriorityDropLimit = 0
-			err = client_data.Update(id, client_info, ebpf.UpdateAny)
-			if err != nil {
-				fmt.Println("Error updating client_data")
-				panic(err)
-			}
-		}
-	}(client_data)
 }
 
 func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
