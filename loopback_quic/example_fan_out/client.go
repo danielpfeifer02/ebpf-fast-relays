@@ -35,15 +35,20 @@ func (c *StreamingClient) run() {
 
 			stream := c.stream_list[0]
 
-			buf := make([]byte, 1)
-			// fmt.Println("C: Reading from stream")
-			n, err := stream.Read(buf)
-			if err != nil {
-				panic(err)
-			}
+			n := 1
 
-			// fmt.Printf("Client got: %s\n", buf[:n])
-			fmt.Printf("%s", buf[:n])
+			for n > 0 {
+
+				buf := make([]byte, 1)
+				// fmt.Println("C: Reading from stream")
+				n, err := stream.Read(buf)
+				if err != nil {
+					panic(err)
+				}
+
+				// fmt.Printf("Client got: %s\n", buf[:n])
+				fmt.Printf("%s", buf[:n])
+			}
 		}
 	}
 }

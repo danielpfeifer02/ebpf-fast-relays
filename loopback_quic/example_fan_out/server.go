@@ -161,12 +161,18 @@ func (s *StreamingServer) sendToAllLow(message string) {
 	// sendToAll(s.low_prio_stream, message)
 }
 
+type client_connection struct {
+	conn   quic.Connection
+	stream quic.Stream
+}
+
 type RelayServer struct {
 	conn_chan         chan quic.Connection
 	stream_chan       chan quic.Stream
 	interrupt_chan    chan bool
 	connection_list   []quic.Connection
-	stream_list       []quic.Stream
+	client_list       []client_connection
+	connection_lookup map[quic.Stream]quic.Connection
 	server_connection quic.Connection
 	server_stream     quic.Stream
 }
@@ -180,7 +186,8 @@ func NewRelayServer() *RelayServer {
 		stream_chan:       make(chan quic.Stream),
 		interrupt_chan:    make(chan bool),
 		connection_list:   make([]quic.Connection, 0),
-		stream_list:       make([]quic.Stream, 0),
+		client_list:       make([]client_connection, 0),
+		connection_lookup: make(map[quic.Stream]quic.Connection),
 		server_connection: nil,
 		server_stream:     nil,
 	}
@@ -312,9 +319,11 @@ func (s *RelayServer) run() error {
 				panic(err)
 			}
 
+			// ! why does it not work without this?
 			if i >= 1 {
 				fmt.Printf("Sending info to client\n")
-				for _, send_stream := range relay.stream_list {
+				for _, client_conn := range relay.client_list {
+					send_stream := client_conn.stream
 					_, err = send_stream.Write([]byte("You get the traffic again now!\n"))
 					if err != nil {
 						panic(err)
@@ -337,15 +346,20 @@ func (s *RelayServer) run() error {
 			case <-s.interrupt_chan:
 				fmt.Println("R: Terminate relay")
 				// close all streams
-				for _, stream := range s.stream_list {
-					stream.Close()
+				for _, client_conn := range s.client_list {
+					client_conn.stream.Close()
 				}
 				listener.Close()
 				done <- struct{}{}
 				return
 
 			case stream := <-s.stream_chan:
-				s.stream_list = append(s.stream_list, stream)
+				conn := s.connection_lookup[stream]
+				client := client_connection{
+					conn:   conn,
+					stream: stream,
+				}
+				s.client_list = append(s.client_list, client)
 
 				if s.server_stream == nil {
 					if s.server_connection == nil {
@@ -430,10 +444,66 @@ func (s *RelayServer) run() error {
 
 	}()
 
+	go keepConnectionsUpToDate(s)
+
 	<-done
 	fmt.Println("Relay done")
 
 	return nil
+}
+
+// ! TODO: weird behavior after prio dropped once?
+func keepConnectionsUpToDate(relay *RelayServer) {
+
+	client_data, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_data", &ebpf.LoadPinOptions{})
+	if err != nil {
+		panic(err)
+	}
+	client_id, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_id", &ebpf.LoadPinOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	for {
+
+		for _, client_conn := range relay.client_list {
+
+			ipaddr, port := getIPAndPort(client_conn.conn)
+			ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+			port_key := swapEndianness16(port)
+
+			key := client_key_struct{
+				Ipaddr:  ipaddr_key,
+				Port:    port_key,
+				Padding: [2]uint8{0, 0},
+			}
+			id := &id_struct{}
+			err = client_id.Lookup(key, id)
+			if err != nil {
+				panic(err)
+			}
+
+			client_info := &client_data_struct{}
+			err = client_data.Lookup(id, client_info)
+			if err != nil {
+				panic(err)
+			}
+
+			active_conn_id := client_conn.conn.GetDestConnID(client_conn.stream)
+			if active_conn_id.String() != string(client_info.ConnectionID[:]) {
+				fmt.Println("R: Connection ID changed. Updating...")
+				copy(client_info.ConnectionID[:], active_conn_id.Bytes())
+				err = client_data.Update(id, client_info, ebpf.UpdateAny)
+				if err != nil {
+					panic(err)
+				}
+			}
+
+		}
+
+		time.Sleep(4 * time.Second)
+
+	}
 }
 
 func publishConnectionEstablished() {
@@ -778,6 +848,7 @@ func streamAcceptWrapperRelay(connection quic.Connection, s *RelayServer) {
 		if err != nil {
 			panic(err)
 		}
+		s.connection_lookup[stream] = connection
 		s.stream_chan <- stream
 	}
 }

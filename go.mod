@@ -4,7 +4,7 @@ go 1.21.0
 
 toolchain go1.22.0
 
-require github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-17
+require github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-18
 
 require github.com/cilium/ebpf v0.13.2
 
