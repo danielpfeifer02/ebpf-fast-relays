@@ -134,6 +134,7 @@ func main_advanced() {
 		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
 		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
 		packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber
+		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
 
 		clearScreen()
 

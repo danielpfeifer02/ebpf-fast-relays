@@ -130,7 +130,30 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_established SEC(".maps");
 
-// TODO: is this side even necessary?
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_info_key_t);
+    __type(value, uint32_t);
+    __uint(max_entries, MAX_CLIENTS);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} connection_current_pn SEC(".maps");
+
+struct client_pn_map_key_t {
+        struct client_info_key_t key;
+        uint32_t packet_number;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_pn_map_key_t);
+    __type(value, uint32_t);
+    __uint(max_entries, MAX_CLIENTS);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} connection_pn_translation SEC(".maps");
+
+
+// TODO: is this side even necessary? Maybe do from user space?
 __section("ingress_from_client")
 int tc_ingress_from_client(struct __sk_buff *skb)
 {
@@ -545,22 +568,51 @@ int tc_egress(struct __sk_buff *skb)
                                 .ip_addr = dst_ip_addr,
                                 .port = dst_port,
                         };
+                
+
+                        // // struct pn_value_t pn_value = {
+                        // //         .packet_number = old_pn + 1,
+                        // //         .changed = 0,
+                        // // };
+                        // // bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
                         
-                        // ! assume 2 byte packet number for now
+                        // Here we translate the packet number of the outgoing packet to 
+                        // the packet number which will actually be sent out (the one in
+                        // the bpf map)
+                        // ! assume 2 byte packet number for now (TODO: set to fixed size for all packets / numbers)
                         uint16_t old_pn;
                         bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
                                                                         + 1 /* Short header bits */
                                                                         + CONN_ID_LEN /* Connection ID */);
 
                         old_pn = ntohs(old_pn);
-
                         bpf_printk("Old packet number: %02x\n", old_pn);
 
-                        struct pn_value_t pn_value = {
-                                .packet_number = old_pn + 1,
-                                .changed = 0,
+                        // lookup the next packet number for a connection
+                        uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key);
+                        uint32_t zero = 0;
+                        if (new_pn == NULL) {
+                                bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
+                                new_pn = &zero;
+                        }
+                        
+                        // update the packet number in the packet
+                        uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
+                        uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
+                        bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0);
+
+                        // we also need to save the mapping for later
+                        struct client_pn_map_key_t pn_key = {
+                                .key = key,
+                                .packet_number = *new_pn,
                         };
-                        bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
+                        bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
+
+                        bpf_printk("Packet number: %d\n", *new_pn);
+
+                        // increment the packet number of the connection
+                        *new_pn = *new_pn + 1;
+                        bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
                         return TC_ACT_OK;
                 }
@@ -663,27 +715,42 @@ int tc_egress(struct __sk_buff *skb)
                 // bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
 
 
-                // setting the packet number so that user space can update it
+                // // setting the packet number so that user space can update it
                 struct client_info_key_t key = {
                         .ip_addr = value->dst_ip_addr,
                         .port = value->dst_port,
                 };
-                struct pn_value_t *old_pn = bpf_map_lookup_elem(&client_pn, &key);
-                if (old_pn == NULL) {
+                // struct pn_value_t *old_pn = bpf_map_lookup_elem(&client_pn, &key);
+                // if (old_pn == NULL) {
+                //         bpf_printk("No packet number found\n");
+                //         return TC_ACT_OK;
+                // }
+                // struct pn_value_t pn_value = {
+                //         .packet_number = old_pn->packet_number + 1, // // TODO: this should not be +100
+                //         .changed = 1,
+                // };
+                // bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
+
+                // // // TODO: i thought this might fix the problem of not receiving at client but apparently it does not
+                // // // set packet number in packet to old_pn->packet_number + 50
+                // uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
+                // uint16_t new_pn = htons(old_pn->packet_number); // // TODO: this should not be +50
+                // bpf_skb_store_bytes(skb, pn_off, &new_pn, sizeof(new_pn), 0);
+
+                uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
+                if (new_pn == NULL) {
                         bpf_printk("No packet number found\n");
                         return TC_ACT_OK;
                 }
-                struct pn_value_t pn_value = {
-                        .packet_number = old_pn->packet_number + 1, // // TODO: this should not be +100
-                        .changed = 1,
-                };
-                bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
-
-                // // TODO: i thought this might fix the problem of not receiving at client but apparently it does not
-                // // set packet number in packet to old_pn->packet_number + 50
                 uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
-                uint16_t new_pn = htons(old_pn->packet_number); // // TODO: this should not be +50
-                bpf_skb_store_bytes(skb, pn_off, &new_pn, sizeof(new_pn), 0);
+                uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
+                bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0);
+
+                bpf_printk("Packet number: %d\n", *new_pn);
+
+                // increment the packet number of the connection
+                *new_pn = *new_pn + 1;
+                bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
                 bpf_printk("Done editing packet\n");
         

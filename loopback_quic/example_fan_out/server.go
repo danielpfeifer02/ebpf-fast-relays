@@ -46,6 +46,11 @@ type client_key_struct struct {
 	Padding [2]uint8
 }
 
+type client_pn_map_key struct {
+	Key client_key_struct
+	Pn  uint32
+}
+
 type client_data_struct struct {
 	SrcMac            [6]uint8
 	DstMac            [6]uint8
@@ -821,6 +826,43 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 
 }
 
+func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int64, error) {
+
+	fmt.Println("TRANSLATE")
+
+	qconn := conn.(quic.Connection)
+
+	if qconn.RemoteAddr().String() == server_addr {
+		fmt.Println("Not translating pn for server")
+		return pn, nil
+	}
+	fmt.Println("Translated packet number", qconn.RemoteAddr().String())
+
+	ipaddr, port := getIPAndPort(qconn)
+	client_key := client_key_struct{
+		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+		Port:    swapEndianness16(uint16(port)),
+		Padding: [2]uint8{0, 0},
+	}
+	key := client_pn_map_key{
+		Key: client_key,
+		Pn:  uint32(pn),
+	}
+
+	client_pn_translator, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_pn_translation", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading client_pn_translator")
+		panic(err)
+	}
+	val := &pn_struct{}
+	err = client_pn_translator.Lookup(key, val)
+	if err != nil {
+		return pn, fmt.Errorf("Error looking up in client_pn_translator")
+	}
+
+	return int64(val.Pn), nil
+}
+
 func getIPAndPort(conn quic.Connection) (net.IP, uint16) {
 	tup := strings.Split(conn.RemoteAddr().String(), ":")
 	ipaddr := net.ParseIP(tup[0])
@@ -843,7 +885,9 @@ func clearBPFMaps() {
 		"number_of_clients",
 		"connection_established",
 		"packet_counter",
-		"client_pn"}
+		"client_pn",
+		"connection_current_pn",
+		"connection_pn_translation"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
