@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
@@ -43,8 +44,18 @@ func main_advanced() {
 
 	crypto_turnoff.CRYPTO_TURNED_OFF = true
 	packet_setting.ALLOW_SETTING_PN = true
+	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
 
-	os.Setenv("QLOGDIR", "./qlog")
+	f, err := os.Create("./log.txt")
+	defer f.Close()
+	if err != nil {
+		panic(err)
+	}
+	log.SetOutput(f)
+	// os.Setenv("QUIC_GO_LOG_LEVEL", "DEBUG") // TODO: not working
+
+	// os.Setenv("QLOGDIR", "./qlog")
+	os.Remove("tls.keylog")
 
 	args := os.Args
 	if len(args) != 2 {
@@ -88,11 +99,11 @@ func main_advanced() {
 			switch choice {
 			case 1:
 				fmt.Println("Sending high-prio message to all clients")
-				server.sendToAllHigh("foobar high")
+				server.sendToAllHigh("foobar high\n")
 				time.Sleep(sleeping_time)
 			case 2:
 				fmt.Println("Sending low-prio message to all clients")
-				server.sendToAllLow("foobar low")
+				server.sendToAllLow("foobar low\n")
 				time.Sleep(sleeping_time)
 			case 3:
 				fmt.Println("Exiting")
@@ -107,6 +118,7 @@ func main_advanced() {
 		}
 
 	} else if args[1] == "client" {
+		os.Setenv("QLOGDIR", "./qlog")
 
 		clearScreen()
 
@@ -115,6 +127,13 @@ func main_advanced() {
 		client.run()
 
 	} else if args[1] == "relay" {
+
+		// TODO: better set here or in server.go?
+		// We only want these functions to be executed in the relay
+		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
+		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
+		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
+		packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber
 
 		clearScreen()
 

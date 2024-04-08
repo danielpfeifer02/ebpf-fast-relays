@@ -21,4 +21,30 @@
 
 - Sometimes passing the packet to userspace is too slow and the server already ends some copies. Can this be done faster / so that no retransmission happens?
 
-- Sending messages to all does not work after some time (mostly 1-4 messages in). What is the cause for this?
+- Sending messages to all does not work after some time (mostly 1-4 messages in). Most likely this has something to do with the packet numbers since the packets arrive at veth3 (i.e. client side interface). It might be due to the retirement of the used connection id!
+
+- Fixing the packet number setting from within the bpf program to not rely on arbitrary / hard-coded values
+
+- Allow to dial addr of relay all the time (seems to only work in the beginning)
+
+- Check that fan out to different addresses works correctly (not only to one client)
+
+- implement packet number handling with handling function for quic-go + adapt bpf code
+
+- Sometimes relay gets an error that there are no connection ids left?
+
+- Able to send after relay has crashed due to protocol violation?? Some rouge go routine maybe? Or is it wanted given that the bpf program still runs and the maps hold the correct values?
+
+- only the first connection seems to receive the fanned out packet correctly: FIXED: make sure that conenction_ids map works correctly
+
+- setting the packet number creates protocol violations: I guess there might be some synchronizations necessary (e.g. similar to a mutex) to avoid using the same pn multiple times and to "stall" user-space packets if some need to be sent
+
+- incoporate priorities to fan out / filtering
+
+- determine how to filter packets that have been replicated but don't need to be sent to client (bc of priority dropping). Maybe add an index to the packet and drop every index after ... (after what?)
+
+- remove usage of packet_counter and change to saving the index in the packet (maybe in the checksum or so?)
+
+- in the trace log file the connection id is "(empty)" for receiving (i.e. id.Len() == 0)? why is length zero?
+
+- change prio packs so that pn always has same size (e.g. 4 bytes). Problem: why receiving ACK one cannot garantuee that pn has this size? (does that matter? since generally pns should only be made bigger by the bpf so reverse translating should only ever make them smaller. One would need variable length integer decoding in the bpf program though. Maybe do the reverse translation in userspace with maps?)

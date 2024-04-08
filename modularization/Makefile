@@ -36,27 +36,6 @@ $(BPF_TC_OBJ): ${TC_PATH}/%.o: ${TC_PATH}/%.c
 		-O2 -emit-llvm -c -o ${@:.o=.ll} $<
 	llc -march=bpf -filetype=obj -O2 -o $@ ${@:.o=.ll}
 
-# not needed after ns setup
-# interface:
-# 	sudo ip link add veth0 type veth peer name veth1
-# 	sudo ip addr add 192.168.1.1/24 dev veth0
-# 	sudo ip addr add 192.168.1.2/24 dev veth1
-# 	sudo ip link set dev veth0 up
-# 	sudo ip link set dev veth1 up
-
-# 	sudo ip link add veth2 type veth peer name veth3
-# 	sudo ip addr add 192.168.1.3/24 dev veth2
-# 	sudo ip addr add 192.168.1.4/24 dev veth3
-# 	sudo ip link set dev veth2 up
-# 	sudo ip link set dev veth3 up
-
-# 	@echo "\n\n PLEASE SET ALL INTERFACE INDICES CORRECTLY IN ${BPF_TC_C}\n\n"
-
-# 	@ip link show veth0 | awk '/^[0-9]/ {split($$0, fields, ":"); print fields[1] ":" fields[2]}'
-# 	@ip link show veth1 | awk '/^[0-9]/ {split($$0, fields, ":"); print fields[1] ":" fields[2]}'
-# 	@ip link show veth2 | awk '/^[0-9]/ {split($$0, fields, ":"); print fields[1] ":" fields[2]}'
-# 	@ip link show veth3 | awk '/^[0-9]/ {split($$0, fields, ":"); print fields[1] ":" fields[2]}'
-
 clean:
 	sudo rm -f $(BPF_TC_PINNED_PATH)
 

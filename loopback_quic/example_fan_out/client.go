@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"runtime"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
 )
 
 type StreamingClient struct {
@@ -21,6 +23,8 @@ func NewStreamingClient() *StreamingClient {
 // TODO structure better
 func (c *StreamingClient) run() {
 
+	fmt.Println("Number of goroutines:", runtime.NumGoroutine())
+
 	// for now only one stream is supported
 	for {
 		if len(c.stream_list) > 0 {
@@ -31,14 +35,20 @@ func (c *StreamingClient) run() {
 
 			stream := c.stream_list[0]
 
-			buf := make([]byte, 1024)
-			fmt.Println("C: Reading from stream")
-			n, err := stream.Read(buf)
-			if err != nil {
-				panic(err)
-			}
+			n := 1
 
-			fmt.Printf("Client got: %s\n", buf[:n])
+			for n > 0 {
+
+				buf := make([]byte, 1)
+				// fmt.Println("C: Reading from stream")
+				n, err := stream.Read(buf)
+				if err != nil {
+					panic(err)
+				}
+
+				// fmt.Printf("Client got: %s\n", buf[:n])
+				fmt.Printf("%s", buf[:n])
+			}
 		}
 	}
 }
@@ -50,7 +60,7 @@ func (c *StreamingClient) connectToServer() error {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-streaming-example"},
 	}
-	fmt.Println("C: Dialing address")
+	fmt.Println("C: Dialing address", relay_addr)
 	// client_addr := net.IPv4(192, 168, 1, 4)
 	// conn, err := quic.DialAddrExt(context.Background(), relay_addr, "veth3", tlsConf, generateQUICConfig())
 	conn, err := quic.DialAddr(context.Background(), relay_addr, tlsConf, generateQUICConfig())
@@ -61,7 +71,7 @@ func (c *StreamingClient) connectToServer() error {
 
 	fmt.Println("C: Opening stream")
 	// Open a new stream with high priority
-	stream, err := conn.OpenStreamSyncWithPriority(context.Background(), quic.HighPriority)
+	stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.HighPriority)
 	if err != nil {
 		return err
 	}

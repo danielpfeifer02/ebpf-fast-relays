@@ -49,10 +49,12 @@ struct client_info_t {
         uint16_t src_port;
         uint16_t dst_port;
         uint8_t connection_id[CONN_ID_LEN];
+        uint8_t priority_drop_limit; // this is the smallest priority that is still accepted
 };
 
 struct pn_value_t {
-        uint32_t packet_number;
+        // TODO: assume only 16 bit pn for now
+        uint16_t packet_number;
         uint8_t changed;
         uint8_t padding[3];
 };
@@ -121,13 +123,14 @@ struct {
 } packet_counter SEC(".maps");
 
 struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __type(key, uint32_t);
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_info_key_t);
     __type(value, uint8_t);
     __uint(max_entries, 1);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_established SEC(".maps");
 
+// TODO: is this side even necessary?
 __section("ingress_from_client")
 int tc_ingress_from_client(struct __sk_buff *skb)
 {
@@ -159,11 +162,17 @@ int tc_ingress_from_client(struct __sk_buff *skb)
         }
 
         // TODO: for now just drop QUIC answers to avoid protocol violation
-        uint32_t zero = 0;
-        uint8_t *conn_established = bpf_map_lookup_elem(&connection_established, &zero);
-        if (conn_established == NULL || *conn_established == 1) {
-                return TC_ACT_SHOT;
+        struct client_info_key_t key = {
+                .ip_addr = ip->saddr,
+                .port = udp->source,
+        };
+        uint8_t *conn_established = bpf_map_lookup_elem(&connection_established, &key);
+        if (conn_established != NULL && *conn_established == 1) {
+                return TC_ACT_OK;
         }
+        uint8_t established = 1;
+        bpf_map_update_elem(&connection_established, &key, &established, BPF_ANY);
+
 
         // Load UDP payload
         void *payload = (void *)(udp + 1);
@@ -224,10 +233,19 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 uint16_t dst_port; // port of the relay
                 bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
 
+                // uint8_t prio;
+                // bpf_probe_read_kernel(&prio, sizeof(prio), payload + 1 /* Long header flags */ 
+                //                                                    + 4 /* Version */ 
+                //                                                    + 1 /* DST CONN ID Len */ 
+                //                                                    + CONN_ID_LEN /* DST CONN ID */
+                //                                                    + 1 /* SRC CONN ID Len */);
+                // bpf_printk("PRIO: %02x\n", prio);
+
                 struct client_info_key_t key = {
                         .ip_addr = src_ip_addr, // identifying will be the ip of the client
                         .port = src_port,       // and the port of the client
                 };
+
 
                 struct client_info_t value = {
                         .src_mac = {0},
@@ -237,6 +255,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                         .src_port = dst_port, // the source port will be the port of the relay
                         .dst_port = src_port, // the destination port will be the port of the client
                         .connection_id = {0},
+                        .priority_drop_limit = 0,
                 };
 
                 for (int i = 0; i < MAC_LEN; i++) {
@@ -281,17 +300,29 @@ __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
 {
 
-        // load connection_established map
+        // return TC_ACT_OK;
+
+        // // // load connection_established map
+        // // uint32_t zero = 0;
+        // // uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &zero);
+        // // if (conn_est == NULL) {
+        // //         bpf_printk("No connection established found\n");
+        // //         return TC_ACT_OK;
+        // // }
+        // // if (*conn_est == 0) {
+        // //         bpf_printk("Connection not established\n");
+        // //         return TC_ACT_OK;
+        // // }
+
         uint32_t zero = 0;
-        uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &zero);
-        if (conn_est == NULL) {
-                bpf_printk("No connection established found\n");
+        uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+        if (pack_ctr != NULL && *pack_ctr == 1) {
+                bpf_printk("Packet counter drop\n");
                 return TC_ACT_OK;
         }
-        if (*conn_est == 0) {
-                bpf_printk("Connection not established\n");
-                return TC_ACT_OK;
-        }
+
+
+
 
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
@@ -356,9 +387,10 @@ int tc_ingress(struct __sk_buff *skb)
                 bpf_printk("Short header - redirecting for %d clients\n", *num_clients);
 
                 // TODO probably not working bc of concurrency (maybe some hash map to look up ctr value for a packet or save inside of packet bytes?)
-                // set packet_counter to 1 
-                uint32_t pack_ctr = 1;
-                bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
+                // ! TODO change from packet ctr to aving index inside of packet
+                // // set packet_counter to 1 
+                // // uint32_t pack_ctr = 1;
+                // // bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
 
                 // set udp checksum to 0
                 uint16_t old_checksum;
@@ -370,11 +402,20 @@ int tc_ingress(struct __sk_buff *skb)
                 uint16_t old_port;
                 bpf_probe_read_kernel(&old_port, sizeof(old_port), &udp->dest);
 
-                for (int i=0; i<MAX_CLIENTS; i++) {
+                uint8_t old_conn_id[CONN_ID_LEN];
+                bpf_probe_read_kernel(old_conn_id, sizeof(old_conn_id), payload + 1 /* Short header flags */);
+                uint32_t conn_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1;
+
+                for (uint32_t i=0; i<MAX_CLIENTS; i++) {
                         if (i >= *num_clients) {
                                 break;
                         }
                         // TODO set some part of the packet to "i" so that we can identify at egress
+                        // since we do not need the connection id anymore once we're at the egress
+                        // we can use it to store the index ctr
+                        // TODO: change to zero index
+                        uint32_t index = i + 1;
+                        bpf_skb_store_bytes(skb, conn_id_off, &index, sizeof(uint32_t), 0);
 
                         uint16_t dst_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
                         uint16_t mrk = PORT_MARKER;
@@ -389,6 +430,9 @@ int tc_ingress(struct __sk_buff *skb)
 
                 // set udp checksum back to old value
                 bpf_skb_store_bytes(skb, checksum_off, &old_checksum, sizeof(old_checksum), 0);
+
+                // set connection id back to old value
+                bpf_skb_store_bytes(skb, conn_id_off, old_conn_id, CONN_ID_LEN, 0);
 
                 // hand over to userspace so that packet can be ACKed
                 return TC_ACT_OK;
@@ -444,16 +488,20 @@ int tc_egress(struct __sk_buff *skb)
                 return TC_ACT_OK;
         }
 
+        uint8_t user_space = 0;
+
         // UDP checksum needs to be 0
         if (udp->check != 0) {
                 bpf_printk("Checksum not 0\n");
-                return TC_ACT_OK;
+                // return TC_ACT_OK;
+                user_space = 1;
         }
 
         // check that the UDP dst port is the port marker
         if (udp->dest != PORT_MARKER) {
                 bpf_printk("Not the correct port\n");
-                return TC_ACT_OK;
+                // return TC_ACT_OK;
+                user_space = 1;
         }
 
         // Load UDP payload
@@ -481,28 +529,94 @@ int tc_egress(struct __sk_buff *skb)
         // redirecting short header packets
         if (header_form == 0) {
 
-                bpf_printk("Received redirected short header!\n");
+                // When a short header packet arrives at the egress interface
+                // which is sent from user space we update the packet number
+                // ! TODO seems to have fixed the error after prio dropping
+                if (user_space) {
 
-                // get packet_counter
-                uint32_t zero = 0;
-                uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+                        // read dst ip and port
+                        uint32_t dst_ip_addr;
+                        bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
+                        uint16_t dst_port;
+                        bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
 
-                if (pack_ctr == NULL) {
-                        bpf_printk("No packet counter found\n");
+                        // now we have to update the packet number
+                        struct client_info_key_t key = {
+                                .ip_addr = dst_ip_addr,
+                                .port = dst_port,
+                        };
+                        
+                        // ! assume 2 byte packet number for now
+                        uint16_t old_pn;
+                        bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
+                                                                        + 1 /* Short header bits */
+                                                                        + CONN_ID_LEN /* Connection ID */);
+
+                        old_pn = ntohs(old_pn);
+
+                        bpf_printk("Old packet number: %02x\n", old_pn);
+
+                        struct pn_value_t pn_value = {
+                                .packet_number = old_pn + 1,
+                                .changed = 0,
+                        };
+                        bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
+
                         return TC_ACT_OK;
                 }
 
+                
+
+
+                bpf_printk("Received redirected short header!\n");
+
+                // // get packet_counter
+                // uint32_t zero = 0;
+                // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+
+                // if (pack_ctr == NULL) {
+                //         bpf_printk("No packet counter found\n");
+                //         return TC_ACT_OK;
+                // }
+
+                uint32_t pack_ctr;
+                bpf_probe_read_kernel(&pack_ctr, sizeof(pack_ctr), payload + 1 /* Short header flags */);
+                bpf_printk("Packet counter: %d\n", pack_ctr);
 
                 // get pack_ctr-th client data
                 struct client_info_t *value;
 
                 // TODO this assumes that they are linear in the map (verify)
                 // TODO remove dependency on packet_counter
-                value = bpf_map_lookup_elem(&client_data, pack_ctr);
+                value = bpf_map_lookup_elem(&client_data, &pack_ctr);
                 if (value == NULL) {
                         bpf_printk("No client data found\n");
                         return TC_ACT_SHOT;
                 }
+
+
+                uint8_t client_prio_drop_limit = value->priority_drop_limit;
+                uint8_t packet_prio; 
+                bpf_probe_read_kernel(&packet_prio, sizeof(packet_prio), payload + 1 /* Short header flags */);
+
+                bpf_printk("Threshold: %02x - Packet prio: %02x\n", client_prio_drop_limit, packet_prio);
+
+                // ! Seems to not be working? Something wrong with the state of the client data map?
+                // ! maybe it is the packet number change which does not have any effect since the packet is dropped
+                // // ! i think it is because the ACK of the packet from the server leaves through the same interface and 
+                // // ! is also dropped once the prio threshold is adapted?
+                // ! something with the client data is wrong since the packet arrives at the client interface 
+                // ! but is dropped apparently
+                // ! i think its the packet number bc if nothing is tired to be sent during the phase of prio dropping
+                // ! it works normally afterwards
+                // if (packet_prio < client_prio_drop_limit) {
+                //         bpf_printk("Packet prio lower than client prio Threshold\n");
+                //         // *pack_ctr = *pack_ctr + 1;
+                //         // bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
+                //         return TC_ACT_SHOT;
+                // }
+                // * TODO wieder anschalten
+
 
                 // set src_mac to value->src_mac
                 uint32_t src_mac_off = 6 /* DST MAC */;
@@ -545,8 +659,8 @@ int tc_egress(struct __sk_buff *skb)
 
                 // TODO get rid of packet_counter and store lut index in packet (possible bc of clone_redirect?)
                 // set pack_ctr to pack_ctr + 1 and write it back
-                *pack_ctr = *pack_ctr + 1;
-                bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
+                // *pack_ctr = *pack_ctr + 1;
+                // bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
 
 
                 // setting the packet number so that user space can update it
@@ -560,14 +674,21 @@ int tc_egress(struct __sk_buff *skb)
                         return TC_ACT_OK;
                 }
                 struct pn_value_t pn_value = {
-                        .packet_number = old_pn->packet_number + 100, // TODO: this should not be +100
+                        .packet_number = old_pn->packet_number + 1, // // TODO: this should not be +100
                         .changed = 1,
                 };
                 bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
 
+                // // TODO: i thought this might fix the problem of not receiving at client but apparently it does not
+                // // set packet number in packet to old_pn->packet_number + 50
+                uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
+                uint16_t new_pn = htons(old_pn->packet_number); // // TODO: this should not be +50
+                bpf_skb_store_bytes(skb, pn_off, &new_pn, sizeof(new_pn), 0);
 
                 bpf_printk("Done editing packet\n");
         
+        } else {
+                // ! TODO: update packet number for long header packets
         }
 
         return TC_ACT_OK;
