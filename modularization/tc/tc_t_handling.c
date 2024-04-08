@@ -608,7 +608,7 @@ int tc_egress(struct __sk_buff *skb)
                         };
                         bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
 
-                        bpf_printk("Packet number: %d\n", *new_pn);
+                        bpf_printk("Packet number: %d -> %d\n", old_pn, *new_pn);
 
                         // increment the packet number of the connection
                         *new_pn = *new_pn + 1;
@@ -738,9 +738,10 @@ int tc_egress(struct __sk_buff *skb)
                 // bpf_skb_store_bytes(skb, pn_off, &new_pn, sizeof(new_pn), 0);
 
                 uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
+                uint32_t zero = 0;
                 if (new_pn == NULL) {
-                        bpf_printk("No packet number found\n");
-                        return TC_ACT_OK;
+                        bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
+                        new_pn = &zero;
                 }
                 uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
                 uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
@@ -756,6 +757,31 @@ int tc_egress(struct __sk_buff *skb)
         
         } else {
                 // ! TODO: update packet number for long header packets
+
+                // Long headers will only be sent from userspace
+                bpf_printk("Long header\n");
+
+                // TODO: is that sufficient?
+                // increment the packet number of the connection
+                // read dst ip and port
+                uint32_t dst_ip_addr;
+                bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
+                uint16_t dst_port;
+                bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
+
+                // now we have to update the packet number
+                struct client_info_key_t key = {
+                        .ip_addr = dst_ip_addr,
+                        .port = dst_port,
+                };
+                uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
+                uint32_t zero = 0;
+                if (new_pn == NULL) {
+                        bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
+                        new_pn = &zero;
+                }
+                *new_pn = *new_pn + 1;
+                bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
         }
 
         return TC_ACT_OK;
