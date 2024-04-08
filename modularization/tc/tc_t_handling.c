@@ -606,7 +606,8 @@ int tc_egress(struct __sk_buff *skb)
                                 .key = key,
                                 .packet_number = *new_pn,
                         };
-                        bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
+                        uint32_t store = old_pn;
+                        bpf_map_update_elem(&connection_pn_translation, &pn_key, &store, BPF_ANY);
 
                         bpf_printk("Packet number: %d -> %d\n", old_pn, *new_pn);
 

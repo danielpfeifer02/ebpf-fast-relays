@@ -857,8 +857,11 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 	val := &pn_struct{}
 	err = client_pn_translator.Lookup(key, val)
 	if err != nil {
+		fmt.Printf("No entry for %d...\n", pn)
 		return pn, fmt.Errorf("Error looking up in client_pn_translator")
 	}
+
+	fmt.Printf("%d -> %d\n", pn, val.Pn)
 
 	return int64(val.Pn), nil
 }
