@@ -314,6 +314,16 @@ int tc_ingress(struct __sk_buff *skb)
         // //         return TC_ACT_OK;
         // // }
 
+        uint32_t zero = 0;
+        uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+        if (pack_ctr != NULL && *pack_ctr == 1) {
+                bpf_printk("Packet counter drop\n");
+                return TC_ACT_OK;
+        }
+
+
+
+
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
 
@@ -378,9 +388,9 @@ int tc_ingress(struct __sk_buff *skb)
 
                 // TODO probably not working bc of concurrency (maybe some hash map to look up ctr value for a packet or save inside of packet bytes?)
                 // ! TODO change from packet ctr to aving index inside of packet
-                // set packet_counter to 1 
-                uint32_t pack_ctr = 1;
-                bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
+                // // set packet_counter to 1 
+                // // uint32_t pack_ctr = 1;
+                // // bpf_map_update_elem(&packet_counter, &zero, &pack_ctr, BPF_ANY);
 
                 // set udp checksum to 0
                 uint16_t old_checksum;
@@ -392,11 +402,20 @@ int tc_ingress(struct __sk_buff *skb)
                 uint16_t old_port;
                 bpf_probe_read_kernel(&old_port, sizeof(old_port), &udp->dest);
 
-                for (int i=0; i<MAX_CLIENTS; i++) {
+                uint8_t old_conn_id[CONN_ID_LEN];
+                bpf_probe_read_kernel(old_conn_id, sizeof(old_conn_id), payload + 1 /* Short header flags */);
+                uint32_t conn_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1;
+
+                for (uint32_t i=0; i<MAX_CLIENTS; i++) {
                         if (i >= *num_clients) {
                                 break;
                         }
                         // TODO set some part of the packet to "i" so that we can identify at egress
+                        // since we do not need the connection id anymore once we're at the egress
+                        // we can use it to store the index ctr
+                        // TODO: change to zero index
+                        uint32_t index = i + 1;
+                        bpf_skb_store_bytes(skb, conn_id_off, &index, sizeof(uint32_t), 0);
 
                         uint16_t dst_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
                         uint16_t mrk = PORT_MARKER;
@@ -411,6 +430,9 @@ int tc_ingress(struct __sk_buff *skb)
 
                 // set udp checksum back to old value
                 bpf_skb_store_bytes(skb, checksum_off, &old_checksum, sizeof(old_checksum), 0);
+
+                // set connection id back to old value
+                bpf_skb_store_bytes(skb, conn_id_off, old_conn_id, CONN_ID_LEN, 0);
 
                 // hand over to userspace so that packet can be ACKed
                 return TC_ACT_OK;
@@ -466,20 +488,20 @@ int tc_egress(struct __sk_buff *skb)
                 return TC_ACT_OK;
         }
 
-        uint8_t not_quic = 0;
+        uint8_t user_space = 0;
 
         // UDP checksum needs to be 0
         if (udp->check != 0) {
                 bpf_printk("Checksum not 0\n");
                 // return TC_ACT_OK;
-                not_quic = 1;
+                user_space = 1;
         }
 
         // check that the UDP dst port is the port marker
         if (udp->dest != PORT_MARKER) {
                 bpf_printk("Not the correct port\n");
                 // return TC_ACT_OK;
-                not_quic = 1;
+                user_space = 1;
         }
 
         // Load UDP payload
@@ -510,7 +532,7 @@ int tc_egress(struct __sk_buff *skb)
                 // When a short header packet arrives at the egress interface
                 // which is sent from user space we update the packet number
                 // ! TODO seems to have fixed the error after prio dropping
-                if (not_quic) {
+                if (user_space) {
 
                         // read dst ip and port
                         uint32_t dst_ip_addr;
@@ -548,22 +570,25 @@ int tc_egress(struct __sk_buff *skb)
 
                 bpf_printk("Received redirected short header!\n");
 
-                // get packet_counter
-                uint32_t zero = 0;
-                uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+                // // get packet_counter
+                // uint32_t zero = 0;
+                // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
 
-                if (pack_ctr == NULL) {
-                        bpf_printk("No packet counter found\n");
-                        return TC_ACT_OK;
-                }
+                // if (pack_ctr == NULL) {
+                //         bpf_printk("No packet counter found\n");
+                //         return TC_ACT_OK;
+                // }
 
+                uint32_t pack_ctr;
+                bpf_probe_read_kernel(&pack_ctr, sizeof(pack_ctr), payload + 1 /* Short header flags */);
+                bpf_printk("Packet counter: %d\n", pack_ctr);
 
                 // get pack_ctr-th client data
                 struct client_info_t *value;
 
                 // TODO this assumes that they are linear in the map (verify)
                 // TODO remove dependency on packet_counter
-                value = bpf_map_lookup_elem(&client_data, pack_ctr);
+                value = bpf_map_lookup_elem(&client_data, &pack_ctr);
                 if (value == NULL) {
                         bpf_printk("No client data found\n");
                         return TC_ACT_SHOT;
@@ -584,12 +609,13 @@ int tc_egress(struct __sk_buff *skb)
                 // ! but is dropped apparently
                 // ! i think its the packet number bc if nothing is tired to be sent during the phase of prio dropping
                 // ! it works normally afterwards
-                if (packet_prio < client_prio_drop_limit) {
-                        bpf_printk("Packet prio lower than client prio Threshold\n");
-                        *pack_ctr = *pack_ctr + 1;
-                        bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
-                        return TC_ACT_SHOT;
-                }
+                // if (packet_prio < client_prio_drop_limit) {
+                //         bpf_printk("Packet prio lower than client prio Threshold\n");
+                //         // *pack_ctr = *pack_ctr + 1;
+                //         // bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
+                //         return TC_ACT_SHOT;
+                // }
+                // * TODO wieder anschalten
 
 
                 // set src_mac to value->src_mac
@@ -633,8 +659,8 @@ int tc_egress(struct __sk_buff *skb)
 
                 // TODO get rid of packet_counter and store lut index in packet (possible bc of clone_redirect?)
                 // set pack_ctr to pack_ctr + 1 and write it back
-                *pack_ctr = *pack_ctr + 1;
-                bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
+                // *pack_ctr = *pack_ctr + 1;
+                // bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
 
 
                 // setting the packet number so that user space can update it
