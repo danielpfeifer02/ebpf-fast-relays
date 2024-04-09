@@ -126,7 +126,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);
     __type(value, uint8_t);
-    __uint(max_entries, 1);
+    __uint(max_entries, MAX_CLIENTS);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_established SEC(".maps");
 
@@ -185,16 +185,16 @@ int tc_ingress_from_client(struct __sk_buff *skb)
         }
 
         // TODO: for now just drop QUIC answers to avoid protocol violation
-        struct client_info_key_t key = {
-                .ip_addr = ip->saddr,
-                .port = udp->source,
-        };
-        uint8_t *conn_established = bpf_map_lookup_elem(&connection_established, &key);
-        if (conn_established != NULL && *conn_established == 1) {
-                return TC_ACT_OK;
-        }
-        uint8_t established = 1;
-        bpf_map_update_elem(&connection_established, &key, &established, BPF_ANY);
+        // struct client_info_key_t key = {
+        //         .ip_addr = ip->saddr,
+        //         .port = udp->source,
+        // };
+        // uint8_t *conn_established = bpf_map_lookup_elem(&connection_established, &key);
+        // if (conn_established != NULL && *conn_established == 1) {
+        //         return TC_ACT_OK;
+        // }
+        // uint8_t established = 1;
+        // bpf_map_update_elem(&connection_established, &key, &established, BPF_ANY);
 
 
         // Load UDP payload
@@ -325,24 +325,13 @@ int tc_ingress(struct __sk_buff *skb)
 
         // return TC_ACT_OK;
 
-        // // // load connection_established map
-        // // uint32_t zero = 0;
-        // // uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &zero);
-        // // if (conn_est == NULL) {
-        // //         bpf_printk("No connection established found\n");
-        // //         return TC_ACT_OK;
-        // // }
-        // // if (*conn_est == 0) {
-        // //         bpf_printk("Connection not established\n");
-        // //         return TC_ACT_OK;
-        // // }
 
-        uint32_t zero = 0;
-        uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
-        if (pack_ctr != NULL && *pack_ctr == 1) {
-                bpf_printk("Packet counter drop\n");
-                return TC_ACT_OK;
-        }
+        // uint32_t zero = 0;
+        // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+        // if (pack_ctr != NULL && *pack_ctr == 1) {
+        //         bpf_printk("Packet counter drop\n");
+        //         return TC_ACT_OK;
+        // }
 
 
 
@@ -373,6 +362,7 @@ int tc_ingress(struct __sk_buff *skb)
         if (udp->source != SERVER_PORT) {
                 return TC_ACT_OK;
         }
+
 
         // Load UDP payload
         void *payload = (void *)(udp + 1);
@@ -580,13 +570,51 @@ int tc_egress(struct __sk_buff *skb)
                         // the packet number which will actually be sent out (the one in
                         // the bpf map)
                         // ! assume 2 byte packet number for now (TODO: set to fixed size for all packets / numbers)
-                        uint16_t old_pn;
-                        bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
-                                                                        + 1 /* Short header bits */
-                                                                        + CONN_ID_LEN /* Connection ID */);
+                        uint32_t old_pn = 0;
+                        uint8_t pn_len = (quic_flags & 0x03) + 1;
+                        uint8_t byte;
+                        uint32_t pn_off_from_quic = 1 /* Short header bits */ + CONN_ID_LEN;
 
-                        old_pn = ntohs(old_pn);
-                        bpf_printk("Old packet number: %02x\n", old_pn);
+                        // ^ TODO: turn into loop
+                        if (pn_len >= 1) {
+                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic);
+                                old_pn = byte;
+                        }
+                        if (pn_len >= 2) {
+                                old_pn = old_pn << 8;
+                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 1);
+                                old_pn = old_pn | byte;
+                        }
+                        if (pn_len >= 3) {
+                                old_pn = old_pn << 8;
+                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 2);
+                                old_pn = old_pn | byte;
+                        }
+                        if (pn_len == 4) {
+                                old_pn = old_pn << 8;
+                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 3);
+                                old_pn = old_pn | byte;
+                        }
+
+                        // long res = bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
+                        //                                                 + 1 /* Short header bits */
+                        //                                                 + CONN_ID_LEN /* Connection ID */);
+
+                        // if (res != 0) {
+                        //         bpf_printk("Could not read packet number\n");
+                        //         return TC_ACT_OK;
+                        // }
+
+                        bpf_printk("Old packet number: %08x\n", old_pn);
+                        // old_pn = ntohs(old_pn);
+
+                        // if (old_pn == 0) { // TODO: why does this happen?
+                        //         uint16_t ipcheck;
+                        //         bpf_probe_read_kernel(&ipcheck, sizeof(ipcheck), &ip->check);
+                        //         bpf_printk("packet number is zero? ip check: %04x\n", ipcheck);
+                        //         return TC_ACT_OK;
+                        // }
+                        // ^
 
                         // lookup the next packet number for a connection
                         uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key);
@@ -594,20 +622,42 @@ int tc_egress(struct __sk_buff *skb)
                         if (new_pn == NULL) {
                                 bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
                                 new_pn = &zero;
+                                bpf_printk("No packet number found. Setting to zero\n");
                         }
                         
                         // update the packet number in the packet
                         uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
-                        uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
-                        bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0);
+                        // uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
+                        // bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0); // heree
+                        uint8_t new_pn_bytes[4];
+                        if (pn_len == 1) {
+                                new_pn_bytes[0] = *new_pn;
+                        }
+                        else if (pn_len == 2) {
+                                new_pn_bytes[0] = (*new_pn & 0xff00) >> 8;
+                                new_pn_bytes[1] = *new_pn & 0x00ff;
+                        }
+                        else if (pn_len == 3) {
+                                new_pn_bytes[0] = (*new_pn & 0xff0000) >> 16;
+                                new_pn_bytes[1] = (*new_pn & 0x00ff00) >> 8;
+                                new_pn_bytes[2] = *new_pn & 0x0000ff;
+                        }
+                        else if (pn_len == 4) {
+                                new_pn_bytes[0] = (*new_pn & 0xff000000) >> 24;
+                                new_pn_bytes[1] = (*new_pn & 0x00ff0000) >> 16;
+                                new_pn_bytes[2] = (*new_pn & 0x0000ff00) >> 8;
+                                new_pn_bytes[3] = *new_pn & 0x000000ff;
+                        }
+                        bpf_skb_store_bytes(skb, pn_off, new_pn_bytes, pn_len, 0);
+                        
 
                         // we also need to save the mapping for later
                         struct client_pn_map_key_t pn_key = {
                                 .key = key,
                                 .packet_number = *new_pn,
                         };
-                        uint32_t store = old_pn;
-                        bpf_map_update_elem(&connection_pn_translation, &pn_key, &store, BPF_ANY);
+                        bpf_printk("Old packet number: %08x\n", old_pn);
+                        bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
 
                         bpf_printk("Packet number: %d -> %d\n", old_pn, *new_pn);
 
@@ -644,6 +694,25 @@ int tc_egress(struct __sk_buff *skb)
                 value = bpf_map_lookup_elem(&client_data, &pack_ctr);
                 if (value == NULL) {
                         bpf_printk("No client data found\n");
+                        return TC_ACT_SHOT;
+                }
+
+
+                // if the connection with this client is not yet established
+                // drop the packet
+                // load connection_established map                
+                struct client_info_key_t key = {
+                        .ip_addr = value->dst_ip_addr,
+                        .port = value->dst_port,
+                };
+
+                uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &key);
+                if (conn_est == NULL) {
+                        bpf_printk("No connection established found. Creating\n");
+                        return TC_ACT_SHOT;
+                }
+                if (*conn_est == 0) {
+                        bpf_printk("Connection not established\n");
                         return TC_ACT_SHOT;
                 }
 
@@ -717,10 +786,10 @@ int tc_egress(struct __sk_buff *skb)
 
 
                 // // setting the packet number so that user space can update it
-                struct client_info_key_t key = {
-                        .ip_addr = value->dst_ip_addr,
-                        .port = value->dst_port,
-                };
+                // struct client_info_key_t key = {
+                //         .ip_addr = value->dst_ip_addr,
+                //         .port = value->dst_port,
+                // };
                 // struct pn_value_t *old_pn = bpf_map_lookup_elem(&client_pn, &key);
                 // if (old_pn == NULL) {
                 //         bpf_printk("No packet number found\n");
@@ -743,10 +812,11 @@ int tc_egress(struct __sk_buff *skb)
                 if (new_pn == NULL) {
                         bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
                         new_pn = &zero;
+                        bpf_printk("No packet number found. Setting to zero\n");
                 }
                 uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
                 uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
-                bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0);
+                bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0); // heree
 
                 bpf_printk("Packet number: %d\n", *new_pn);
 
@@ -780,6 +850,7 @@ int tc_egress(struct __sk_buff *skb)
                 if (new_pn == NULL) {
                         bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
                         new_pn = &zero;
+                        bpf_printk("No packet number found. Setting to zero\n");
                 }
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);

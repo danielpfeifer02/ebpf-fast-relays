@@ -36,8 +36,16 @@ type pn_struct struct {
 	Padding [3]uint8
 }
 
+type connnection_pn_stuct struct {
+	Pn uint32
+}
+
 type id_struct struct {
 	Id uint32
+}
+
+type conn_established_struct struct {
+	Established uint8
 }
 
 type client_key_struct struct {
@@ -409,7 +417,7 @@ func (s *RelayServer) run() error {
 					s.server_stream = server_stream
 					go passOnTraffic(s)
 
-					go publishConnectionEstablished()
+					go publishConnectionEstablished(conn)
 				}
 
 				fmt.Println("R: New stream added")
@@ -554,23 +562,38 @@ func keepConnectionsUpToDate(relay *RelayServer) {
 	}
 }
 
-func publishConnectionEstablished() {
-	// time.Sleep(1 * time.Second)
-	// if bpf_enabled {
-	// 	connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	err = connection_map.Update(uint32(0), uint8(1), 0)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// }
+func publishConnectionEstablished(conn quic.Connection) {
+	time.Sleep(1 * time.Second)
+	if bpf_enabled {
+		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		ipaddr, port := getIPAndPort(conn)
+		ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+		port_key := swapEndianness16(port)
+
+		key := client_key_struct{
+			Ipaddr:  ipaddr_key,
+			Port:    port_key,
+			Padding: [2]uint8{0, 0},
+		}
+		estab := &conn_established_struct{
+			Established: uint8(1),
+		}
+		err = connection_map.Update(key, estab, 0)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("R: Connection established")
+	}
 }
 
 func packetNumberHandler(conn quic.Connection) {
 
-	client_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
+	// client_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
+	connection_current_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_current_pn", &ebpf.LoadPinOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -583,42 +606,48 @@ func packetNumberHandler(conn quic.Connection) {
 		Port:    port_key,
 		Padding: [2]uint8{0, 0},
 	}
-	val := &pn_struct{}
+	val := &connnection_pn_stuct{}
 
-	old_val := int64(0)
+	// old_val := int64(0)
 
 	for {
 
-		err := client_pn.Lookup(key, val)
-		if err != nil {
-			panic(err)
+		err = connection_current_pn.Lookup(key, val)
+		if err == nil && val.Pn > 0 {
+			conn.SetHighestSent(int64(val.Pn) - 1)
+			// fmt.Println(val.Pn - 1)
 		}
 
-		if val.Changed == 1 {
-			fmt.Println("R: Packet number changed! Updating...")
+		// err := client_pn.Lookup(key, val)
+		// if err != nil {
+		// 	panic(err)
+		// }
 
-			// TODO: change internal type to int32 since pn cannot be larger than 2^32?
-			conn.SetPacketNumber(int64(val.Pn))
+		// if val.Changed == 1 {
+		// 	fmt.Println("R: Packet number changed! Updating...")
 
-			// TODO: should I set it to the actual value or does this suffice?
-			conn.SetHighestSent(old_val) // TODO: val.Pn - 1?
+		// 	// TODO: change internal type to int32 since pn cannot be larger than 2^32?
+		// 	conn.SetPacketNumber(int64(val.Pn))
 
-			val.Changed = 0
-			err = client_pn.Update(key, val, 0)
-			if err != nil {
-				panic(err)
-			}
+		// 	// TODO: should I set it to the actual value or does this suffice?
+		// 	conn.SetHighestSent(old_val) // TODO: val.Pn - 1?
 
-			tmp := &pn_struct{}
-			err := client_pn.Lookup(key, tmp)
-			if err != nil {
-				panic(err)
-			}
-			fmt.Printf("R: Updated packet number to %d (%d)\n", tmp.Pn, tmp.Changed)
+		// 	val.Changed = 0
+		// 	err = client_pn.Update(key, val, 0)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
 
-		}
+		// 	tmp := &pn_struct{}
+		// 	err := client_pn.Lookup(key, tmp)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
+		// 	fmt.Printf("R: Updated packet number to %d (%d)\n", tmp.Pn, tmp.Changed)
 
-		old_val = int64(val.Pn)
+		// }
+
+		// old_val = int64(val.Pn)
 
 	}
 }
@@ -828,7 +857,7 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 
 func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int64, error) {
 
-	fmt.Println("TRANSLATE")
+	fmt.Println("TRANSLATE", pn)
 
 	qconn := conn.(quic.Connection)
 
@@ -854,16 +883,26 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 		fmt.Println("Error loading client_pn_translator")
 		panic(err)
 	}
-	val := &pn_struct{}
+	val := &connnection_pn_stuct{}
 	err = client_pn_translator.Lookup(key, val)
 	if err != nil {
-		fmt.Printf("No entry for %d...\n", pn)
+		fmt.Printf("No entry for %d. Getting next smaller...\n", pn)
+
+		// for smaller_pn := pn; smaller_pn > 0; smaller_pn-- {
+		// 	key.Pn = uint32(smaller_pn)
+		// 	err = client_pn_translator.Lookup(key, val)
+		// 	if err == nil {
+		// 		return int64(val.Pn), nil
+		// 	}
+		// }
 		return pn, fmt.Errorf("Error looking up in client_pn_translator")
 	}
 
 	fmt.Printf("%d -> %d\n", pn, val.Pn)
 
-	return int64(val.Pn), nil
+	translated_pn := int64(val.Pn)
+	fmt.Println(translated_pn)
+	return translated_pn, nil
 }
 
 func getIPAndPort(conn quic.Connection) (net.IP, uint16) {
