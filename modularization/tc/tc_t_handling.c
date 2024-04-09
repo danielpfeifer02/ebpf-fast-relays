@@ -153,7 +153,7 @@ struct {
 } connection_pn_translation SEC(".maps");
 
 
-// TODO: is this side even necessary? Maybe do from user space?
+// TODO: is this side even necessary? Maybe do from user space? -> cannot access mac addresses from user space i believe
 __section("ingress_from_client")
 int tc_ingress_from_client(struct __sk_buff *skb)
 {
@@ -326,12 +326,12 @@ int tc_ingress(struct __sk_buff *skb)
         // return TC_ACT_OK;
 
 
-        // uint32_t zero = 0;
-        // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
-        // if (pack_ctr != NULL && *pack_ctr == 1) {
-        //         bpf_printk("Packet counter drop\n");
-        //         return TC_ACT_OK;
-        // }
+        uint32_t zero = 0;
+        uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+        if (pack_ctr != NULL && *pack_ctr == 1) {
+                bpf_printk("Packet counter drop\n");
+                return TC_ACT_OK;
+        }
 
 
 
@@ -388,6 +388,17 @@ int tc_ingress(struct __sk_buff *skb)
 
         // redirecting short header packets
         if (header_form == 0) {
+
+                // check that the packet actually contains payload (frame type 0x08-0x0f)
+                // TODO: what if there are multiple frames in one packet besides the stream frame?
+                uint8_t pn_len = (quic_flags & 0x03) + 1;
+                uint8_t frame_type;
+                uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
+                bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
+                if (frame_type < 0x08 || frame_type > 0x0f) {
+                        bpf_printk("Not a stream frame\n");
+                        return TC_ACT_OK;
+                }
 
                 // get number of clients
                 uint32_t zero = 0;
@@ -691,6 +702,7 @@ int tc_egress(struct __sk_buff *skb)
 
                 // TODO this assumes that they are linear in the map (verify)
                 // TODO remove dependency on packet_counter
+                // TODO  is it made sure that the client ids are always sequential?
                 value = bpf_map_lookup_elem(&client_data, &pack_ctr);
                 if (value == NULL) {
                         bpf_printk("No client data found\n");

@@ -48,3 +48,7 @@
 - in the trace log file the connection id is "(empty)" for receiving (i.e. id.Len() == 0)? why is length zero?
 
 - change prio packs so that pn always has same size (e.g. 4 bytes). Problem: why receiving ACK one cannot garantuee that pn has this size? (does that matter? since generally pns should only be made bigger by the bpf so reverse translating should only ever make them smaller. One would need variable length integer decoding in the bpf program though. Maybe do the reverse translation in userspace with maps?)
+
+- make sure all the synchronization is correct (i.e. add synchronization)
+
+- what if there are multiple frames in one packet besides the stream frame? would require variable length integer reading

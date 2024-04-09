@@ -133,7 +133,7 @@ func main_advanced() {
 		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
 		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
 		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
-		packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber
+		// packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber // TODO: still needed?
 		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
 		packet_setting.SET_ONLY_APP_DATA = true // TODO: fix in prio_packs repo?
 

@@ -364,17 +364,17 @@ func (s *RelayServer) run() error {
 				panic(err)
 			}
 
-			// ! why does it not work without this?
-			if i >= 1 {
-				fmt.Printf("Sending info to client\n")
-				for _, client_conn := range relay.client_list {
-					send_stream := client_conn.stream
-					_, err = send_stream.Write([]byte("You get the traffic again now!\n"))
-					if err != nil {
-						panic(err)
-					}
-				}
-			}
+			// // ! why does it not work without this?
+			// if i >= 1 {
+			// 	fmt.Printf("Sending info to client\n")
+			// 	for _, client_conn := range relay.client_list {
+			// 		send_stream := client_conn.stream
+			// 		_, err = send_stream.Write([]byte("You get the traffic again now!\n"))
+			// 		if err != nil {
+			// 			panic(err)
+			// 		}
+			// 	}
+			// }
 		}
 	}(s)
 
@@ -388,7 +388,7 @@ func (s *RelayServer) run() error {
 
 			select {
 
-			case <-s.interrupt_chan:
+			case <-s.interrupt_chan: // TODO: add graceful shutdown
 				fmt.Println("R: Terminate relay")
 				// close all streams
 				for _, client_conn := range s.client_list {
@@ -672,15 +672,13 @@ func getConnectionIDsKey(qconn quic.Connection) [6]byte {
 
 func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
-	fmt.Println("INIT")
-
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not initializing connection id for server")
+		// fmt.Println("Not initializing connection id for server")
 		return
 	}
-
+	fmt.Println("INIT")
 	fmt.Println("Init connection id")
 
 	key := getConnectionIDsKey(qconn)
@@ -700,15 +698,13 @@ func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
 func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
-	fmt.Println("RETIRE")
-
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not retiring connection id for server")
+		// fmt.Println("Not retiring connection id for server")
 		return
 	}
-
+	fmt.Println("RETIRE")
 	fmt.Println("Retire connection id for connection:", qconn.RemoteAddr().String())
 
 	key := getConnectionIDsKey(qconn)
@@ -758,14 +754,13 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 
 func updateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
-	fmt.Println("UPDATE")
-
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not updating connection id for server")
+		// fmt.Println("Not updating connection id for server")
 		return
 	}
+	fmt.Println("UPDATE")
 	setBPFMapConnectionID(qconn, id)
 }
 
@@ -823,7 +818,7 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not incrementing pn for server")
+		// fmt.Println("Not incrementing pn for server")
 		return
 	}
 	fmt.Println("Increased packet number", qconn.RemoteAddr().String())
@@ -857,14 +852,13 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 
 func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int64, error) {
 
-	fmt.Println("TRANSLATE", pn)
-
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not translating pn for server")
+		// fmt.Println("Not translating pn for server")
 		return pn, nil
 	}
+	fmt.Println("TRANSLATE", pn)
 	fmt.Println("Translated packet number", qconn.RemoteAddr().String())
 
 	ipaddr, port := getIPAndPort(qconn)
@@ -962,14 +956,16 @@ func swapEndianness32(val uint32) uint32 {
 
 func passOnTraffic(relay *RelayServer) error {
 	for {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 1024) // TODO: larger buffer?
 		n, err := relay.server_stream.Read(buf)
 		if err != nil {
 			panic(err)
 		}
+		// fmt.Printf("%s", buf[:n])
 		fmt.Printf("Relay got from server: %s\n(This is just for ACK creation!)\n", buf[:n])
 		// fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
-		// for _, send_stream := range relay.stream_list {
+		// for _, client := range relay.client_list {
+		// 	send_stream := client.stream
 		// 	_, err = send_stream.Write(buf[:n])
 		// 	if err != nil {
 		// 		panic(err)
