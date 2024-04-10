@@ -156,6 +156,46 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_pn_translation SEC(".maps");
 
+struct client_stream_offset_key_t {
+        struct client_info_key_t key;
+        uint32_t stream_id;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_stream_offset_key_t);
+    __type(value, uint32_t);
+    __uint(max_entries, MAX_CLIENTS);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} client_stream_offset SEC(".maps");
+
+struct var_int {
+        uint64_t value;
+        uint8_t len;
+};
+
+struct var_int read_var_int(void *start) {
+
+        uint64_t result = 0;
+        uint8_t byte;
+        bpf_probe_read_kernel(&byte, sizeof(byte), start);
+        uint8_t len = 1 << (byte >> 6);
+        result = result & 0x3f; 
+
+        for (int i=1; i<8; i++) {
+                if (i >= len) {
+                        break;
+                }
+                result = result << 8;
+                bpf_probe_read_kernel(&byte, sizeof(byte), start + i);
+                result = result | byte;
+        }
+        return {
+                .value = result,
+                .len = len,
+        };
+}
+
 
 // TODO: is this side even necessary? Maybe do from user space? -> cannot access mac addresses from user space i believe
 __section("ingress_from_client")
@@ -778,6 +818,26 @@ int tc_egress(struct __sk_buff *skb)
                         // TODO: update stream offset
                         // TODO: for this add a map which stores the stream offset for each stream!
                         // TODO: how to identify the stream? -> stream id in the packet
+
+                        uint8_t off_bit_set = frame_type & 0x04;
+                        uint8_t len_bit_set = frame_type & 0x02;
+                        uint8_t fin_bit_set = frame_type & 0x01;
+
+                        if (off_bit_set) {
+                        
+                                uint32_t stream_id_off = frame_off + 1 /* Frame type */;
+                                struct var_int stream_id = read_var_int(payload + stream_id_off);
+                                struct var_int stream_offset = read_var_int(payload + stream_id_off + stream_id.len);
+
+                                struct client_stream_offset_key_t stream_key = {
+                                        .key = key,
+                                        .stream_id = stream_id.value,
+                                };
+                                
+                                // TODO: add functionality to update the stream offset
+
+                        }
+
                 }
 
 
