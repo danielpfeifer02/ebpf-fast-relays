@@ -36,14 +36,27 @@ type pn_struct struct {
 	Padding [3]uint8
 }
 
+type connnection_pn_stuct struct {
+	Pn uint32
+}
+
 type id_struct struct {
 	Id uint32
+}
+
+type conn_established_struct struct {
+	Established uint8
 }
 
 type client_key_struct struct {
 	Ipaddr  uint32
 	Port    uint16
 	Padding [2]uint8
+}
+
+type client_pn_map_key struct {
+	Key client_key_struct
+	Pn  uint32
 }
 
 type client_data_struct struct {
@@ -74,6 +87,7 @@ type StreamingServer struct {
 	stream_list      []quic.Stream
 	high_prio_stream quic.Stream
 	low_prio_stream  quic.Stream
+	relay_conn       quic.Connection
 }
 
 var _ Server = &StreamingServer{}
@@ -87,6 +101,7 @@ func NewStreamingServer() *StreamingServer {
 		// TODO set high_prio_stream and low_prio_stream
 		high_prio_stream: nil,
 		low_prio_stream:  nil,
+		relay_conn:       nil,
 	}
 }
 
@@ -128,6 +143,9 @@ func (s *StreamingServer) run() error {
 
 			case conn := <-s.conn_chan:
 				fmt.Println("S: New connection accepted")
+				if s.relay_conn == nil {
+					s.relay_conn = conn
+				}
 				go streamAcceptWrapperServer(conn, s.stream_chan)
 			}
 
@@ -151,6 +169,10 @@ func sendToAll(stream *quic.Stream, message string) {
 }
 
 func (s *StreamingServer) sendToAllHigh(message string) {
+
+	s.relay_conn.SendDatagram([]byte(message))
+	return
+
 	// sendToAll(s.high_prio_stream, message)
 	for _, stream := range s.stream_list {
 		sendToAll(&stream, message)
@@ -221,6 +243,7 @@ func (s *RelayServer) run() error {
 		client_ctr := uint32(0)
 		// set number of clients to 0
 		err = number_of_clients.Update(uint32(0), client_ctr, 0)
+		fmt.Println("Update at point nr.", 1)
 		if err != nil {
 			panic(err)
 		}
@@ -230,6 +253,7 @@ func (s *RelayServer) run() error {
 			panic(err)
 		}
 		err = id_counter.Update(uint32(0), uint32(0), 0)
+		fmt.Println("Update at point nr.", 2)
 		if err != nil {
 			panic(err)
 		}
@@ -295,6 +319,7 @@ func (s *RelayServer) run() error {
 			panic(err)
 		}
 		err = packet_counter.Update(uint32(0), uint32(0), 0)
+		fmt.Println("Update at point nr.", 3)
 		if err != nil {
 			panic(err)
 		}
@@ -313,6 +338,7 @@ func (s *RelayServer) run() error {
 			}
 			client_info.PriorityDropLimit = 2
 			err = client_data.Update(id, client_info, ebpf.UpdateAny)
+			fmt.Println("Update at point nr.", 4)
 			if err != nil {
 				fmt.Println("Error updating client_data")
 				panic(err)
@@ -323,6 +349,7 @@ func (s *RelayServer) run() error {
 				panic(err)
 			}
 			err = packet_counter.Update(uint32(0), uint32(1), 0)
+			fmt.Println("Update at point nr.", 5)
 			if err != nil {
 				panic(err)
 			}
@@ -337,6 +364,7 @@ func (s *RelayServer) run() error {
 			}
 			client_info.PriorityDropLimit = 0
 			err = client_data.Update(id, client_info, ebpf.UpdateAny)
+			fmt.Println("Update at point nr.", 6)
 			if err != nil {
 				fmt.Println("Error updating client_data")
 				panic(err)
@@ -347,11 +375,12 @@ func (s *RelayServer) run() error {
 				panic(err)
 			}
 			err = packet_counter.Update(uint32(0), uint32(0), 0)
+			fmt.Println("Update at point nr.", 7)
 			if err != nil {
 				panic(err)
 			}
 
-			// ! why does it not work without this?
+			// // ! why does it not work without this?
 			if i >= 1 {
 				fmt.Printf("Sending info to client\n")
 				for _, client_conn := range relay.client_list {
@@ -375,7 +404,7 @@ func (s *RelayServer) run() error {
 
 			select {
 
-			case <-s.interrupt_chan:
+			case <-s.interrupt_chan: // TODO: add graceful shutdown
 				fmt.Println("R: Terminate relay")
 				// close all streams
 				for _, client_conn := range s.client_list {
@@ -404,7 +433,7 @@ func (s *RelayServer) run() error {
 					s.server_stream = server_stream
 					go passOnTraffic(s)
 
-					go publishConnectionEstablished()
+					go publishConnectionEstablished(conn)
 				}
 
 				fmt.Println("R: New stream added")
@@ -419,6 +448,7 @@ func (s *RelayServer) run() error {
 
 					client_ctr++
 					err = number_of_clients.Update(uint32(0), client_ctr, 0)
+					fmt.Println("Update at point nr.", 8)
 					if err != nil {
 						panic(err)
 					}
@@ -537,6 +567,7 @@ func keepConnectionsUpToDate(relay *RelayServer) {
 				fmt.Println("R: Connection ID changed. Updating...")
 				copy(client_info.ConnectionID[:], active_conn_id.Bytes())
 				err = client_data.Update(id, client_info, ebpf.UpdateAny)
+				fmt.Println("Update at point nr.", 9)
 				if err != nil {
 					panic(err)
 				}
@@ -549,23 +580,39 @@ func keepConnectionsUpToDate(relay *RelayServer) {
 	}
 }
 
-func publishConnectionEstablished() {
-	// time.Sleep(1 * time.Second)
-	// if bpf_enabled {
-	// 	connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	err = connection_map.Update(uint32(0), uint8(1), 0)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// }
+func publishConnectionEstablished(conn quic.Connection) {
+	time.Sleep(1 * time.Second)
+	if bpf_enabled {
+		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
+		if err != nil {
+			panic(err)
+		}
+
+		ipaddr, port := getIPAndPort(conn)
+		ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+		port_key := swapEndianness16(port)
+
+		key := client_key_struct{
+			Ipaddr:  ipaddr_key,
+			Port:    port_key,
+			Padding: [2]uint8{0, 0},
+		}
+		estab := &conn_established_struct{
+			Established: uint8(1),
+		}
+		err = connection_map.Update(key, estab, 0)
+		fmt.Println("Update at point nr.", 10)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("R: Connection established")
+	}
 }
 
 func packetNumberHandler(conn quic.Connection) {
 
-	client_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
+	// client_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
+	connection_current_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_current_pn", &ebpf.LoadPinOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -578,42 +625,48 @@ func packetNumberHandler(conn quic.Connection) {
 		Port:    port_key,
 		Padding: [2]uint8{0, 0},
 	}
-	val := &pn_struct{}
+	val := &connnection_pn_stuct{}
 
-	old_val := int64(0)
+	// old_val := int64(0)
 
 	for {
 
-		err := client_pn.Lookup(key, val)
-		if err != nil {
-			panic(err)
+		err = connection_current_pn.Lookup(key, val)
+		if err == nil && val.Pn > 0 {
+			conn.SetHighestSent(int64(val.Pn) - 1)
+			// fmt.Println(val.Pn - 1)
 		}
 
-		if val.Changed == 1 {
-			fmt.Println("R: Packet number changed! Updating...")
+		// err := client_pn.Lookup(key, val)
+		// if err != nil {
+		// 	panic(err)
+		// }
 
-			// TODO: change internal type to int32 since pn cannot be larger than 2^32?
-			conn.SetPacketNumber(int64(val.Pn))
+		// if val.Changed == 1 {
+		// 	fmt.Println("R: Packet number changed! Updating...")
 
-			// TODO: should I set it to the actual value or does this suffice?
-			conn.SetHighestSent(old_val) // TODO: val.Pn - 1?
+		// 	// TODO: change internal type to int32 since pn cannot be larger than 2^32?
+		// 	conn.SetPacketNumber(int64(val.Pn))
 
-			val.Changed = 0
-			err = client_pn.Update(key, val, 0)
-			if err != nil {
-				panic(err)
-			}
+		// 	// TODO: should I set it to the actual value or does this suffice?
+		// 	conn.SetHighestSent(old_val) // TODO: val.Pn - 1?
 
-			tmp := &pn_struct{}
-			err := client_pn.Lookup(key, tmp)
-			if err != nil {
-				panic(err)
-			}
-			fmt.Printf("R: Updated packet number to %d (%d)\n", tmp.Pn, tmp.Changed)
+		// 	val.Changed = 0
+		// 	err = client_pn.Update(key, val, 0)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
 
-		}
+		// 	tmp := &pn_struct{}
+		// 	err := client_pn.Lookup(key, tmp)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
+		// 	fmt.Printf("R: Updated packet number to %d (%d)\n", tmp.Pn, tmp.Changed)
 
-		old_val = int64(val.Pn)
+		// }
+
+		// old_val = int64(val.Pn)
 
 	}
 }
@@ -638,15 +691,13 @@ func getConnectionIDsKey(qconn quic.Connection) [6]byte {
 
 func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
-	fmt.Println("INIT")
-
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not initializing connection id for server")
+		// fmt.Println("Not initializing connection id for server")
 		return
 	}
-
+	fmt.Println("INIT")
 	fmt.Println("Init connection id")
 
 	key := getConnectionIDsKey(qconn)
@@ -666,15 +717,13 @@ func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
 func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
-	fmt.Println("RETIRE")
-
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not retiring connection id for server")
+		// fmt.Println("Not retiring connection id for server")
 		return
 	}
-
+	fmt.Println("RETIRE")
 	fmt.Println("Retire connection id for connection:", qconn.RemoteAddr().String())
 
 	key := getConnectionIDsKey(qconn)
@@ -724,14 +773,13 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 
 func updateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
-	fmt.Println("UPDATE")
-
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not updating connection id for server")
+		// fmt.Println("Not updating connection id for server")
 		return
 	}
+	fmt.Println("UPDATE")
 	setBPFMapConnectionID(qconn, id)
 }
 
@@ -773,6 +821,7 @@ func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	}
 	copy(client_info.ConnectionID[:], v)
 	err = client_data.Update(id, client_info, ebpf.UpdateAny)
+	fmt.Println("Update at point nr.", 11)
 	if err != nil {
 		fmt.Println("Error updating client_data")
 		panic(err)
@@ -789,7 +838,7 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == server_addr {
-		fmt.Println("Not incrementing pn for server")
+		// fmt.Println("Not incrementing pn for server")
 		return
 	}
 	fmt.Println("Increased packet number", qconn.RemoteAddr().String())
@@ -812,6 +861,7 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 		panic(err)
 	}
 	err = client_pn.Update(key, new_pn, 0)
+	fmt.Println("Update at point nr.", 12)
 	if err != nil {
 		fmt.Println("Error updating client_pn")
 		panic(err)
@@ -819,6 +869,55 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 
 	fmt.Println("Client packet number map updated")
 
+}
+
+func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int64, error) {
+
+	qconn := conn.(quic.Connection)
+
+	if qconn.RemoteAddr().String() == server_addr {
+		// fmt.Println("Not translating pn for server")
+		return pn, nil
+	}
+	fmt.Println("TRANSLATE", pn)
+	fmt.Println("Translated packet number", qconn.RemoteAddr().String())
+
+	ipaddr, port := getIPAndPort(qconn)
+	client_key := client_key_struct{
+		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+		Port:    swapEndianness16(uint16(port)),
+		Padding: [2]uint8{0, 0},
+	}
+	key := client_pn_map_key{
+		Key: client_key,
+		Pn:  uint32(pn),
+	}
+
+	client_pn_translator, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_pn_translation", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading client_pn_translator")
+		panic(err)
+	}
+	val := &connnection_pn_stuct{}
+	err = client_pn_translator.Lookup(key, val)
+	if err != nil {
+		fmt.Printf("No entry for %d. Getting next smaller...\n", pn)
+
+		// for smaller_pn := pn; smaller_pn > 0; smaller_pn-- {
+		// 	key.Pn = uint32(smaller_pn)
+		// 	err = client_pn_translator.Lookup(key, val)
+		// 	if err == nil {
+		// 		return int64(val.Pn), nil
+		// 	}
+		// }
+		return pn, fmt.Errorf("Error looking up in client_pn_translator")
+	}
+
+	fmt.Printf("%d -> %d\n", pn, val.Pn)
+
+	translated_pn := int64(val.Pn)
+	fmt.Println(translated_pn)
+	return translated_pn, nil
 }
 
 func getIPAndPort(conn quic.Connection) (net.IP, uint16) {
@@ -843,7 +942,9 @@ func clearBPFMaps() {
 		"number_of_clients",
 		"connection_established",
 		"packet_counter",
-		"client_pn"}
+		"client_pn",
+		"connection_current_pn",
+		"connection_pn_translation"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
@@ -876,14 +977,16 @@ func swapEndianness32(val uint32) uint32 {
 
 func passOnTraffic(relay *RelayServer) error {
 	for {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 1024) // TODO: larger buffer?
 		n, err := relay.server_stream.Read(buf)
 		if err != nil {
 			panic(err)
 		}
+		// fmt.Printf("%s", buf[:n])
 		fmt.Printf("Relay got from server: %s\n(This is just for ACK creation!)\n", buf[:n])
 		// fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
-		// for _, send_stream := range relay.stream_list {
+		// for _, client := range relay.client_list {
+		// 	send_stream := client.stream
 		// 	_, err = send_stream.Write(buf[:n])
 		// 	if err != nil {
 		// 		panic(err)
@@ -971,7 +1074,8 @@ func generateTLSConfig(klf bool) *tls.Config {
 
 func generateQUICConfig() *quic.Config {
 	return &quic.Config{
-		Tracer:         qlog.DefaultTracer,
-		MaxIdleTimeout: 5 * time.Minute,
+		Tracer:          qlog.DefaultTracer,
+		MaxIdleTimeout:  5 * time.Minute,
+		EnableDatagrams: true,
 	}
 }
