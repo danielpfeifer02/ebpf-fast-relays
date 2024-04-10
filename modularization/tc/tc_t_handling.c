@@ -29,6 +29,10 @@
 #define SERVER_PORT htons(4242)
 #define PORT_MARKER htons(6969)
 
+#define STREAM_FRAME(x) ((x) >= 0x08 && (x) <= 0x0f)
+#define DATAGRAM_FRAME(x) ((x) >= 0x30 && (x) <= 0x31)
+#define SUPPORTED_FRAME(x) (STREAM_FRAME(x) || DATAGRAM_FRAME(x))
+
 #define IP_CSUM_OFF (ETH_HLEN + offsetof(struct iphdr, check))
 
 
@@ -395,8 +399,10 @@ int tc_ingress(struct __sk_buff *skb)
                 uint8_t frame_type;
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
                 bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
-                if (frame_type < 0x08 || frame_type > 0x0f) {
-                        bpf_printk("Not a stream frame\n");
+
+                // bpf_printk("Type of frame: %02x\n", frame_type);
+                if (!SUPPORTED_FRAME(frame_type)) {
+                        bpf_printk("Not a stream or datagram frame\n");
                         return TC_ACT_OK;
                 }
 
@@ -569,7 +575,6 @@ int tc_egress(struct __sk_buff *skb)
                                 .ip_addr = dst_ip_addr,
                                 .port = dst_port,
                         };
-                
 
                         // // struct pn_value_t pn_value = {
                         // //         .packet_number = old_pn + 1,

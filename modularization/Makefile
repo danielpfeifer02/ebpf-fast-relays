@@ -52,7 +52,7 @@ clean:
 		rm -f /sys/fs/bpf/tc/globals/packet_counter; \
 		rm -f /sys/fs/bpf/tc/globals/connection_established; \
 		rm -f /sys/fs/bpf/tc/globals/client_pn; \
-		rm -f /sys/fs/bpf/tc/globals/connnection_current_pn; \
+		rm -f /sys/fs/bpf/tc/globals/connection_current_pn; \
 		rm -f /sys/fs/bpf/tc/globals/connection_pn_translation; \
 	fi
 

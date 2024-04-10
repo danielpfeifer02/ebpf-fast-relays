@@ -87,6 +87,7 @@ type StreamingServer struct {
 	stream_list      []quic.Stream
 	high_prio_stream quic.Stream
 	low_prio_stream  quic.Stream
+	relay_conn       quic.Connection
 }
 
 var _ Server = &StreamingServer{}
@@ -100,6 +101,7 @@ func NewStreamingServer() *StreamingServer {
 		// TODO set high_prio_stream and low_prio_stream
 		high_prio_stream: nil,
 		low_prio_stream:  nil,
+		relay_conn:       nil,
 	}
 }
 
@@ -141,6 +143,9 @@ func (s *StreamingServer) run() error {
 
 			case conn := <-s.conn_chan:
 				fmt.Println("S: New connection accepted")
+				if s.relay_conn == nil {
+					s.relay_conn = conn
+				}
 				go streamAcceptWrapperServer(conn, s.stream_chan)
 			}
 
@@ -164,6 +169,10 @@ func sendToAll(stream *quic.Stream, message string) {
 }
 
 func (s *StreamingServer) sendToAllHigh(message string) {
+
+	s.relay_conn.SendDatagram([]byte(message))
+	return
+
 	// sendToAll(s.high_prio_stream, message)
 	for _, stream := range s.stream_list {
 		sendToAll(&stream, message)
@@ -234,6 +243,7 @@ func (s *RelayServer) run() error {
 		client_ctr := uint32(0)
 		// set number of clients to 0
 		err = number_of_clients.Update(uint32(0), client_ctr, 0)
+		fmt.Println("Update at point nr.", 1)
 		if err != nil {
 			panic(err)
 		}
@@ -243,6 +253,7 @@ func (s *RelayServer) run() error {
 			panic(err)
 		}
 		err = id_counter.Update(uint32(0), uint32(0), 0)
+		fmt.Println("Update at point nr.", 2)
 		if err != nil {
 			panic(err)
 		}
@@ -308,6 +319,7 @@ func (s *RelayServer) run() error {
 			panic(err)
 		}
 		err = packet_counter.Update(uint32(0), uint32(0), 0)
+		fmt.Println("Update at point nr.", 3)
 		if err != nil {
 			panic(err)
 		}
@@ -326,6 +338,7 @@ func (s *RelayServer) run() error {
 			}
 			client_info.PriorityDropLimit = 2
 			err = client_data.Update(id, client_info, ebpf.UpdateAny)
+			fmt.Println("Update at point nr.", 4)
 			if err != nil {
 				fmt.Println("Error updating client_data")
 				panic(err)
@@ -336,6 +349,7 @@ func (s *RelayServer) run() error {
 				panic(err)
 			}
 			err = packet_counter.Update(uint32(0), uint32(1), 0)
+			fmt.Println("Update at point nr.", 5)
 			if err != nil {
 				panic(err)
 			}
@@ -350,6 +364,7 @@ func (s *RelayServer) run() error {
 			}
 			client_info.PriorityDropLimit = 0
 			err = client_data.Update(id, client_info, ebpf.UpdateAny)
+			fmt.Println("Update at point nr.", 6)
 			if err != nil {
 				fmt.Println("Error updating client_data")
 				panic(err)
@@ -360,21 +375,22 @@ func (s *RelayServer) run() error {
 				panic(err)
 			}
 			err = packet_counter.Update(uint32(0), uint32(0), 0)
+			fmt.Println("Update at point nr.", 7)
 			if err != nil {
 				panic(err)
 			}
 
 			// // ! why does it not work without this?
-			// if i >= 1 {
-			// 	fmt.Printf("Sending info to client\n")
-			// 	for _, client_conn := range relay.client_list {
-			// 		send_stream := client_conn.stream
-			// 		_, err = send_stream.Write([]byte("You get the traffic again now!\n"))
-			// 		if err != nil {
-			// 			panic(err)
-			// 		}
-			// 	}
-			// }
+			if i >= 1 {
+				fmt.Printf("Sending info to client\n")
+				for _, client_conn := range relay.client_list {
+					send_stream := client_conn.stream
+					_, err = send_stream.Write([]byte("You get the traffic again now!\n"))
+					if err != nil {
+						panic(err)
+					}
+				}
+			}
 		}
 	}(s)
 
@@ -432,6 +448,7 @@ func (s *RelayServer) run() error {
 
 					client_ctr++
 					err = number_of_clients.Update(uint32(0), client_ctr, 0)
+					fmt.Println("Update at point nr.", 8)
 					if err != nil {
 						panic(err)
 					}
@@ -550,6 +567,7 @@ func keepConnectionsUpToDate(relay *RelayServer) {
 				fmt.Println("R: Connection ID changed. Updating...")
 				copy(client_info.ConnectionID[:], active_conn_id.Bytes())
 				err = client_data.Update(id, client_info, ebpf.UpdateAny)
+				fmt.Println("Update at point nr.", 9)
 				if err != nil {
 					panic(err)
 				}
@@ -583,6 +601,7 @@ func publishConnectionEstablished(conn quic.Connection) {
 			Established: uint8(1),
 		}
 		err = connection_map.Update(key, estab, 0)
+		fmt.Println("Update at point nr.", 10)
 		if err != nil {
 			panic(err)
 		}
@@ -802,6 +821,7 @@ func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	}
 	copy(client_info.ConnectionID[:], v)
 	err = client_data.Update(id, client_info, ebpf.UpdateAny)
+	fmt.Println("Update at point nr.", 11)
 	if err != nil {
 		fmt.Println("Error updating client_data")
 		panic(err)
@@ -841,6 +861,7 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 		panic(err)
 	}
 	err = client_pn.Update(key, new_pn, 0)
+	fmt.Println("Update at point nr.", 12)
 	if err != nil {
 		fmt.Println("Error updating client_pn")
 		panic(err)
@@ -1053,7 +1074,8 @@ func generateTLSConfig(klf bool) *tls.Config {
 
 func generateQUICConfig() *quic.Config {
 	return &quic.Config{
-		Tracer:         qlog.DefaultTracer,
-		MaxIdleTimeout: 5 * time.Minute,
+		Tracer:          qlog.DefaultTracer,
+		MaxIdleTimeout:  5 * time.Minute,
+		EnableDatagrams: true,
 	}
 }

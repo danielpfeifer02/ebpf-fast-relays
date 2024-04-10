@@ -52,3 +52,5 @@
 - make sure all the synchronization is correct (i.e. add synchronization)
 
 - what if there are multiple frames in one packet besides the stream frame? would require variable length integer reading
+
+- fix stream offset (or change to datagrams, or both?)

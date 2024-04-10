@@ -12,11 +12,13 @@ import (
 
 type StreamingClient struct {
 	stream_list []quic.Stream
+	relay_conn  quic.Connection
 }
 
 func NewStreamingClient() *StreamingClient {
 	return &StreamingClient{
 		stream_list: make([]quic.Stream, 0),
+		relay_conn:  nil,
 	}
 }
 
@@ -27,29 +29,37 @@ func (c *StreamingClient) run() {
 
 	// for now only one stream is supported
 	for {
-		if len(c.stream_list) > 0 {
 
-			if len(c.stream_list) > 1 {
-				fmt.Println("C: For now more than one stream is not supported")
-			}
-
-			stream := c.stream_list[0]
-
-			n := 1
-
-			for n > 0 {
-
-				buf := make([]byte, 1)
-				// fmt.Println("C: Reading from stream")
-				n, err := stream.Read(buf)
-				if err != nil {
-					panic(err)
-				}
-
-				// fmt.Printf("Client got: %s\n", buf[:n])
-				fmt.Printf("%s", buf[:n])
-			}
+		data, err := c.relay_conn.ReceiveDatagram(context.Background())
+		if err != nil {
+			fmt.Printf("C: Error receiving datagram (%v)\n", err)
+			return
 		}
+		fmt.Printf("C: Received datagram: %s\n", data)
+
+		// if len(c.stream_list) > 0 {
+
+		// 	if len(c.stream_list) > 1 {
+		// 		fmt.Println("C: For now more than one stream is not supported")
+		// 	}
+
+		// 	stream := c.stream_list[0]
+
+		// 	n := 1
+
+		// 	for n > 0 {
+
+		// 		buf := make([]byte, 1)
+		// 		// fmt.Println("C: Reading from stream")
+		// 		n, err := stream.Read(buf)
+		// 		if err != nil {
+		// 			panic(err)
+		// 		}
+
+		// 		// fmt.Printf("Client got: %s\n", buf[:n])
+		// 		fmt.Printf("%s", buf[:n])
+		// 	}
+		// }
 	}
 }
 
@@ -68,6 +78,8 @@ func (c *StreamingClient) connectToServer() error {
 		fmt.Printf("C: Error dialing address (%v)\n", err)
 		return err
 	}
+
+	c.relay_conn = conn
 
 	fmt.Println("C: Opening stream")
 	// Open a new stream with high priority

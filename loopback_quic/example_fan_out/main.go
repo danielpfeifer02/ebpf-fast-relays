@@ -119,6 +119,7 @@ func main_advanced() {
 
 	} else if args[1] == "client" {
 		os.Setenv("QLOGDIR", "./qlog")
+		packet_setting.PRINT_PACKET_RECEIVING_INFO = true
 
 		clearScreen()
 
