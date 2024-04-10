@@ -757,6 +757,30 @@ int tc_egress(struct __sk_buff *skb)
                 // * TODO wieder anschalten
 
 
+                // if the frame is a stream frame we need to update the stream offset
+                /*
+                STREAM Frame {
+                  Type (i) = 0x08..0x0f,
+                  Stream ID (i),
+                  [Offset (i)],
+                  [Length (i)],
+                  Stream Data (..),
+                }                        
+                */
+                uint8_t pn_len = (quic_flags & 0x03) + 1;
+                uint8_t frame_type;
+                uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
+                bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
+
+                // TODO: this only works if there is only one frame in the packet
+                // TODO: adapt it so that it goes through all frames?
+                if (STREAM_FRAME(frame_type)) {
+                        // TODO: update stream offset
+                        // TODO: for this add a map which stores the stream offset for each stream!
+                        // TODO: how to identify the stream? -> stream id in the packet
+                }
+
+
                 // set src_mac to value->src_mac
                 uint32_t src_mac_off = 6 /* DST MAC */;
                 bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0);
