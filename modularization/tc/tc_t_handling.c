@@ -23,6 +23,7 @@
 #define CONN_ID_LEN 16
 #define MAC_LEN 6
 #define MAX_CLIENTS 1024
+#define MAX_STREAMS_PER_CLIENT 16
 
 // TODO: why is 4242 observable in WireShark and 6969 not?
 #define RELAY_PORT htons(4242)
@@ -164,19 +165,20 @@ struct client_stream_offset_key_t {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_stream_offset_key_t);
-    __type(value, uint32_t);
-    __uint(max_entries, MAX_CLIENTS);
+    __type(value, struct var_int);
+    __uint(max_entries, MAX_CLIENTS * MAX_STREAMS_PER_CLIENT);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } client_stream_offset SEC(".maps");
 
 struct var_int {
         uint64_t value;
-        uint8_t len;
+        // len for saved values in the stream offset map provide the MINIMAL length of value in bytes
+        uint8_t len; 
 };
 
 
 // TODO: not working -> fix
-__attribute__((always_inline)) read_var_int(void *start, struct var_int *res) {
+__attribute__((always_inline)) void read_var_int(void *start, struct var_int *res) {
 
         uint64_t result = 0;
         uint8_t byte;
@@ -195,11 +197,10 @@ __attribute__((always_inline)) read_var_int(void *start, struct var_int *res) {
         }
         res->value = result;
         res->len = len;
-        return 0;
 }
 
 // to satisfy the verifier
-__attribute__((always_inline)) bounded_var_int_len(uint8_t var_int_len) {
+__attribute__((always_inline)) uint32_t bounded_var_int_len(uint8_t var_int_len) {
         if (var_int_len == 1) {
                 return 1;
         }
@@ -213,6 +214,23 @@ __attribute__((always_inline)) bounded_var_int_len(uint8_t var_int_len) {
                 return 8;
         }
         return 0;
+}
+
+// https://datatracker.ietf.org/doc/html/rfc9000#name-variable-length-integer-enc
+__attribute__((always_inline)) uint8_t determine_minimal_length_encoded(uint64_t value) {
+        if (value <= 63) {
+                return 0b00;
+        }
+        if (value <= 16383) {
+                return 0b01;
+        }
+        if (value <= 1073741823) {
+                return 0b10;
+        }
+        if (value <= 4611686018427387903) {
+                return 0b11;
+        }
+        return 0b100;
 }
 
 
@@ -835,31 +853,31 @@ int tc_egress(struct __sk_buff *skb)
                 // TODO: adapt it so that it goes through all frames?
                 if (STREAM_FRAME(frame_type)) {
                         // TODO: update stream offset
-                        // TODO: for this add a map which stores the stream offset for each stream!
+                        // TODO: for this add a map which stores the stream offset for each stream! 
                         // TODO: how to identify the stream? -> stream id in the packet
 
                         uint8_t off_bit_set = frame_type & 0x04;
                         uint8_t len_bit_set = frame_type & 0x02;
                         uint8_t fin_bit_set = frame_type & 0x01;
 
-                        if (off_bit_set) {
-                                
-                                uint8_t byte;
+                        uint8_t byte;
 
-                                uint32_t stream_id_off = frame_off + 1 /* Frame type */;
-                                struct var_int stream_id = {0};
-                                // read_var_int(payload + stream_id_off, &stream_id_off); // TODO: fix
-                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off);
-                                stream_id.len = 1 << (byte >> 6);
-                                stream_id.value = byte & 0x3f; 
-                                for (int i=1; i<8; i++) {
-                                        if (i >= stream_id.len) {
-                                                break;
-                                        }
-                                        stream_id.value = stream_id.value << 8;
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off + i);
-                                        stream_id.value = stream_id.value | byte;
+                        uint32_t stream_id_off = frame_off + 1 /* Frame type */;
+                        struct var_int stream_id = {0};
+                        // read_var_int(payload + stream_id_off, &stream_id_off); // TODO: fix
+                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off);
+                        stream_id.len = 1 << (byte >> 6);
+                        stream_id.value = byte & 0x3f; 
+                        for (int i=1; i<8; i++) {
+                                if (i >= stream_id.len) {
+                                        break;
                                 }
+                                stream_id.value = stream_id.value << 8;
+                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off + i);
+                                stream_id.value = stream_id.value | byte;
+                        }
+
+                        if (off_bit_set) {
 
                                 uint32_t stream_offset_off = stream_id_off + bounded_var_int_len(stream_id.len);
                                 struct var_int stream_offset = {0};
@@ -884,10 +902,7 @@ int tc_egress(struct __sk_buff *skb)
                                 uint64_t data_length = 0;
                                 if (len_bit_set) {
 
-                                        struct var_int stream_len = {
-                                                .value = 0,
-                                                .len = 0,
-                                        };
+                                        struct var_int stream_len = {0};
                                         uint32_t stream_len_off = stream_offset_off + bounded_var_int_len(stream_offset.len);
                                         // read_var_int(payload + stream_len_off, &stream_len); // TODO: fix
                                         bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_len_off);
@@ -902,6 +917,7 @@ int tc_egress(struct __sk_buff *skb)
                                                 stream_len.value = stream_len.value | byte;
                                         }
                                         data_length = stream_len.value;
+                                        stream_offset_off += bounded_var_int_len(stream_len.len);
 
                                 } else {
                                         data_length = payload_size - 1 /* 1-RTT Header Flags */
@@ -912,7 +928,102 @@ int tc_egress(struct __sk_buff *skb)
                                                                 - bounded_var_int_len(stream_offset.len);
                                 }
 
-                                bpf_printk("Stream data length: %d\n", data_length);
+                                // bpf_printk("Stream data length: %d\n", data_length);
+
+                                struct var_int *old_stream_offset = bpf_map_lookup_elem(&client_stream_offset, &stream_key);
+                                struct var_int zero = {
+                                        .value = 0,
+                                        .len = 1,
+                                };
+                                if (old_stream_offset == NULL) {
+                                        bpf_printk("[stream handling] No stream offset found\n"); // TODO should not happen?
+                                        old_stream_offset = &zero;
+                                }
+
+                                uint64_t new_value = old_stream_offset->value + data_length;
+                                uint8_t new_len_enc = determine_minimal_length_encoded(new_value);
+                                if (new_len_enc > 0b11) {
+                                        bpf_printk("[stream handling] Stream offset too large\n");
+                                        return TC_ACT_OK;
+                                }
+
+                                bpf_printk("[stream handling] New Stream Offset will be %08x\n", new_value);
+
+                                struct var_int new_stream_offset = {
+                                        .value = new_value,
+                                        .len = 1 << (new_len_enc),
+                                };
+
+                                if (new_stream_offset.len > stream_offset.len) {
+                                        bpf_printk("[stream handling] Stream offset length of the packet is too short\n");
+                                        return TC_ACT_OK;
+                                }
+
+                                bpf_map_update_elem(&client_stream_offset, &stream_key, &new_stream_offset, BPF_ANY);
+
+                                // bpf_printk("Stream off len: %d\n", new_stream_offset.len);
+                                // TODO: write into packet
+                                uint8_t new_stream_offset_bytes[8];
+
+                                // add length encoding to the first byte
+                                uint8_t len_enc;
+                                if (stream_offset.len == 1) {
+                                        len_enc = 0b00;
+                                } else if (stream_offset.len == 2) {
+                                        len_enc = 0b01;
+                                } else if (stream_offset.len == 4) {
+                                        len_enc = 0b10;
+                                } else if (stream_offset.len == 8) {
+                                        len_enc = 0b11;
+                                } else {
+                                        bpf_printk("[stream handling] Stream offset length of the packet is not valid\n");
+                                        return TC_ACT_OK;
+                                }
+
+                                new_stream_offset_bytes[0] = 
+                                        (len_enc << 6) | (new_stream_offset.value & 0x3f);
+                                
+                                uint8_t cur;
+                                uint8_t ctr = 1;
+                                for (int i=1; i<8; i++, ctr++) {
+                                        if (i >= stream_offset.len) {
+                                                break;
+                                        }
+                                        cur = new_stream_offset.value & 0xff;
+                                        new_stream_offset_bytes[i] |= cur;
+                                        new_stream_offset.value = new_stream_offset.value >> 8; 
+
+                                }
+                                // TODO: why is stream_offset.len not working but ctr is?
+                                // until now the offset off was relative to the quic payload start
+                                // add all the previous headers to the offset
+                                stream_offset_off += sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
+                                bpf_skb_store_bytes(skb, stream_offset_off, new_stream_offset_bytes, ctr, 0);
+
+                                bpf_printk("[stream handling] Stream offset updated to %08x\n", new_stream_offset.value);
+
+
+                        } else { // if no off bit is set then it's the first frame of the stream
+
+                                // set an entry in client_stream_offset
+                                struct client_stream_offset_key_t stream_key = {
+                                        .key = key,
+                                        .stream_id = stream_id.value,
+                                };
+
+                                struct var_int *check_empty = bpf_map_lookup_elem(&client_stream_offset, &stream_key);
+                                if (check_empty != NULL) {
+                                        bpf_printk("[stream handling] Stream offset already set but shouldn't be?\n");
+                                        return TC_ACT_OK;
+                                } 
+
+                                struct var_int zero = {
+                                        .value = 0,
+                                        .len = 1,
+                                };
+                                bpf_map_update_elem(&client_stream_offset, &stream_key, &zero, BPF_ANY);
+
+                                bpf_printk("[stream handling] Stream offset set to 0\n");
 
                         }
 
@@ -921,7 +1032,7 @@ int tc_egress(struct __sk_buff *skb)
 
                 // set src_mac to value->src_mac
                 uint32_t src_mac_off = 6 /* DST MAC */;
-                bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0);
+                bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0); // TODO &value->src_mac?
 
                 // TODO Not needed? (Not correct anyway since src_mac was mac from client and not from bridge)
                 // set dst_mac to value->dst_mac

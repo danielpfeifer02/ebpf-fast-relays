@@ -162,7 +162,7 @@ func (s *StreamingServer) run() error {
 }
 
 func sendToAll(stream *quic.Stream, message string) {
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 1; i++ {
 		_, err := (*stream).Write([]byte(message))
 		if err != nil {
 			panic(err)
@@ -947,7 +947,8 @@ func clearBPFMaps() {
 		"packet_counter",
 		"client_pn",
 		"connection_current_pn",
-		"connection_pn_translation"}
+		"connection_pn_translation",
+		"client_stream_offset"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
