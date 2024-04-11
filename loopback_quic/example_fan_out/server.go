@@ -162,16 +162,19 @@ func (s *StreamingServer) run() error {
 }
 
 func sendToAll(stream *quic.Stream, message string) {
-	_, err := (*stream).Write([]byte(message))
-	if err != nil {
-		panic(err)
+	for i := 0; i < 1; i++ {
+		_, err := (*stream).Write([]byte(message))
+		if err != nil {
+			panic(err)
+		}
+		time.Sleep(10.0 * time.Millisecond)
 	}
 }
 
 func (s *StreamingServer) sendToAllHigh(message string) {
 
-	s.relay_conn.SendDatagram([]byte(message))
-	return
+	// s.relay_conn.SendDatagram([]byte(message))
+	// return
 
 	// sendToAll(s.high_prio_stream, message)
 	for _, stream := range s.stream_list {
@@ -378,18 +381,6 @@ func (s *RelayServer) run() error {
 			fmt.Println("Update at point nr.", 7)
 			if err != nil {
 				panic(err)
-			}
-
-			// // ! why does it not work without this?
-			if i >= 1 {
-				fmt.Printf("Sending info to client\n")
-				for _, client_conn := range relay.client_list {
-					send_stream := client_conn.stream
-					_, err = send_stream.Write([]byte("You get the traffic again now!\n"))
-					if err != nil {
-						panic(err)
-					}
-				}
 			}
 		}
 	}(s)
@@ -944,7 +935,8 @@ func clearBPFMaps() {
 		"packet_counter",
 		"client_pn",
 		"connection_current_pn",
-		"connection_pn_translation"}
+		"connection_pn_translation",
+		"client_stream_offset"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
