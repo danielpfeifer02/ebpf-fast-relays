@@ -407,12 +407,12 @@ int tc_ingress(struct __sk_buff *skb)
         // return TC_ACT_OK;
 
 
-        uint32_t zero = 0;
-        uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
-        if (pack_ctr != NULL && *pack_ctr == 1) {
-                bpf_printk("Packet counter drop\n");
-                return TC_ACT_OK;
-        }
+        // uint32_t zero = 0;
+        // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+        // if (pack_ctr != NULL && *pack_ctr == 1) {
+        //         bpf_printk("Packet counter drop\n");
+        //         return TC_ACT_OK;
+        // }
 
 
 
@@ -817,21 +817,11 @@ int tc_egress(struct __sk_buff *skb)
 
                 bpf_printk("Threshold: %02x - Packet prio: %02x\n", client_prio_drop_limit, packet_prio);
 
-                // ! Seems to not be working? Something wrong with the state of the client data map?
-                // ! maybe it is the packet number change which does not have any effect since the packet is dropped
-                // // ! i think it is because the ACK of the packet from the server leaves through the same interface and 
-                // // ! is also dropped once the prio threshold is adapted?
-                // ! something with the client data is wrong since the packet arrives at the client interface 
-                // ! but is dropped apparently
-                // ! i think its the packet number bc if nothing is tired to be sent during the phase of prio dropping
-                // ! it works normally afterwards
-                // if (packet_prio < client_prio_drop_limit) {
-                //         bpf_printk("Packet prio lower than client prio Threshold\n");
-                //         // *pack_ctr = *pack_ctr + 1;
-                //         // bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
-                //         return TC_ACT_SHOT;
-                // }
-                // * TODO wieder anschalten
+                // drop the packet if the prio is lower than the client prio drop limit
+                if (packet_prio < client_prio_drop_limit) {
+                        bpf_printk("Packet prio lower than client prio Threshold\n");
+                        return TC_ACT_SHOT;
+                }
 
 
                 // if the frame is a stream frame we need to update the stream offset
@@ -963,7 +953,7 @@ int tc_egress(struct __sk_buff *skb)
 
                                 // bpf_printk("Stream off len: %d\n", new_stream_offset.len);
                                 // TODO: write into packet
-                                uint8_t new_stream_offset_bytes[8];
+                                uint8_t new_stream_offset_bytes[8] = {0};
 
                                 // add length encoding to the first byte
                                 uint8_t len_enc;
@@ -980,20 +970,23 @@ int tc_egress(struct __sk_buff *skb)
                                         return TC_ACT_OK;
                                 }
 
+                                uint8_t bounded_len = bounded_var_int_len(stream_offset.len);
                                 new_stream_offset_bytes[0] = 
-                                        (len_enc << 6) | (new_stream_offset.value & 0x3f);
+                                        (len_enc << 6) | ((new_stream_offset.value >> (8 * (bounded_len - 1))) & 0x3f);
                                 
                                 uint8_t cur;
+                                uint64_t tmp = new_stream_offset.value;
                                 uint8_t ctr = 1;
                                 for (int i=1; i<8; i++, ctr++) {
-                                        if (i >= stream_offset.len) {
+                                        if (i >= bounded_len) {
                                                 break;
                                         }
-                                        cur = new_stream_offset.value & 0xff;
+                                        cur = tmp & 0xff;
                                         new_stream_offset_bytes[i] |= cur;
-                                        new_stream_offset.value = new_stream_offset.value >> 8; 
+                                        tmp = tmp >> 8; 
 
                                 }
+
                                 // TODO: why is stream_offset.len not working but ctr is?
                                 // until now the offset off was relative to the quic payload start
                                 // add all the previous headers to the offset

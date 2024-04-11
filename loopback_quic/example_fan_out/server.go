@@ -382,18 +382,6 @@ func (s *RelayServer) run() error {
 			if err != nil {
 				panic(err)
 			}
-
-			// // ! why does it not work without this?
-			if i >= 1 {
-				fmt.Printf("Sending info to client\n")
-				for _, client_conn := range relay.client_list {
-					send_stream := client_conn.stream
-					_, err = send_stream.Write([]byte("You get the traffic again now!\n"))
-					if err != nil {
-						panic(err)
-					}
-				}
-			}
 		}
 	}(s)
 
