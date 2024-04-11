@@ -174,13 +174,16 @@ struct var_int {
         uint8_t len;
 };
 
-struct var_int read_var_int(void *start) {
+
+// TODO: not working -> fix
+__attribute__((always_inline)) read_var_int(void *start, struct var_int *res) {
 
         uint64_t result = 0;
         uint8_t byte;
         bpf_probe_read_kernel(&byte, sizeof(byte), start);
         uint8_t len = 1 << (byte >> 6);
-        result = result & 0x3f; 
+        bpf_printk("Stream %d %d", len, byte >> 6);
+        result = byte & 0x3f; 
 
         for (int i=1; i<8; i++) {
                 if (i >= len) {
@@ -190,10 +193,26 @@ struct var_int read_var_int(void *start) {
                 bpf_probe_read_kernel(&byte, sizeof(byte), start + i);
                 result = result | byte;
         }
-        return {
-                .value = result,
-                .len = len,
-        };
+        res->value = result;
+        res->len = len;
+        return 0;
+}
+
+// to satisfy the verifier
+__attribute__((always_inline)) bounded_var_int_len(uint8_t var_int_len) {
+        if (var_int_len == 1) {
+                return 1;
+        }
+        if (var_int_len == 2) {
+                return 2;
+        }
+        if (var_int_len == 4) {
+                return 4;
+        }
+        if (var_int_len == 8) {
+                return 8;
+        }
+        return 0;
 }
 
 
@@ -824,17 +843,76 @@ int tc_egress(struct __sk_buff *skb)
                         uint8_t fin_bit_set = frame_type & 0x01;
 
                         if (off_bit_set) {
-                        
+                                
+                                uint8_t byte;
+
                                 uint32_t stream_id_off = frame_off + 1 /* Frame type */;
-                                struct var_int stream_id = read_var_int(payload + stream_id_off);
-                                struct var_int stream_offset = read_var_int(payload + stream_id_off + stream_id.len);
+                                struct var_int stream_id = {0};
+                                // read_var_int(payload + stream_id_off, &stream_id_off); // TODO: fix
+                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off);
+                                stream_id.len = 1 << (byte >> 6);
+                                stream_id.value = byte & 0x3f; 
+                                for (int i=1; i<8; i++) {
+                                        if (i >= stream_id.len) {
+                                                break;
+                                        }
+                                        stream_id.value = stream_id.value << 8;
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off + i);
+                                        stream_id.value = stream_id.value | byte;
+                                }
+
+                                uint32_t stream_offset_off = stream_id_off + bounded_var_int_len(stream_id.len);
+                                struct var_int stream_offset = {0};
+                                // read_var_int(payload + stream_offset_off, &stream_offset); // TODO: fix
+                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_offset_off);
+                                stream_offset.len = 1 << (byte >> 6);
+                                stream_offset.value = byte & 0x3f; 
+                                for (int i=1; i<8; i++) {
+                                        if (i >= stream_offset.len) {
+                                                break;
+                                        }
+                                        stream_offset.value = stream_offset.value << 8;
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_offset_off + i);
+                                        stream_offset.value = stream_offset.value | byte;
+                                }
 
                                 struct client_stream_offset_key_t stream_key = {
                                         .key = key,
                                         .stream_id = stream_id.value,
                                 };
                                 
-                                // TODO: add functionality to update the stream offset
+                                uint64_t data_length = 0;
+                                if (len_bit_set) {
+
+                                        struct var_int stream_len = {
+                                                .value = 0,
+                                                .len = 0,
+                                        };
+                                        uint32_t stream_len_off = stream_offset_off + bounded_var_int_len(stream_offset.len);
+                                        // read_var_int(payload + stream_len_off, &stream_len); // TODO: fix
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_len_off);
+                                        stream_len.len = 1 << (byte >> 6);
+                                        stream_len.value = byte & 0x3f;
+                                        for (int i=1; i<8; i++) {
+                                                if (i >= stream_len.len) {
+                                                        break;
+                                                }
+                                                stream_len.value = stream_len.value << 8;
+                                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_len_off + i);
+                                                stream_len.value = stream_len.value | byte;
+                                        }
+                                        data_length = stream_len.value;
+
+                                } else {
+                                        data_length = payload_size - 1 /* 1-RTT Header Flags */
+                                                                - CONN_ID_LEN
+                                                                - pn_len
+                                                                - 1 /* Frame Type */
+                                                                - bounded_var_int_len(stream_id.len)
+                                                                - bounded_var_int_len(stream_offset.len);
+                                }
+
+                                bpf_printk("Stream data length: %d\n", data_length);
 
                         }
 

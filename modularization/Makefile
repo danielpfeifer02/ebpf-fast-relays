@@ -54,6 +54,7 @@ clean:
 		rm -f /sys/fs/bpf/tc/globals/client_pn; \
 		rm -f /sys/fs/bpf/tc/globals/connection_current_pn; \
 		rm -f /sys/fs/bpf/tc/globals/connection_pn_translation; \
+		rm -f /sys/fs/bpf/tc/globals/client_stream_offset; \
 	fi
 
 	rm -f $(BPF_TC_OBJ)

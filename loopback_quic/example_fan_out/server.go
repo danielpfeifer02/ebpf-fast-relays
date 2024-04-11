@@ -162,16 +162,19 @@ func (s *StreamingServer) run() error {
 }
 
 func sendToAll(stream *quic.Stream, message string) {
-	_, err := (*stream).Write([]byte(message))
-	if err != nil {
-		panic(err)
+	for i := 0; i < 3; i++ {
+		_, err := (*stream).Write([]byte(message))
+		if err != nil {
+			panic(err)
+		}
+		time.Sleep(10.0 * time.Millisecond)
 	}
 }
 
 func (s *StreamingServer) sendToAllHigh(message string) {
 
-	s.relay_conn.SendDatagram([]byte(message))
-	return
+	// s.relay_conn.SendDatagram([]byte(message))
+	// return
 
 	// sendToAll(s.high_prio_stream, message)
 	for _, stream := range s.stream_list {
