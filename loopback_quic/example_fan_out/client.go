@@ -30,36 +30,36 @@ func (c *StreamingClient) run() {
 	// for now only one stream is supported
 	for {
 
-		// data, err := c.relay_conn.ReceiveDatagram(context.Background())
-		// if err != nil {
-		// 	fmt.Printf("C: Error receiving datagram (%v)\n", err)
-		// 	return
-		// }
-		// fmt.Printf("C: Received datagram: %s\n", data)
-
-		if len(c.stream_list) > 0 {
-
-			if len(c.stream_list) > 1 {
-				fmt.Println("C: For now more than one stream is not supported")
-			}
-
-			stream := c.stream_list[0]
-
-			n := 1
-
-			for n > 0 {
-
-				buf := make([]byte, 1)
-				// fmt.Println("C: Reading from stream")
-				n, err := stream.Read(buf)
-				if err != nil {
-					panic(err)
-				}
-
-				// fmt.Printf("Client got: %s\n", buf[:n])
-				fmt.Printf("%s", buf[:n])
-			}
+		data, err := c.relay_conn.ReceiveDatagram(context.Background())
+		if err != nil {
+			fmt.Printf("C: Error receiving datagram (%v)\n", err)
+			return
 		}
+		fmt.Printf("C: Received datagram: %s\n", data)
+
+		// if len(c.stream_list) > 0 {
+
+		// 	if len(c.stream_list) > 1 {
+		// 		fmt.Println("C: For now more than one stream is not supported")
+		// 	}
+
+		// 	stream := c.stream_list[0]
+
+		// 	n := 1
+
+		// 	for n > 0 {
+
+		// 		buf := make([]byte, 1)
+		// 		// fmt.Println("C: Reading from stream")
+		// 		n, err := stream.Read(buf)
+		// 		if err != nil {
+		// 			panic(err)
+		// 		}
+
+		// 		// fmt.Printf("Client got: %s\n", buf[:n])
+		// 		fmt.Printf("%s", buf[:n])
+		// 	}
+		// }
 	}
 }
 
@@ -83,7 +83,7 @@ func (c *StreamingClient) connectToServer() error {
 
 	fmt.Println("C: Opening stream")
 	// Open a new stream with high priority
-	stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.HighPriority)
+	stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.LowPriority)
 	if err != nil {
 		return err
 	}

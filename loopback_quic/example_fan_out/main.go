@@ -12,6 +12,7 @@ import (
 
 	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
+	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
 )
 
 const sleeping_time = 1 * time.Second
@@ -99,11 +100,11 @@ func main_advanced() {
 			switch choice {
 			case 1:
 				fmt.Println("Sending high-prio message to all clients")
-				server.sendToAllHigh("foobar high\n")
+				server.sendToAll("foobar high\n", priority_setting.HighPriority)
 				time.Sleep(sleeping_time)
 			case 2:
 				fmt.Println("Sending low-prio message to all clients")
-				server.sendToAllLow("foobar low\n")
+				server.sendToAll("foobar low\n", priority_setting.LowPriority)
 				time.Sleep(sleeping_time)
 			case 3:
 				fmt.Println("Exiting")
@@ -164,7 +165,7 @@ func main_basic() {
 	client.connectToServer()
 	time.Sleep(sleeping_time)
 
-	server.sendToAllHigh("Hello, World!")
+	server.sendToAll("Hello, World!", priority_setting.HighPriority)
 	time.Sleep(sleeping_time)
 
 	fmt.Println("Sending interrupt")

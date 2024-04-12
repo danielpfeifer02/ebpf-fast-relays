@@ -161,7 +161,7 @@ func (s *StreamingServer) run() error {
 	return nil
 }
 
-func sendToAll(stream *quic.Stream, message string) {
+func sendToStream(stream *quic.Stream, message string) {
 	for i := 0; i < 1; i++ {
 		_, err := (*stream).Write([]byte(message))
 		if err != nil {
@@ -171,19 +171,9 @@ func sendToAll(stream *quic.Stream, message string) {
 	}
 }
 
-func (s *StreamingServer) sendToAllHigh(message string) {
+func (s *StreamingServer) sendToAll(message string, prio priority_setting.Priority) {
 
-	// s.relay_conn.SendDatagram([]byte(message))
-	// return
-
-	// sendToAll(s.high_prio_stream, message)
-	for _, stream := range s.stream_list {
-		sendToAll(&stream, message)
-	}
-}
-
-func (s *StreamingServer) sendToAllLow(message string) {
-	// sendToAll(s.low_prio_stream, message)
+	s.relay_conn.SendDatagramWithPriority([]byte(message), prio)
 }
 
 type client_connection struct {
@@ -317,16 +307,6 @@ func (s *RelayServer) run() error {
 			panic(err)
 		}
 
-		packet_counter, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packet_counter", &ebpf.LoadPinOptions{})
-		if err != nil {
-			panic(err)
-		}
-		err = packet_counter.Update(uint32(0), uint32(0), 0)
-		fmt.Println("Update at point nr.", 3)
-		if err != nil {
-			panic(err)
-		}
-
 		wait := time.Duration(4)
 
 		for i := 0; i < 3; i++ { // TODO change packet_counter from 0 to 1 and back alternatingly
@@ -339,21 +319,11 @@ func (s *RelayServer) run() error {
 				fmt.Println("Error looking up client_data")
 				panic(err)
 			}
-			client_info.PriorityDropLimit = 2
+			client_info.PriorityDropLimit = 2 // 1 is low, 2 is high
 			err = client_data.Update(id, client_info, ebpf.UpdateAny)
 			fmt.Println("Update at point nr.", 4)
 			if err != nil {
 				fmt.Println("Error updating client_data")
-				panic(err)
-			}
-
-			packet_counter, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packet_counter", &ebpf.LoadPinOptions{})
-			if err != nil {
-				panic(err)
-			}
-			err = packet_counter.Update(uint32(0), uint32(1), 0)
-			fmt.Println("Update at point nr.", 5)
-			if err != nil {
 				panic(err)
 			}
 
@@ -370,16 +340,6 @@ func (s *RelayServer) run() error {
 			fmt.Println("Update at point nr.", 6)
 			if err != nil {
 				fmt.Println("Error updating client_data")
-				panic(err)
-			}
-
-			packet_counter, err = ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packet_counter", &ebpf.LoadPinOptions{})
-			if err != nil {
-				panic(err)
-			}
-			err = packet_counter.Update(uint32(0), uint32(0), 0)
-			fmt.Println("Update at point nr.", 7)
-			if err != nil {
 				panic(err)
 			}
 		}
