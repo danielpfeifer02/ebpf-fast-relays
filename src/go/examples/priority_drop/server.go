@@ -927,10 +927,10 @@ func clearBPFMaps() {
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
-		cmd := exec.Command("./clear_bpf_map", map_location+path)
+		cmd := exec.Command("../../../utils/build/clear_bpf_map", map_location+path)
 		stdout, err := cmd.Output()
 		if err != nil {
-			fmt.Printf(string(stdout))
+			fmt.Println(string(stdout))
 			panic(err)
 		}
 		fmt.Println(string(stdout))

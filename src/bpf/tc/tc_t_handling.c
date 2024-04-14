@@ -852,7 +852,7 @@ int tc_egress(struct __sk_buff *skb)
 
                         uint8_t off_bit_set = frame_type & 0x04;
                         uint8_t len_bit_set = frame_type & 0x02;
-                        uint8_t fin_bit_set = frame_type & 0x01;
+                        // uint8_t fin_bit_set = frame_type & 0x01;
 
                         uint8_t byte;
 

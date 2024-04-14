@@ -58,6 +58,9 @@ func main_advanced() {
 	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
 
 	f, err := os.Create("./log.txt")
+	if err != nil {
+		panic(err)
+	}
 	defer f.Close()
 	if err != nil {
 		panic(err)
@@ -75,7 +78,7 @@ func main_advanced() {
 		if len(args) == 3 && args[1] == "relay" {
 			bpf_enabled = false
 		} else {
-			fmt.Printf("Usage: go run *.go (server|client|relay)\n", args[0])
+			fmt.Println("Usage: go run *.go (server|client|relay)")
 			return
 		}
 	}

@@ -9,13 +9,15 @@ import (
 )
 
 func main() {
-	intf := "veth0"
-	ip := "192.168.1.2" // shouldnt matter
+	intf := "veth1"
+	ip := "1.1.1.1" // shouldnt matter
 	numberOfPings := 5
 
-	fmt.Println("Make sure to use tc_poc_handling.c in Makefile ($TC should be set to \"tc_poc\")!")
-
 	done := make(chan bool)
+
+	clear := exec.Command("echo", ">", "/sys/kernel/tracing/trace")
+	clear.Run()
+
 	go readFromTracingPipe(done)
 
 	sendPings(intf, ip, numberOfPings)
@@ -24,7 +26,11 @@ func main() {
 
 func sendPings(intf string, ip string, count int) {
 	cmd := exec.Command("ping", "-I", intf, "-c", fmt.Sprintf("%d", count), ip)
+	// cmd.Stdout = os.Stdout
+	// cmd.Stderr = os.Stderr
+	fmt.Println("Executing: 'ping -I", intf, "-c", count, ip+"'")
 	cmd.Run()
+	fmt.Println("Done pinging")
 }
 
 func readFromTracingPipe(done chan bool) {
