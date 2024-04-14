@@ -17,10 +17,7 @@
 	__attribute__((section(NAME), used))
 #endif
 
-#define veth0_veth1 6
-#define veth1_veth0 5
-#define veth2_veth3 8
-#define veth3_veth2 7
+#define veth2 14
 
 __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
@@ -36,14 +33,19 @@ int tc_ingress(struct __sk_buff *skb)
         // Load ethernet header
         struct ethhdr *eth = (struct ethhdr *)data;
 
-        // Since ping packets start with an ARP packet and 
-        // we don't really car about the exact type of the
-        // packet here, we can just use ARP to show how the
-        // redirection would work.
-        if (eth->h_proto == htons(ETH_P_ARP)) {
-                bpf_printk("[ingress tc] packet entered ingress and will be redirected to egress!\n");
-                return bpf_redirect(veth2_veth3, 0);
+        // We redirect the response of the ICMP packets
+        if (eth->h_proto != 0x08) {
+                return TC_ACT_OK;
         }
+
+        // Load IP header
+        struct iphdr *ip = (struct iphdr *)(eth + 1);
+        if (ip->protocol != IPPROTO_ICMP) {
+                return TC_ACT_OK;
+        }
+
+        bpf_printk("[ingress tc] packet entered ingress and will be redirected to egress!\n");
+        bpf_clone_redirect(skb, veth2, 0);
 
         return TC_ACT_OK;
 }

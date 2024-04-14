@@ -56,6 +56,6 @@ set local addr of relay and client accordingly so that hooking to interface work
 
 
 relay command:
-cd ../../modularization/ && make clean && make && cd ../loopback_quic/example_fan_out && QUIC_GO_LOG_LEVEL=DEBUG go run *.go relay
-
-cd Desktop/thesis/Adaptive_MoQ/loopback_quic/example_fan_out/
+cd ../../../bpf/ && make clean && make && cd ../go/examples/priority_drop && QUIC_GO_LOG_LEVEL=DEBUG go run *.go relay
+or
+cd ../../../bpf/ && make clean && make && cd ../go/examples/priority_drop && ./build/main relay
