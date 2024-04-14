@@ -522,7 +522,10 @@ int tc_ingress(struct __sk_buff *skb)
                         // we can use it to store the index ctr
                         // TODO: change to zero index
                         uint32_t index = i + 1;
-                        bpf_skb_store_bytes(skb, conn_id_off, &index, sizeof(uint32_t), 0);
+                        // we use the second byte of the connection id to store the index
+                        // since the first byte is encoding the priority 
+                        uint32_t index_off = conn_id_off + 1;
+                        bpf_skb_store_bytes(skb, index_off, &index, sizeof(uint32_t), 0);
 
                         uint16_t dst_port_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
                         uint16_t mrk = PORT_MARKER;
@@ -776,7 +779,8 @@ int tc_egress(struct __sk_buff *skb)
                 // }
 
                 uint32_t pack_ctr;
-                bpf_probe_read_kernel(&pack_ctr, sizeof(pack_ctr), payload + 1 /* Short header flags */);
+                void *index_off = payload + 1 /* Short header flags */ + 1 /* Prio in conn id */;
+                bpf_probe_read_kernel(&pack_ctr, sizeof(pack_ctr), index_off);
                 bpf_printk("Packet counter: %d\n", pack_ctr);
 
                 // get pack_ctr-th client data

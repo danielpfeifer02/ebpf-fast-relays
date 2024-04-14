@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"runtime"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
@@ -25,9 +24,12 @@ func NewStreamingClient() *StreamingClient {
 // TODO structure better
 func (c *StreamingClient) run() {
 
-	fmt.Println("Number of goroutines:", runtime.NumGoroutine())
+	// fmt.Println("Number of goroutines:", runtime.NumGoroutine())
 
-	// for now only one stream is supported
+	for _, stream := range c.stream_list {
+		go c.handleStream(stream)
+	}
+
 	for {
 
 		data, err := c.relay_conn.ReceiveDatagram(context.Background())
@@ -37,29 +39,18 @@ func (c *StreamingClient) run() {
 		}
 		fmt.Printf("C: Received datagram: %s\n", data)
 
-		// if len(c.stream_list) > 0 {
+	}
+}
 
-		// 	if len(c.stream_list) > 1 {
-		// 		fmt.Println("C: For now more than one stream is not supported")
-		// 	}
-
-		// 	stream := c.stream_list[0]
-
-		// 	n := 1
-
-		// 	for n > 0 {
-
-		// 		buf := make([]byte, 1)
-		// 		// fmt.Println("C: Reading from stream")
-		// 		n, err := stream.Read(buf)
-		// 		if err != nil {
-		// 			panic(err)
-		// 		}
-
-		// 		// fmt.Printf("Client got: %s\n", buf[:n])
-		// 		fmt.Printf("%s", buf[:n])
-		// 	}
-		// }
+func (c *StreamingClient) handleStream(stream quic.Stream) {
+	for {
+		data := make([]byte, 1024)
+		n, err := stream.Read(data)
+		if err != nil {
+			fmt.Printf("C: Error reading stream (%v)\n", err)
+			return
+		}
+		fmt.Printf("C: Received message: %s\n", data[:n])
 	}
 }
 
@@ -78,18 +69,34 @@ func (c *StreamingClient) connectToServer() error {
 		fmt.Printf("C: Error dialing address (%v)\n", err)
 		return err
 	}
-
 	c.relay_conn = conn
 
 	fmt.Println("C: Opening stream")
-	// Open a new stream with high priority
-	stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.LowPriority)
+	// Open a new stream with no priority
+	high_stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.NoPriority)
 	if err != nil {
 		return err
 	}
-
 	fmt.Println("C: Appending stream")
-	c.stream_list = append(c.stream_list, stream)
+	c.stream_list = append(c.stream_list, high_stream)
+
+	// fmt.Println("C: Opening low prio stream")
+	// // Open a new stream with low priority
+	// low_stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.LowPriority)
+	// if err != nil {
+	// 	return err
+	// }
+	// fmt.Println("C: Appending low prio stream")
+	// c.stream_list = append(c.stream_list, low_stream)
+
+	// fmt.Println("C: Opening high prio stream")
+	// // Open a new stream with high priority
+	// high_stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.HighPriority)
+	// if err != nil {
+	// 	return err
+	// }
+	// fmt.Println("C: Appending high prio stream")
+	// c.stream_list = append(c.stream_list, high_stream)
 
 	return nil
 }
