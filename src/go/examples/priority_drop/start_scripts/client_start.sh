@@ -4,7 +4,8 @@ set -x
 
 clear
 
-SERVER_NS="server_ns"
+CLIENT_NS="client_ns"
 
 export PATH=${PATH}:/usr/local/go/bin
-ip netns exec ${SERVER_NS} go run *.go server
+cd ..
+ip netns exec ${CLIENT_NS} go run *.go client

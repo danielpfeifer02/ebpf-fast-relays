@@ -3,15 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"time"
 
-	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
-	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
 )
 
@@ -53,44 +50,22 @@ func main() {
 
 func main_advanced() {
 
-	crypto_turnoff.CRYPTO_TURNED_OFF = true
-	packet_setting.ALLOW_SETTING_PN = true
-	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
-
-	f, err := os.Create("./log.txt")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	if err != nil {
-		panic(err)
-	}
-	log.SetOutput(f)
-	// os.Setenv("QUIC_GO_LOG_LEVEL", "DEBUG") // TODO: not working
-
-	// os.Setenv("QLOGDIR", "./qlog")
+	mainConfig()
 	os.Remove("tls.keylog")
 
 	args := os.Args
 	if len(args) != 2 {
-
-		//TODO remove first case
-		if len(args) == 3 && args[1] == "relay" {
-			bpf_enabled = false
-		} else {
-			fmt.Println("Usage: go run *.go (server|client|relay)")
-			return
-		}
+		fmt.Println("Usage: go run *.go (server|client|relay)")
+		return
 	}
 
 	if args[1] == "server" {
 
-		crypto_turnoff.CRYPTO_TURNED_OFF = true
+		serverConfig()
 
 		scanner := bufio.NewScanner(os.Stdin)
 
 		server := NewStreamingServer()
-
 		go server.run()
 
 		for {
@@ -143,8 +118,8 @@ func main_advanced() {
 		}
 
 	} else if args[1] == "client" {
-		os.Setenv("QLOGDIR", "./qlog")
-		// packet_setting.PRINT_PACKET_RECEIVING_INFO = true
+
+		clientConfig()
 
 		clearScreen()
 
@@ -154,14 +129,7 @@ func main_advanced() {
 
 	} else if args[1] == "relay" {
 
-		// TODO: better set here or in server.go?
-		// We only want these functions to be executed in the relay
-		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
-		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
-		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
-		// packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber // TODO: still needed?
-		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
-		packet_setting.SET_ONLY_APP_DATA = true // TODO: fix in prio_packs repo?
+		relayConfig()
 
 		relay := NewRelayServer()
 		go relay.run()
@@ -213,27 +181,4 @@ func main_advanced() {
 
 	}
 
-}
-
-func main_basic() {
-
-	server := NewStreamingServer()
-	go server.run()
-	time.Sleep(sleeping_time)
-
-	client := NewStreamingClient()
-	go client.run()
-	time.Sleep(sleeping_time)
-
-	client.connectToServer()
-	time.Sleep(sleeping_time)
-
-	server.sendToAll("Hello, World!", priority_setting.HighPriority, true)
-	time.Sleep(sleeping_time)
-
-	fmt.Println("Sending interrupt")
-	server.interrupt_chan <- true
-	time.Sleep(sleeping_time)
-
-	fmt.Println("Done")
 }
