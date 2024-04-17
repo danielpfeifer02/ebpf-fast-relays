@@ -99,5 +99,5 @@ func relayConfig() {
 
 func clientConfig() {
 	os.Setenv("QLOGDIR", "./qlog")
-	// packet_setting.PRINT_PACKET_RECEIVING_INFO = true
+	packet_setting.PRINT_PACKET_RECEIVING_INFO = false
 }

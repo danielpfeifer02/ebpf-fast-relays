@@ -19,7 +19,7 @@
 	__attribute__((section(NAME), used))
 #endif
 
-#define veth2_egress_ifindex 14
+#define veth2_egress_ifindex 13
 #define CONN_ID_LEN 16
 #define MAC_LEN 6
 #define MAX_CLIENTS 1024
@@ -235,6 +235,7 @@ __attribute__((always_inline)) uint8_t determine_minimal_length_encoded(uint64_t
 
 
 // TODO: is this side even necessary? Maybe do from user space? -> cannot access mac addresses from user space i believe
+// TODO: sometimes not working to get the correct client_data? is this setup robust enough?
 __section("ingress_from_client")
 int tc_ingress_from_client(struct __sk_buff *skb)
 {
@@ -324,6 +325,8 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 bpf_probe_read_kernel(dst_connection_id, sizeof(dst_connection_id), payload + dst_connection_id_offset);
                 bpf_probe_read_kernel(src_connection_id, sizeof(src_connection_id), payload + src_connection_id_offset);
 
+                // ! both src and dst mac are correct here since
+                // ! src mac does not change and dst mac is the relay
                 uint8_t src_mac[MAC_LEN]; // mac address of the client
                 bpf_probe_read_kernel(src_mac, sizeof(src_mac), eth->h_source);
                 uint8_t dst_mac[MAC_LEN]; // mac address of the relay
@@ -1031,10 +1034,9 @@ int tc_egress(struct __sk_buff *skb)
                 uint32_t src_mac_off = 6 /* DST MAC */;
                 bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0); // TODO &value->src_mac?
 
-                // TODO Not needed? (Not correct anyway since src_mac was mac from client and not from bridge)
                 // set dst_mac to value->dst_mac
-                // uint32_t dst_mac_off = 0;
-                // bpf_skb_store_bytes(skb, dst_mac_off, value->dst_mac, MAC_LEN, 0);
+                uint32_t dst_mac_off = 0;
+                bpf_skb_store_bytes(skb, dst_mac_off, value->dst_mac, MAC_LEN, 0);
 
                 // ^ TODO turn ip addr setting to function: https://elixir.bootlin.com/linux/v4.9/source/samples/bpf/tcbpf1_kern.c#L51
                 // set src_ip to value->src_ip_addr

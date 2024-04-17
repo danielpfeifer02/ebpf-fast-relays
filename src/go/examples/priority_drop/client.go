@@ -25,6 +25,7 @@ func NewStreamingClient() *StreamingClient {
 func (c *StreamingClient) run() {
 
 	// fmt.Println("Number of goroutines:", runtime.NumGoroutine())
+	fmt.Println("C: Running client")
 
 	for _, stream := range c.stream_list {
 		go c.handleStream(stream)
@@ -73,30 +74,20 @@ func (c *StreamingClient) connectToServer() error {
 
 	fmt.Println("C: Opening stream")
 	// Open a new stream with no priority
-	high_stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.NoPriority)
+	stream_one, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.NoPriority)
 	if err != nil {
 		return err
 	}
 	fmt.Println("C: Appending stream")
-	c.stream_list = append(c.stream_list, high_stream)
+	c.stream_list = append(c.stream_list, stream_one)
 
-	// fmt.Println("C: Opening low prio stream")
-	// // Open a new stream with low priority
-	// low_stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.LowPriority)
-	// if err != nil {
-	// 	return err
-	// }
-	// fmt.Println("C: Appending low prio stream")
-	// c.stream_list = append(c.stream_list, low_stream)
-
-	// fmt.Println("C: Opening high prio stream")
-	// // Open a new stream with high priority
-	// high_stream, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.HighPriority)
-	// if err != nil {
-	// 	return err
-	// }
-	// fmt.Println("C: Appending high prio stream")
-	// c.stream_list = append(c.stream_list, high_stream)
+	// ! TODO: not sure why client needs a second stream to avoid STREAM_STATE_ERROR?
+	// Open a new stream with low priority
+	stream_two, err := conn.OpenStreamSyncWithPriority(context.Background(), priority_setting.NoPriority)
+	if err != nil {
+		return err
+	}
+	c.stream_list = append(c.stream_list, stream_two)
 
 	return nil
 }
