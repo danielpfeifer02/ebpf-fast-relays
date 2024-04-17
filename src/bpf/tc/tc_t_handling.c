@@ -19,7 +19,7 @@
 	__attribute__((section(NAME), used))
 #endif
 
-#define veth2_egress_ifindex 13
+#define veth2_egress_ifindex 13 // ! TODO: how to handle better and avoid manual configuration?
 #define CONN_ID_LEN 16
 #define MAC_LEN 6
 #define MAX_CLIENTS 1024

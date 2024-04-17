@@ -29,7 +29,7 @@ all: $(BPF_TC_OBJ) tc_main
 	go build -o ${PRIO_DROP_PATH}/build/main ${PRIO_DROP_PATH}/*.go
 
 poc: $(BPF_TC_IN_TO_EG_OBJ) tc_poc
-	@if [ ! -d "/sys/kernel/tracing" ]; then \
+	@if [ ! -e "/sys/kernel/tracing/trace_pipe" ]; then \
 		echo "Mounting tracefs"; \
 		sudo mount -t tracefs tracefs /sys/kernel/tracing; \
 	fi
