@@ -96,69 +96,77 @@ func server() error {
 
 func relay() error {
 
-	fmt.Println("connecting to server")
+	announcementCh := make(chan string)
 
-	server_conn, err := quic.DialAddr(context.Background(),
-		video_server_address, video_generateTLSConfig(), video_generateQuicConfig())
+	c, err := moqtransport.DialQUIC(context.Background(), video_server_address)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("connected to server")
-	server_str, err := server_conn.OpenStreamSync(context.Background())
+
+	fmt.Println("moq peer connected")
+	c.OnAnnouncement(func(s string) error {
+		log.Printf("handling announcement of track %v", s)
+		announcementCh <- s
+		return nil
+	})
+
+	fmt.Println("waiting for announcement")
+	trackname := <-announcementCh
+	t, err := c.Subscribe(trackname)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("opened stream to server")
 
-	client_listener, err := quic.ListenAddr(relay_server_address,
-		video_generateTLSConfig(), video_generateQuicConfig())
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("listening for clients")
+	sendTrackList := make([]moqtransport.SendTrack, 0)
 
-	client_list := make([]Client, 0)
-
-	go passOnVideo(server_conn, server_str, client_list)
-
-	for {
-		c_conn, err := client_listener.Accept(context.Background())
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println("accepted client connection")
-
-		go func(c_conn quic.Connection) {
-
-			c_str, err := c_conn.AcceptStream(context.Background())
+	go func(t *moqtransport.ReceiveTrack) {
+		for {
+			buf := make([]byte, 64_000)
+			n, err := t.Read(buf)
 			if err != nil {
-				panic(err)
+				log.Printf("error on read: %v", err)
+				return
 			}
-			fmt.Println("accepted client stream")
-			client := Client{
-				conn:   c_conn,
-				stream: c_str,
-			}
-			client_list = append(client_list, client)
-
-			go func(c_str quic.Stream) {
-				for {
-					buf := make([]byte, 64_000)
-					n, err := c_str.Read(buf)
-					if err != nil {
-						panic(err)
-					}
-					// send to server
-					_, err = server_str.Write(buf[:n])
-					if err != nil {
-						panic(err)
-					}
+			for _, st := range sendTrackList {
+				_, err := st.Write(buf[:n])
+				if err != nil {
+					log.Printf("error on write: %v", err)
+					return
 				}
-			}(c_str)
-		}(c_conn)
+			}
+		}
+	}(t)
 
-		fmt.Println("new client connected")
+	s := moqtransport.Server{
+		Handler: moqtransport.PeerHandlerFunc(func(p *moqtransport.Peer) {
+			fmt.Println("handling new peer")
+			defer log.Println("XXX")
+			p.OnAnnouncement(func(s string) error {
+				log.Printf("got announcement: %v", s)
+				return nil
+			})
+			if err := p.Announce("video"); err != nil {
+				log.Printf("failed to announce video: %v", err)
+			}
+			fmt.Println("announced video namespace")
+			p.OnSubscription(func(s string, st *moqtransport.SendTrack) (uint64, time.Duration, error) {
+				log.Printf("handling subscription to track %s", s)
+				if s != "video" {
+					return 0, 0, errors.New("unknown trackname")
+				}
+
+				sendTrackList = append(sendTrackList, *st)
+				fmt.Println("added track to sendTrackList")
+
+				return 0, 0, nil
+			})
+		}),
+		TLSConfig: video_generateTLSConfig(),
 	}
+	if err := s.ListenQUIC(context.Background(), relay_server_address); err != nil {
+		panic(err)
+	}
+	return nil
 
 }
 
@@ -301,3 +309,74 @@ func video_generateQuicConfig() *quic.Config {
 		EnableDatagrams: true,
 	}
 }
+
+/* Maybe explore if direclty handling quic streams is more efficient
+func relay_plain_quic() error {
+
+	fmt.Println("connecting to server")
+
+	server_conn, err := quic.DialAddr(context.Background(),
+		video_server_address, video_generateTLSConfig(), video_generateQuicConfig())
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("connected to server")
+	server_str, err := server_conn.OpenStreamSync(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("opened stream to server")
+
+	client_listener, err := quic.ListenAddr(relay_server_address,
+		video_generateTLSConfig(), video_generateQuicConfig())
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("listening for clients")
+
+	client_list := make([]Client, 0)
+
+	go passOnVideo(server_conn, server_str, client_list)
+
+	for {
+		c_conn, err := client_listener.Accept(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("accepted client connection")
+
+		go func(c_conn quic.Connection) {
+
+			c_str, err := c_conn.AcceptStream(context.Background())
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("accepted client stream")
+			client := Client{
+				conn:   c_conn,
+				stream: c_str,
+			}
+			client_list = append(client_list, client)
+
+			go func(c_str quic.Stream) {
+				for {
+					buf := make([]byte, 64_000)
+					n, err := c_str.Read(buf)
+					if err != nil {
+						panic(err)
+					}
+					// send to server
+					fmt.Println("sending to server")
+					_, err = server_str.Write(buf[:n])
+					if err != nil {
+						panic(err)
+					}
+				}
+			}(c_str)
+		}(c_conn)
+
+		fmt.Println("new client connected")
+	}
+
+}
+*/

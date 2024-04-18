@@ -9,7 +9,7 @@ require (
 	github.com/mengelbart/gst-go v0.0.4
 )
 
-// replace github.com/danielpfeifer02/priority-moqtransport v0.1.0 => ./priority-moqtransport
+// replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-3 => ../gst-prio-moq-app/priority-moqtransport
 
 // github.com/danielpfeifer02/priority-moqtransport/varint v0.1.0
 //replace github.com/danielpfeifer02/priority-moqtransport/varint v0.1.0 => ./priority-moqtransport/varint
