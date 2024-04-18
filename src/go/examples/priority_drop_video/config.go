@@ -68,8 +68,8 @@ func generateQUICConfig() *quic.Config {
 }
 
 func mainConfig() {
-	crypto_turnoff.CRYPTO_TURNED_OFF = true
-	packet_setting.ALLOW_SETTING_PN = true
+	crypto_turnoff.CRYPTO_TURNED_OFF = false
+	packet_setting.ALLOW_SETTING_PN = false
 	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
 
 	f, err := os.Create("./build/log.txt")
@@ -84,7 +84,7 @@ func mainConfig() {
 }
 
 func serverConfig() {
-	crypto_turnoff.CRYPTO_TURNED_OFF = true
+	crypto_turnoff.CRYPTO_TURNED_OFF = false
 }
 
 func relayConfig() {

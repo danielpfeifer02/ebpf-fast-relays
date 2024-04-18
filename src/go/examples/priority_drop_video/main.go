@@ -1,15 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"time"
-
-	"github.com/danielpfeifer02/quic-go-prio-packs/priority_setting"
 )
 
 const sleeping_time = 1 * time.Second
@@ -61,61 +57,63 @@ func main_advanced() {
 
 	if args[1] == "server" {
 
-		serverConfig()
+		video_main(true)
 
-		scanner := bufio.NewScanner(os.Stdin)
+		// serverConfig()
 
-		server := NewStreamingServer()
-		go server.run()
+		// scanner := bufio.NewScanner(os.Stdin)
 
-		for {
-			clearScreen()
-			printMenuServer()
+		// server := NewStreamingServer()
+		// go server.run()
 
-			fmt.Print("Choose an action: ")
-			if !scanner.Scan() {
-				fmt.Println("Error reading input:", scanner.Err())
-				return
-			}
-			choiceStr := scanner.Text()
-			choice, err := strconv.Atoi(choiceStr)
-			if err != nil {
-				fmt.Println("Invalid choice. Please enter a number.")
-				time.Sleep(sleeping_time)
-				continue
-			}
+		// for {
+		// 	clearScreen()
+		// 	printMenuServer()
 
-			switch choice {
-			case 1:
-				fmt.Println("Sending high-prio message to all clients via streams")
-				server.sendToAll("foobar high\n", priority_setting.HighPriority, USE_STREAMS)
-				time.Sleep(sleeping_time)
-			case 2:
-				fmt.Println("Sending low-prio message to all clients via streams")
-				server.sendToAll("foobar low\n", priority_setting.LowPriority, USE_STREAMS)
-				time.Sleep(sleeping_time)
-			case 3:
-				fmt.Println("Sending high-prio message to all clients via datagrams")
-				server.sendToAll("foobar high\n", priority_setting.HighPriority, USE_DATAGRAMS)
-				time.Sleep(sleeping_time)
-			case 4:
-				fmt.Println("Sending low-prio message to all clients via datagrams")
-				server.sendToAll("foobar low\n", priority_setting.LowPriority, USE_DATAGRAMS)
-				time.Sleep(sleeping_time)
-			case 5:
-				fmt.Println("Changing priority drop threshold")
-				time.Sleep(sleeping_time)
-			case 6:
-				fmt.Println("Exiting")
-				server.interrupt_chan <- true
-				time.Sleep(sleeping_time)
-				return
-			default:
-				clearScreen()
-				printMenuServer()
-			}
+		// 	fmt.Print("Choose an action: ")
+		// 	if !scanner.Scan() {
+		// 		fmt.Println("Error reading input:", scanner.Err())
+		// 		return
+		// 	}
+		// 	choiceStr := scanner.Text()
+		// 	choice, err := strconv.Atoi(choiceStr)
+		// 	if err != nil {
+		// 		fmt.Println("Invalid choice. Please enter a number.")
+		// 		time.Sleep(sleeping_time)
+		// 		continue
+		// 	}
 
-		}
+		// 	switch choice {
+		// 	case 1:
+		// 		fmt.Println("Sending high-prio message to all clients via streams")
+		// 		server.sendToAll("foobar high\n", priority_setting.HighPriority, USE_STREAMS)
+		// 		time.Sleep(sleeping_time)
+		// 	case 2:
+		// 		fmt.Println("Sending low-prio message to all clients via streams")
+		// 		server.sendToAll("foobar low\n", priority_setting.LowPriority, USE_STREAMS)
+		// 		time.Sleep(sleeping_time)
+		// 	case 3:
+		// 		fmt.Println("Sending high-prio message to all clients via datagrams")
+		// 		server.sendToAll("foobar high\n", priority_setting.HighPriority, USE_DATAGRAMS)
+		// 		time.Sleep(sleeping_time)
+		// 	case 4:
+		// 		fmt.Println("Sending low-prio message to all clients via datagrams")
+		// 		server.sendToAll("foobar low\n", priority_setting.LowPriority, USE_DATAGRAMS)
+		// 		time.Sleep(sleeping_time)
+		// 	case 5:
+		// 		fmt.Println("Changing priority drop threshold")
+		// 		time.Sleep(sleeping_time)
+		// 	case 6:
+		// 		fmt.Println("Exiting")
+		// 		server.interrupt_chan <- true
+		// 		time.Sleep(sleeping_time)
+		// 		return
+		// 	default:
+		// 		clearScreen()
+		// 		printMenuServer()
+		// 	}
+
+		// }
 
 	} else if args[1] == "client" {
 
@@ -129,51 +127,53 @@ func main_advanced() {
 
 	} else if args[1] == "relay" {
 
-		relayConfig()
+		video_main(false)
 
-		relay := NewRelayServer()
-		go relay.run()
+		// relayConfig()
 
-		for {
-			if len(relay.client_list) > 0 {
-				break
-			}
-		}
+		// relay := NewRelayServer()
+		// go relay.run()
 
-		for {
+		// for {
+		// 	if len(relay.client_list) > 0 {
+		// 		break
+		// 	}
+		// }
 
-			clearScreen()
-			printMenuRelay()
+		// for {
 
-			scanner := bufio.NewScanner(os.Stdin)
-			fmt.Print("Choose an action: ")
-			if !scanner.Scan() {
-				fmt.Println("Error reading input:", scanner.Err())
-				return
-			}
-			choiceStr := scanner.Text()
-			choice, err := strconv.Atoi(choiceStr)
-			if err != nil {
-				fmt.Println("Invalid choice. Please enter a number.")
-				time.Sleep(sleeping_time)
-				continue
-			}
+		// 	clearScreen()
+		// 	printMenuRelay()
 
-			switch choice {
-			case 1:
-				fmt.Println("Changing priority drop threshold")
-				relay.changePriorityDropThreshold()
-				time.Sleep(sleeping_time)
-			case 2:
-				fmt.Println("Exiting")
-				relay.interrupt_chan <- true
-				time.Sleep(sleeping_time)
-				return
-			default:
-				clearScreen()
-				printMenuRelay()
-			}
-		}
+		// 	scanner := bufio.NewScanner(os.Stdin)
+		// 	fmt.Print("Choose an action: ")
+		// 	if !scanner.Scan() {
+		// 		fmt.Println("Error reading input:", scanner.Err())
+		// 		return
+		// 	}
+		// 	choiceStr := scanner.Text()
+		// 	choice, err := strconv.Atoi(choiceStr)
+		// 	if err != nil {
+		// 		fmt.Println("Invalid choice. Please enter a number.")
+		// 		time.Sleep(sleeping_time)
+		// 		continue
+		// 	}
+
+		// 	switch choice {
+		// 	case 1:
+		// 		fmt.Println("Changing priority drop threshold")
+		// 		relay.changePriorityDropThreshold()
+		// 		time.Sleep(sleeping_time)
+		// 	case 2:
+		// 		fmt.Println("Exiting")
+		// 		relay.interrupt_chan <- true
+		// 		time.Sleep(sleeping_time)
+		// 		return
+		// 	default:
+		// 		clearScreen()
+		// 		printMenuRelay()
+		// 	}
+		// }
 
 	} else {
 
