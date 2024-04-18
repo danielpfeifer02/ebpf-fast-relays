@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -47,57 +46,6 @@ func swapEndianness16(val uint16) uint16 {
 
 func swapEndianness32(val uint32) uint32 {
 	return (val&0xFF)<<24 | (val&0xFF00)<<8 | (val&0xFF0000)>>8 | (val&0xFF000000)>>24
-}
-
-func passOnTraffic(relay *RelayServer) error {
-
-	// listen for incoming streams
-	streams_to_listen := []quic.Stream{relay.server_stream_high_prio, relay.server_stream_low_prio}
-	for _, stream := range streams_to_listen {
-		go func(stream quic.Stream) {
-			for {
-				buf := make([]byte, 1024) // TODO: larger buffer?
-				n, err := stream.Read(buf)
-				if err != nil {
-					panic(err)
-				}
-
-				// buf, err := relay.server_connection.ReceiveDatagram(context.Background())
-				// if err != nil {
-				// 	panic(err)
-				// }
-
-				// fmt.Printf("%s", buf[:n])
-				fmt.Printf("Relay got from server: %s\n", buf[:n])
-				// fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
-				// for _, client := range relay.client_list {
-				// 	send_stream := client.stream
-				// 	_, err = send_stream.Write(buf[:n])
-				// 	if err != nil {
-				// 		panic(err)
-				// 	}
-				// }
-			}
-		}(stream)
-	}
-
-	// listen for incoming datagrams
-	for {
-		buf, err := relay.server_connection.ReceiveDatagram(context.Background())
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Printf("Relay got from server: %s\n", buf)
-		// fmt.Printf("Relay got from server: %s\nPassing on...\n", buf)
-		// for _, client := range relay.client_list {
-		// 	send_stream := client.stream
-		// 	_, err = send_stream.Write(buf)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		// }
-	}
 }
 
 func debugPrint(p ...interface{}) {

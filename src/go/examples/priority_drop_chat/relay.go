@@ -212,7 +212,7 @@ func (s *RelayServer) run() error {
 					}
 					s.server_stream_low_prio = low_stream
 
-					go passOnTraffic(s)
+					go s.passOnTraffic()
 					go publishConnectionEstablished(conn)
 				}
 
@@ -291,4 +291,55 @@ func (s *RelayServer) changePriorityDropThreshold() {
 		fmt.Println("R: Priority drop limit of stream is now", client_info.PriorityDropLimit)
 	}
 
+}
+
+func (s *RelayServer) passOnTraffic() error {
+
+	// listen for incoming streams
+	streams_to_listen := []quic.Stream{s.server_stream_high_prio, s.server_stream_low_prio}
+	for _, stream := range streams_to_listen {
+		go func(stream quic.Stream) {
+			for {
+				buf := make([]byte, 1024) // TODO: larger buffer?
+				n, err := stream.Read(buf)
+				if err != nil {
+					panic(err)
+				}
+
+				// buf, err := relay.server_connection.ReceiveDatagram(context.Background())
+				// if err != nil {
+				// 	panic(err)
+				// }
+
+				// fmt.Printf("%s", buf[:n])
+				fmt.Printf("Relay got from server: %s\n", buf[:n])
+				// fmt.Printf("Relay got from server: %s\nPassing on...\n", buf[:n])
+				// for _, client := range relay.client_list {
+				// 	send_stream := client.stream
+				// 	_, err = send_stream.Write(buf[:n])
+				// 	if err != nil {
+				// 		panic(err)
+				// 	}
+				// }
+			}
+		}(stream)
+	}
+
+	// listen for incoming datagrams
+	for {
+		buf, err := s.server_connection.ReceiveDatagram(context.Background())
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("Relay got from server: %s\n", buf)
+		// fmt.Printf("Relay got from server: %s\nPassing on...\n", buf)
+		// for _, client := range relay.client_list {
+		// 	send_stream := client.stream
+		// 	_, err = send_stream.Write(buf)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
+		// }
+	}
 }

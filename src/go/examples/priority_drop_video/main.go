@@ -57,7 +57,7 @@ func main_advanced() {
 
 	if args[1] == "server" {
 
-		video_main(true)
+		video_main(args[1])
 
 		// serverConfig()
 
@@ -117,17 +117,19 @@ func main_advanced() {
 
 	} else if args[1] == "client" {
 
-		clientConfig()
+		// clientConfig()
 
-		clearScreen()
+		video_main(args[1])
 
-		client := NewStreamingClient()
-		client.connectToServer()
-		client.run()
+		// clearScreen()
+
+		// client := NewStreamingClient()
+		// client.connectToServer()
+		// client.run()
 
 	} else if args[1] == "relay" {
 
-		video_main(false)
+		video_main(args[1])
 
 		// relayConfig()
 
