@@ -20,13 +20,17 @@ DEV_EG := veth2
 # TODO: other way to export PATH
 export PATH := $(PATH):/usr/local/go/bin
 
-PRIO_DROP_PATH := ../go/examples/priority_drop
+PRIO_DROP_PATH_VIDEO := ../go/examples/priority_drop_video
+PRIO_DROP_PATH_CHAT := ../go/examples/priority_drop_chat
 INGRESS_TO_EGRESS_PATH := ../go/examples/ingress_to_egress
 
-.PHONY: clean all tc_main tc_poc
+.PHONY: clean all tc_main tc_poc chat
 
 all: $(BPF_TC_OBJ) tc_main
-	go build -o ${PRIO_DROP_PATH}/build/main ${PRIO_DROP_PATH}/*.go
+	go build -o ${PRIO_DROP_PATH_VIDEO}/build/main ${PRIO_DROP_PATH_VIDEO}/*.go
+
+chat: $(BPF_TC_OBJ) tc_main
+	go build -o ${PRIO_DROP_PATH_CHAT}/build/main ${PRIO_DROP_PATH_CHAT}/*.go
 
 poc: $(BPF_TC_IN_TO_EG_OBJ) tc_poc
 	@if [ ! -e "/sys/kernel/tracing/trace_pipe" ]; then \
@@ -109,5 +113,6 @@ clean:
 		rm -f ${BPF_TC_IN_TO_EG_OBJ:.o=.ll}; \
 	fi
 
-	rm -f ${PRIO_DROP_PATH}/build/main
+	rm -f ${PRIO_DROP_PATH_VIDEO}/build/main
+	rm -f ${PRIO_DROP_PATH_CHAT}/build/main
 	rm -f ${INGRESS_TO_EGRESS_PATH}/build/main

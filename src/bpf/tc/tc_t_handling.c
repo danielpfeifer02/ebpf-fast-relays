@@ -794,7 +794,7 @@ int tc_egress(struct __sk_buff *skb)
                 // TODO  is it made sure that the client ids are always sequential?
                 value = bpf_map_lookup_elem(&client_data, &pack_ctr);
                 if (value == NULL) {
-                        bpf_printk("No client data found\n");
+                        bpf_printk("No client data found for packet ctr %d\n", pack_ctr);
                         return TC_ACT_SHOT;
                 }
 

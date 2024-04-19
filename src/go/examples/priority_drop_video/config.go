@@ -17,6 +17,10 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 )
 
+const bpf_enabled = true
+const relay_passing_on = false
+const DEBUG_PRINT = false
+
 // Setup a bare-bones TLS config for the server
 func generateTLSConfig(klf bool) *tls.Config {
 	key, err := rsa.GenerateKey(rand.Reader, 1024)
@@ -68,7 +72,7 @@ func generateQUICConfig() *quic.Config {
 }
 
 func mainConfig() {
-	crypto_turnoff.CRYPTO_TURNED_OFF = false
+	crypto_turnoff.CRYPTO_TURNED_OFF = true
 	packet_setting.ALLOW_SETTING_PN = false
 	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
 
@@ -83,18 +87,18 @@ func mainConfig() {
 	// os.Setenv("QLOGDIR", "./qlog")
 }
 
-func serverConfig() {
-	crypto_turnoff.CRYPTO_TURNED_OFF = false
-}
+func serverConfig() {}
 
 func relayConfig() {
-	// We only want these functions to be executed in the relay
-	packet_setting.ConnectionInitiationBPFHandler = initConnectionId
-	packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
-	packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
-	// packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber // TODO: still needed?
-	packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
-	packet_setting.SET_ONLY_APP_DATA = true // TODO: fix in prio_packs repo?
+	// // We only want these functions to be executed in the relay
+	if bpf_enabled {
+		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
+		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
+		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
+		// packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber // TODO: still needed?
+		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
+		packet_setting.SET_ONLY_APP_DATA = true // TODO: fix in prio_packs repo?
+	}
 }
 
 func clientConfig() {

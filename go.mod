@@ -9,14 +9,9 @@ require (
 	github.com/mengelbart/gst-go v0.0.4
 )
 
-// replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-3 => ../gst-prio-moq-app/priority-moqtransport
+replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-3 => ../gst-prio-moq-app/priority-moqtransport
 
-// github.com/danielpfeifer02/priority-moqtransport/varint v0.1.0
-//replace github.com/danielpfeifer02/priority-moqtransport/varint v0.1.0 => ./priority-moqtransport/varint
-
-// github.com/mengelbart/moqtransport v0.1.1-0.20231007110949-d6b0470c8219
-// github.com/danielpfeifer02/quic-go-no-crypto v0.41.0-1
-// github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-5
+replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-26 => ../quic-go-prio-packs
 
 require (
 	github.com/francoispqt/gojay v1.2.13 // indirect

@@ -102,8 +102,17 @@ func packetNumberHandler(conn quic.Connection) {
 	}
 }
 
+type Client struct {
+	conn   quic.Connection
+	stream quic.Stream
+}
+
+type RelayData struct {
+	client_list []Client
+}
+
 // ! TODO: weird behavior after prio dropped once?
-func keepConnectionsUpToDate(relay *RelayServer) {
+func keepConnectionsUpToDate(data *RelayData) {
 
 	client_data, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_data", &ebpf.LoadPinOptions{})
 	if err != nil {
@@ -116,7 +125,7 @@ func keepConnectionsUpToDate(relay *RelayServer) {
 
 	for {
 
-		for _, client_conn := range relay.client_list {
+		for _, client_conn := range data.client_list {
 
 			ipaddr, port := getIPAndPort(client_conn.conn)
 			ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
@@ -182,7 +191,7 @@ func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
 	qconn := conn.(quic.Connection)
 
-	if qconn.RemoteAddr().String() == server_addr {
+	if qconn.RemoteAddr().String() == video_server_address {
 		// fmt.Println("Not initializing connection id for server")
 		return
 	}
@@ -208,7 +217,7 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 
 	qconn := conn.(quic.Connection)
 
-	if qconn.RemoteAddr().String() == server_addr {
+	if qconn.RemoteAddr().String() == video_server_address {
 		// fmt.Println("Not retiring connection id for server")
 		return
 	}
@@ -264,7 +273,7 @@ func updateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 
 	qconn := conn.(quic.Connection)
 
-	if qconn.RemoteAddr().String() == server_addr {
+	if qconn.RemoteAddr().String() == video_server_address {
 		// fmt.Println("Not updating connection id for server")
 		return
 	}
@@ -326,7 +335,7 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 
 	qconn := conn.(quic.Connection)
 
-	if qconn.RemoteAddr().String() == server_addr {
+	if qconn.RemoteAddr().String() == video_server_address {
 		// fmt.Println("Not incrementing pn for server")
 		return
 	}
@@ -364,7 +373,7 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 
 	qconn := conn.(quic.Connection)
 
-	if qconn.RemoteAddr().String() == server_addr {
+	if qconn.RemoteAddr().String() == video_server_address {
 		// fmt.Println("Not translating pn for server")
 		return pn, nil
 	}

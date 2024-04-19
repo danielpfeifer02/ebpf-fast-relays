@@ -56,6 +56,6 @@ set local addr of relay and client accordingly so that hooking to interface work
 
 
 relay command:
-cd ../../../bpf/ && make clean && make && cd ../go/examples/priority_drop && QUIC_GO_LOG_LEVEL=DEBUG go run *.go relay
+cd ../../../bpf/ && make clean && make && cd ../go/examples/priority_drop_video && QUIC_GO_LOG_LEVEL=DEBUG go run *.go relay
 or
-cd ../../../bpf/ && make clean && make && cd ../go/examples/priority_drop && ./build/main relay
+cd ../../../bpf/ && make clean && make && cd ../go/examples/priority_drop_video/ && ./build/main relay
