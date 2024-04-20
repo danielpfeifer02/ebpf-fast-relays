@@ -43,7 +43,7 @@ func (s *RelayServer) run() error {
 
 	// fmt.Println("Number of goroutines:", runtime.NumGoroutine())
 
-	listener, err := quic.ListenAddr(relay_addr, generateTLSConfig(false), generateQUICConfig())
+	listener, err := quic.ListenAddr(relay_addr, generateTLSConfig(true), generateQUICConfig())
 	if err != nil {
 		fmt.Printf("\nError: %v\n", err)
 		return err

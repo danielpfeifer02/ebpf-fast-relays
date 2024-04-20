@@ -30,11 +30,14 @@
 #define SERVER_PORT htons(4242)
 #define PORT_MARKER htons(6969)
 
-#define STREAM_FRAME(x) ((x) >= 0x08 && (x) <= 0x0f)
-#define DATAGRAM_FRAME(x) ((x) >= 0x30 && (x) <= 0x31)
-#define SUPPORTED_FRAME(x) (STREAM_FRAME(x) || DATAGRAM_FRAME(x))
+#define IS_STREAM_FRAME(x) ((x) >= 0x08 && (x) <= 0x0f)
+#define IS_DATAGRAM_FRAME(x) ((x) >= 0x30 && (x) <= 0x31)
+#define SUPPORTED_FRAME(x) (IS_STREAM_FRAME(x) || IS_DATAGRAM_FRAME(x))
 
 #define IP_CSUM_OFF (ETH_HLEN + offsetof(struct iphdr, check))
+
+#define NO_VALUE_NEEDED 0
+#define VALUE_NEEDED 1
 
 
 // this key is used to make sure that we can check if a client is already in the map
@@ -178,7 +181,7 @@ struct var_int {
 
 
 // TODO: not working -> fix
-__attribute__((always_inline)) void read_var_int(void *start, struct var_int *res) {
+__attribute__((always_inline)) void read_var_int(void *start, struct var_int *res, uint8_t need_value) {
 
         uint64_t result = 0;
         uint8_t byte;
@@ -186,6 +189,12 @@ __attribute__((always_inline)) void read_var_int(void *start, struct var_int *re
         uint8_t len = 1 << (byte >> 6);
         bpf_printk("Stream %d %d", len, byte >> 6);
         result = byte & 0x3f; 
+
+        if (need_value == NO_VALUE_NEEDED) {
+                res->value = 0;
+                res->len = len;
+                return;
+        }
 
         for (int i=1; i<8; i++) {
                 if (i >= len) {
@@ -231,6 +240,278 @@ __attribute__((always_inline)) uint8_t determine_minimal_length_encoded(uint64_t
                 return 0b11;
         }
         return 0b100;
+}
+
+
+#define PADDING_FRAME 0x00
+#define PING_FRAME 0x01
+#define RESET_STREAM_FRAME 0x04
+#define STOP_SENDING_FRAME 0x05
+#define CRYPTO_FRAME 0x06
+#define NEW_TOKEN_FRAME 0x07
+
+#define STREAM_FRAME 0x08
+#define OFF_BIT 0x04
+#define LEN_BIT 0x02
+#define FIN_BIT 0x01
+#define STREAM_WITH_OFF (STREAM_FRAME | OFF_BIT)
+#define STREAM_WITH_LEN (STREAM_FRAME | LEN_BIT)
+#define STREAM_WITH_FIN (STREAM_FRAME | FIN_BIT)
+#define STREAM_WITH_OFF_LEN (STREAM_FRAME | OFF_BIT | LEN_BIT)
+#define STREAM_WITH_OFF_FIN (STREAM_FRAME | OFF_BIT | FIN_BIT)
+#define STREAM_WITH_LEN_FIN (STREAM_FRAME | LEN_BIT | FIN_BIT)
+#define STREAM_WITH_OFF_LEN_FIN (STREAM_FRAME | OFF_BIT | LEN_BIT | FIN_BIT)
+
+#define MAX_DATA_FRAME 0x10
+#define MAX_STREAM_DATA_FRAME 0x11
+#define DATA_BLOCKED_FRAME 0x14
+#define STREAM_DATA_BLOCKED_FRAME 0x15
+#define NEW_CONNECTION_ID_FRAME 0x18
+#define RETIRE_CONNECTION_ID_FRAME 0x19
+#define PATH_CHALLENGE_FRAME 0x1a
+#define PATH_RESPONSE_FRAME 0x1b
+#define HANDSHAKE_DONE_FRAME 0x1e
+
+// https://datatracker.ietf.org/doc/html/rfc9000#frames
+uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
+        switch (frame_id) {
+                /*
+                PADDING Frame {
+                  Type (i) = 0x00,
+                }
+                */
+                case PADDING_FRAME:
+                        return 1;
+
+                /*
+                PING Frame {
+                  Type (i) = 0x01,
+                }
+                */
+                case PING_FRAME:
+                        return 1;
+
+                /*
+                ACK Frame {
+                  Type (i) = 0x02..0x03,
+                  Largest Acknowledged (i),
+                  ACK Delay (i),
+                  ACK Range Count (i),
+                  First ACK Range (i),
+                  ACK Range (..) ...,
+                  [ECN Counts (..)],
+                }
+                ACK Range {
+                  Gap (i),
+                  ACK Range Length (i),
+                }
+                ECN Counts {
+                  ECT0 Count (i),
+                  ECT1 Count (i),
+                  ECN-CE Count (i),
+                }
+                */
+                case 0x02: // ACK
+                case 0x03: 
+                        return 5; //TODO: ACK Range (has two varints) and ECN Counts (has three varints???
+                
+                /*
+                RESET_STREAM Frame {
+                  Type (i) = 0x04,
+                  Stream ID (i),
+                  Application Protocol Error Code (i),
+                  Final Size (i),
+                }
+                */
+                case RESET_STREAM_FRAME:
+                        return 4;
+                
+                /*
+                STOP_SENDING Frame {
+                  Type (i) = 0x05,
+                  Stream ID (i),
+                  Application Protocol Error Code (i),
+                }
+                */
+                case STOP_SENDING_FRAME:
+                        return 3;
+                
+                /*
+                CRYPTO Frame {
+                  Type (i) = 0x06,
+                  Offset (i),
+                  Length (i),
+                  Crypto Data (..),
+                }
+                */
+                case CRYPTO_FRAME:
+                        return 3; //TODO: plus crypto data
+                
+                /*
+                NEW_TOKEN Frame {
+                  Type (i) = 0x07,
+                  Token Length (i),
+                  Token (..),
+                }
+                */
+                case NEW_TOKEN_FRAME:
+                        return 2; //TODO: second one is token length
+
+                /*
+                STREAM Frame {
+                  Type (i) = 0x08..0x0f,
+                  Stream ID (i),
+                  [Offset (i)],
+                  [Length (i)],
+                  Stream Data (..),
+                }
+                */
+                case STREAM_FRAME:
+                case STREAM_WITH_FIN:
+                        return 2;
+                case STREAM_WITH_LEN:
+                case STREAM_WITH_OFF:
+                case STREAM_WITH_LEN_FIN:
+                case STREAM_WITH_OFF_FIN:
+                        return 3;
+                case STREAM_WITH_OFF_LEN:
+                case STREAM_WITH_OFF_LEN_FIN:
+                        return 4;
+                
+                /*
+                MAX_DATA Frame {
+                  Type (i) = 0x10,
+                  Maximum Data (i),
+                }
+                */
+                case MAX_DATA_FRAME:
+                        return 2;
+                
+                /*
+                MAX_STREAM_DATA Frame {
+                  Type (i) = 0x11,
+                  Stream ID (i),
+                  Maximum Stream Data (i),
+                }
+                */
+                case MAX_STREAM_DATA_FRAME:
+                        return 3;
+                
+                /*
+                MAX_STREAMS Frame {
+                  Type (i) = 0x12..0x13,
+                  Maximum Streams (i),
+                }
+                */
+                case 0x12: // MAX_STREAMS
+                case 0x13:
+                        return 2;
+                
+                /*
+                DATA_BLOCKED Frame {
+                  Type (i) = 0x14,
+                  Maximum Data (i),
+                }
+                */
+                case DATA_BLOCKED_FRAME:
+                        return 2;
+                
+                /*
+                STREAM_DATA_BLOCKED Frame {
+                  Type (i) = 0x15,
+                  Stream ID (i),
+                  Maximum Stream Data (i),
+                }
+                */
+                case STREAM_DATA_BLOCKED_FRAME: 
+                        return 3;
+                
+                /*
+                STREAMS_BLOCKED Frame {
+                  Type (i) = 0x16..0x17,
+                  Maximum Streams (i),
+                }
+                */
+                case 0x16: // STREAMS_BLOCKED
+                case 0x17:
+                        return 2;
+                
+                /*
+                NEW_CONNECTION_ID Frame {
+                  Type (i) = 0x18,
+                  Sequence Number (i),
+                  Retire Prior To (i),
+                  Length (8),
+                  Connection ID (8..160),
+                  Stateless Reset Token (128),
+                }
+                */
+                case NEW_CONNECTION_ID_FRAME:
+                        return 3;
+                
+                /*
+                RETIRE_CONNECTION_ID Frame {
+                  Type (i) = 0x19,
+                  Sequence Number (i),
+                }
+                */
+                case RETIRE_CONNECTION_ID_FRAME:
+                        return 2;
+                
+                /*
+                PATH_CHALLENGE Frame {
+                  Type (i) = 0x1a,
+                  Data (64),
+                }
+                */
+                case PATH_CHALLENGE_FRAME:
+                        return 1;
+                
+                /*
+                PATH_RESPONSE Frame {
+                  Type (i) = 0x1b,
+                  Data (64),
+                }
+                */
+                case PATH_RESPONSE_FRAME:
+                        return 1;
+                
+                /*
+                CONNECTION_CLOSE Frame {
+                  Type (i) = 0x1c..0x1d,
+                  Error Code (i),
+                  [Frame Type (i)],
+                  Reason Phrase Length (i),
+                  Reason Phrase (..),
+                }
+                */
+                case 0x1c: // CONNECTION_CLOSE
+                case 0x1d:
+                        return 3; //TODO: when is frame type there?
+                
+                /*
+                HANDSHAKE_DONE Frame {
+                  Type (i) = 0x1e,
+                }       
+                */
+                case HANDSHAKE_DONE_FRAME:
+                        return 1;       
+                
+                /*
+                  In this case the frame read is not valid
+                */
+                default: // unknown frame
+                        return -1;
+        }
+}
+
+// This function returns the start of the QUIC stream frame
+// or NULL if the payload of the packet does not contain
+// a QUIC stream frame
+void *get_stream_frame_start(void *payload) {
+
+
+
 }
 
 
@@ -848,7 +1129,7 @@ int tc_egress(struct __sk_buff *skb)
 
                 // TODO: this only works if there is only one frame in the packet
                 // TODO: adapt it so that it goes through all frames?
-                if (STREAM_FRAME(frame_type)) {
+                if (IS_STREAM_FRAME(frame_type)) {
                         // TODO: update stream offset
                         // TODO: for this add a map which stores the stream offset for each stream! 
                         // TODO: how to identify the stream? -> stream id in the packet
@@ -861,7 +1142,7 @@ int tc_egress(struct __sk_buff *skb)
 
                         uint32_t stream_id_off = frame_off + 1 /* Frame type */;
                         struct var_int stream_id = {0};
-                        // read_var_int(payload + stream_id_off, &stream_id_off); // TODO: fix
+                        // read_var_int(payload + stream_id_off, &stream_id_off, VALUE_NEEDED); // TODO: fix
                         bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off);
                         stream_id.len = 1 << (byte >> 6);
                         stream_id.value = byte & 0x3f; 
@@ -878,7 +1159,7 @@ int tc_egress(struct __sk_buff *skb)
 
                                 uint32_t stream_offset_off = stream_id_off + bounded_var_int_len(stream_id.len);
                                 struct var_int stream_offset = {0};
-                                // read_var_int(payload + stream_offset_off, &stream_offset); // TODO: fix
+                                // read_var_int(payload + stream_offset_off, &stream_offset, VALUE_NEEDED); // TODO: fix
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_offset_off);
                                 stream_offset.len = 1 << (byte >> 6);
                                 stream_offset.value = byte & 0x3f; 
@@ -901,7 +1182,7 @@ int tc_egress(struct __sk_buff *skb)
 
                                         struct var_int stream_len = {0};
                                         uint32_t stream_len_off = stream_offset_off + bounded_var_int_len(stream_offset.len);
-                                        // read_var_int(payload + stream_len_off, &stream_len); // TODO: fix
+                                        // read_var_int(payload + stream_len_off, &stream_len, VALUE_NEEDED); // TODO: fix
                                         bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_len_off);
                                         stream_len.len = 1 << (byte >> 6);
                                         stream_len.value = byte & 0x3f;

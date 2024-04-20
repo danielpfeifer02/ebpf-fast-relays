@@ -115,7 +115,7 @@ func relay() error {
 				return 0, 0, nil
 			})
 		}),
-		TLSConfig: video_generateTLSConfig(),
+		TLSConfig: video_generateTLSConfig(true),
 	}
 	if err := s.ListenQUIC(context.Background(), relay_server_address); err != nil {
 		panic(err)

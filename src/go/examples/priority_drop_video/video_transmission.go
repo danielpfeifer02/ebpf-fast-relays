@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"math/big"
 	"os"
@@ -38,7 +39,7 @@ func video_main(user string) {
 }
 
 // Setup a bare-bones TLS config for the server
-func video_generateTLSConfig() *tls.Config {
+func video_generateTLSConfig(klf bool) *tls.Config {
 	key, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		panic(err)
@@ -56,17 +57,29 @@ func video_generateTLSConfig() *tls.Config {
 		panic(err)
 	}
 
+	if !klf {
+		return &tls.Config{
+			Certificates:       []tls.Certificate{tlsCert},
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"moq-00"},
+			CipherSuites:       []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
+		}
+	}
+
 	// Keylog file
-	keylogFile, err := os.Create("keylog.txt")
+	keylogFile, err := os.OpenFile("tls.keylog", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println("TLS keylog file created")
 
 	return &tls.Config{
 		Certificates:       []tls.Certificate{tlsCert},
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"moq-00"},
 		KeyLogWriter:       keylogFile,
+		CipherSuites:       []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
 	}
 }
 

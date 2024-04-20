@@ -48,7 +48,7 @@ func server() error {
 				return 0, 0, nil
 			})
 		}),
-		TLSConfig: video_generateTLSConfig(),
+		TLSConfig: video_generateTLSConfig(false),
 	}
 	if err := s.ListenQUIC(context.Background(), video_server_address); err != nil {
 		panic(err)

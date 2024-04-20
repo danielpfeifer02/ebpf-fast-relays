@@ -1,13 +1,7 @@
 package main
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"log"
-	"math/big"
 	"os"
 	"time"
 
@@ -18,50 +12,50 @@ import (
 )
 
 const bpf_enabled = true
-const relay_passing_on = false
+const relay_passing_on = true
 const DEBUG_PRINT = false
 
-// Setup a bare-bones TLS config for the server
-func generateTLSConfig(klf bool) *tls.Config {
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
-	if err != nil {
-		panic(err)
-	}
-	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	if err != nil {
-		panic(err)
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+// // Setup a bare-bones TLS config for the server
+// func generateTLSConfig(klf bool) *tls.Config {
+// 	key, err := rsa.GenerateKey(rand.Reader, 1024)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	template := x509.Certificate{SerialNumber: big.NewInt(1)}
+// 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+// 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
-	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		panic(err)
-	}
+// 	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	if !klf {
-		return &tls.Config{
-			Certificates: []tls.Certificate{tlsCert},
-			NextProtos:   []string{"quic-streaming-example"},
-			CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
-		}
-	}
+// 	if !klf {
+// 		return &tls.Config{
+// 			Certificates: []tls.Certificate{tlsCert},
+// 			NextProtos:   []string{"quic-streaming-example"},
+// 			CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
+// 		}
+// 	}
 
-	// Create a KeyLogWriter
-	keyLogFile, err := os.OpenFile("tls.keylog", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		panic(err)
-	}
-	// defer keyLogFile.Close() // TODO why not close?
+// 	// Create a KeyLogWriter
+// 	keyLogFile, err := os.OpenFile("tls.keylog", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	// defer keyLogFile.Close() // TODO why not close?
 
-	return &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
-		NextProtos:   []string{"quic-streaming-example"},
-		KeyLogWriter: keyLogFile,
-		CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
-	}
-}
+// 	return &tls.Config{
+// 		Certificates: []tls.Certificate{tlsCert},
+// 		NextProtos:   []string{"quic-streaming-example"},
+// 		KeyLogWriter: keyLogFile,
+// 		CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
+// 	}
+// }
 
 func generateQUICConfig() *quic.Config {
 	return &quic.Config{
