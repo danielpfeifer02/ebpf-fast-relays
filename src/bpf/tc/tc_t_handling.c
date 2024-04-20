@@ -181,7 +181,7 @@ struct var_int {
 
 
 // TODO: not working -> fix
-__attribute__((always_inline)) void read_var_int(void *start, struct var_int *res, uint8_t need_value) {
+void read_var_int(void *start, struct var_int *res, uint8_t need_value) {
 
         uint64_t result = 0;
         uint8_t byte;
@@ -245,6 +245,8 @@ __attribute__((always_inline)) uint8_t determine_minimal_length_encoded(uint64_t
 
 #define PADDING_FRAME 0x00
 #define PING_FRAME 0x01
+#define ACK_FRAME 0x02
+#define ACK_ECN_FRAME 0x03
 #define RESET_STREAM_FRAME 0x04
 #define STOP_SENDING_FRAME 0x05
 #define CRYPTO_FRAME 0x06
@@ -271,6 +273,8 @@ __attribute__((always_inline)) uint8_t determine_minimal_length_encoded(uint64_t
 #define PATH_CHALLENGE_FRAME 0x1a
 #define PATH_RESPONSE_FRAME 0x1b
 #define HANDSHAKE_DONE_FRAME 0x1e
+
+#define INVALID_FRAME 0xff
 
 // https://datatracker.ietf.org/doc/html/rfc9000#frames
 uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
@@ -311,9 +315,10 @@ uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
                   ECN-CE Count (i),
                 }
                 */
-                case 0x02: // ACK
-                case 0x03: 
-                        return 5; //TODO: ACK Range (has two varints) and ECN Counts (has three varints???
+                case ACK_FRAME:
+                        return 5;
+                case ACK_ECN_FRAME: 
+                        return 8; //TODO: ACK Range (has two varints) and ECN Counts (has three varints???
                 
                 /*
                 RESET_STREAM Frame {
@@ -501,17 +506,58 @@ uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
                   In this case the frame read is not valid
                 */
                 default: // unknown frame
-                        return -1;
+                        return INVALID_FRAME;
         }
 }
 
 // This function returns the start of the QUIC stream frame
 // or NULL if the payload of the packet does not contain
 // a QUIC stream frame
-void *get_stream_frame_start(void *payload) {
+__attribute__((always_inline)) int32_t get_stream_frame_start(void *payload, uint32_t payload_length, void **stream_frame_start) {
 
+        for (int frame_ctr=0; frame_ctr<10; frame_ctr++) { // TODO: change to while loop possible?
+                // TODO: handle special cases like NEW_TOKEN_FRAME with skipping token
+                uint8_t byte;
+                bpf_probe_read_kernel(&byte, sizeof(byte), payload);
 
+                if (IS_STREAM_FRAME(byte)) {
+                        *stream_frame_start = payload;
+                        return 1;
+                }
 
+                payload++;
+
+                // read how many var ints are in the frame
+                uint8_t var_ints = get_number_of_var_ints_of_frame(byte);
+                if (var_ints == INVALID_FRAME) {
+                        *stream_frame_start = NULL;
+                        return 0;
+                }
+
+                // starting at 1 since the type is also a var int
+                // but already read at this point
+                for (int i=1; i<10; i++) {
+                        if (i == var_ints) {
+                                break;
+                        }
+                        struct var_int res;
+                        if (i != 3 || (byte != ACK_FRAME && byte != ACK_ECN_FRAME)) {
+                                read_var_int(payload, &res, NO_VALUE_NEEDED);
+                        } else {
+                                // In case the frame is an ACK frame we need to 
+                                // find out how many ACK ranges there are (fourth var int
+                                // is the number of ACK ranges) and add 2 var ints for each
+                                // ACK range present
+                                read_var_int(payload, &res, VALUE_NEEDED);
+                                var_ints += 2 * res.value;
+                        }
+                        payload += bounded_var_int_len(res.len);
+                }
+
+        } //while (payload < payload + payload_length);
+
+        *stream_frame_start = NULL;
+        return 0;
 }
 
 
@@ -1111,6 +1157,16 @@ int tc_egress(struct __sk_buff *skb)
                         return TC_ACT_SHOT;
                 }
 
+                void *stream_start;
+                get_stream_frame_start(payload, payload_size, &stream_start);
+                if (stream_start == NULL) {
+                        bpf_printk("No stream frame found\n");
+                        return TC_ACT_SHOT;
+                }
+
+                // set the payload to the start of the stream frame
+                // since we only care about the stream frame
+                payload = stream_start;
 
                 // if the frame is a stream frame we need to update the stream offset
                 /*
@@ -1127,8 +1183,7 @@ int tc_egress(struct __sk_buff *skb)
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
                 bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
 
-                // TODO: this only works if there is only one frame in the packet
-                // TODO: adapt it so that it goes through all frames?
+                // ! should be fixed? TODO: this only works if there is only one frame in the packet
                 if (IS_STREAM_FRAME(frame_type)) {
                         // TODO: update stream offset
                         // TODO: for this add a map which stores the stream offset for each stream! 
