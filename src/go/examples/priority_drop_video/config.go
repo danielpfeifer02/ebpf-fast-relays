@@ -13,6 +13,7 @@ import (
 
 const bpf_enabled = true
 const relay_passing_on = true
+const relay_playing = true
 const DEBUG_PRINT = false
 
 // // Setup a bare-bones TLS config for the server
@@ -59,9 +60,10 @@ const DEBUG_PRINT = false
 
 func generateQUICConfig() *quic.Config {
 	return &quic.Config{
-		Tracer:          qlog.DefaultTracer,
-		MaxIdleTimeout:  5 * time.Minute,
-		EnableDatagrams: true,
+		Tracer:                 qlog.DefaultTracer,
+		MaxIdleTimeout:         5 * time.Minute,
+		EnableDatagrams:        true,
+		MaxStreamReceiveWindow: 1 << 30,
 	}
 }
 

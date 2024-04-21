@@ -10,6 +10,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
+	"github.com/mengelbart/gst-go"
 )
 
 func relay() error {
@@ -24,6 +25,15 @@ func relay() error {
 		}
 		client_ctr := uint32(0)
 		err = number_of_clients.Update(uint32(0), client_ctr, 0)
+		if err != nil {
+			panic(err)
+		}
+
+		id_counter, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/id_counter", &ebpf.LoadPinOptions{})
+		if err != nil {
+			panic(err)
+		}
+		err = id_counter.Update(uint32(0), uint32(0), 0)
 		if err != nil {
 			panic(err)
 		}
@@ -43,6 +53,13 @@ func relay() error {
 		return nil
 	})
 
+	// toggle := make(chan bool)
+	sendTrackList := make([]moqtransport.SendTrack, 0)
+
+	// go func() {
+	// 	// wait for toggle signal
+	// 	<-toggle
+
 	fmt.Println("waiting for announcement")
 	trackname := <-announcementCh
 	t, err := c.Subscribe(trackname)
@@ -50,15 +67,24 @@ func relay() error {
 		panic(err)
 	}
 
-	sendTrackList := make([]moqtransport.SendTrack, 0)
+	player_chan := make(chan []byte)
+	if relay_playing {
+		go relay_player(player_chan)
+	}
 
-	go func(t *moqtransport.ReceiveTrack) {
+	go func(t *moqtransport.ReceiveTrack, player_chan chan []byte) {
 		for {
 			buf := make([]byte, 64_000)
 			n, err := t.Read(buf)
 			if err != nil {
 				log.Printf("error on read: %v", err)
 				return
+			}
+
+			if relay_playing {
+				fmt.Println("Received", n, "bytes")
+				player_chan <- buf[:n]
+				fmt.Println("Sent", n, "bytes to player")
 			}
 
 			if relay_passing_on {
@@ -71,7 +97,8 @@ func relay() error {
 				}
 			}
 		}
-	}(t)
+	}(t, player_chan)
+	// }()
 
 	s := moqtransport.Server{
 		Handler: moqtransport.PeerHandlerFunc(func(p *moqtransport.Peer) {
@@ -107,6 +134,11 @@ func relay() error {
 
 					// publish connection established (TODO: correct place for that?)
 					testPublishConnEstablished()
+
+					// ! TODO: does this maybe help to make it work with the client
+					// ! 	   so that client receives video. (i.e. does client) need
+					// !   	   everything from the start?
+					// toggle <- true
 				}
 
 				sendTrackList = append(sendTrackList, *st)
@@ -126,7 +158,7 @@ func relay() error {
 
 // TODO: make better so that this also works for multiple clients
 func testPublishConnEstablished() {
-	time.Sleep(1 * time.Second)
+	// time.Sleep(1 * time.Second)
 	if bpf_enabled {
 		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
 		if err != nil {
@@ -153,4 +185,43 @@ func testPublishConnEstablished() {
 		}
 		fmt.Println("R: Connection established")
 	}
+}
+
+func relay_player(recv_chan chan []byte) error {
+	closeCh := make(chan struct{})
+
+	p, err := gst.NewPipeline("appsrc name=src ! multipartdemux ! jpegdec ! autovideosink")
+	if err != nil {
+		panic(err)
+	}
+	p.SetEOSHandler(func() {
+		p.Stop()
+		closeCh <- struct{}{}
+	})
+	p.SetErrorHandler(func(err error) {
+		log.Println(err)
+		p.Stop()
+		closeCh <- struct{}{}
+	})
+	p.Start()
+	log.Println("starting pipeline")
+	go func() {
+		for {
+			buf := <-recv_chan
+			n := len(buf)
+			_, err = p.Write(buf[:n])
+			if err != nil {
+				log.Printf("error on write: %v", err)
+				p.SendEOS()
+			}
+		}
+	}()
+
+	ml := gst.NewMainLoop()
+	go func() {
+		<-closeCh
+		ml.Stop()
+	}()
+	ml.Run()
+	return nil
 }

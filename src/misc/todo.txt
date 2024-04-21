@@ -58,3 +58,17 @@
 - support multi frame packets and "filter" out STREAM and DATAGRAM frames
 
 - add necessary changes to moq packet in bpf
+
+- priority-moqtransport: does it make sense that the max receive window needs to be set higher than default? What exactly is max. receive window limiting?
+
+- values in connection_pn_t map don't make sense. Somehow e.g. 0 seems to be there more often
+
+- client seems to get acks for unsent packets?
+
+- reconnecting from same client for relay does not work because there is still state for that client (i.e. add something to clear state after disconnection). 
+  Issue not really findable in wireshark (no packet with the given "largestAcked"???)
+
+- server has no subscribe handler sometimes?
+
+- does the client maybe need everything from the start of the video? would kind of defeat the purpose of possibility to subscribe later?
+

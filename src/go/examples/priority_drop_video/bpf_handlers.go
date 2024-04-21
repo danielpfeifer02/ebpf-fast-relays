@@ -331,14 +331,13 @@ func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 
 func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 
-	debugPrint("INCREMENT")
-
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == video_server_address {
 		// fmt.Println("Not incrementing pn for server")
 		return
 	}
+	debugPrint("INCREMENT")
 	debugPrint("Increased packet number", qconn.RemoteAddr().String())
 
 	new_pn := pn_struct{
@@ -408,8 +407,8 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 		// 		return int64(val.Pn), nil
 		// 	}
 		// }
-		debugPrint("Error looking up in client_pn_translator")
-		return pn, nil
+		// debugPrint("Error looking up in client_pn_translator")
+		return 0, fmt.Errorf("No entry for %d", pn)
 	}
 
 	debugPrint(pn, "->", val.Pn)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -47,6 +48,7 @@ func server() error {
 				p.Start()
 				return 0, 0, nil
 			})
+			fmt.Println("Peer is set up")
 		}),
 		TLSConfig: video_generateTLSConfig(false),
 	}

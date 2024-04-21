@@ -995,7 +995,6 @@ int tc_egress(struct __sk_buff *skb)
                         // Here we translate the packet number of the outgoing packet to 
                         // the packet number which will actually be sent out (the one in
                         // the bpf map)
-                        // ! assume 2 byte packet number for now (TODO: set to fixed size for all packets / numbers)
                         uint32_t old_pn = 0;
                         uint8_t pn_len = (quic_flags & 0x03) + 1;
                         uint8_t byte;
@@ -1091,6 +1090,7 @@ int tc_egress(struct __sk_buff *skb)
                         *new_pn = *new_pn + 1;
                         bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
+                        bpf_printk("Let packet through from user space\n");
                         return TC_ACT_OK;
                 }
 
@@ -1134,15 +1134,16 @@ int tc_egress(struct __sk_buff *skb)
                         .port = value->dst_port,
                 };
 
-                uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &key);
-                if (conn_est == NULL) {
-                        bpf_printk("No connection established found. Creating\n");
-                        return TC_ACT_SHOT;
-                }
-                if (*conn_est == 0) {
-                        bpf_printk("Connection not established\n");
-                        return TC_ACT_SHOT;
-                }
+                // ! TODO: fix within go code
+                // uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &key);
+                // if (conn_est == NULL) {
+                //         bpf_printk("No connection established found for %d %d\n", key.ip_addr, key.port);
+                //         return TC_ACT_SHOT;
+                // }
+                // if (*conn_est == 0) {
+                //         bpf_printk("Connection not established\n");
+                //         return TC_ACT_SHOT;
+                // }
 
 
                 uint8_t client_prio_drop_limit = value->priority_drop_limit;
@@ -1365,6 +1366,8 @@ int tc_egress(struct __sk_buff *skb)
 
                         }
 
+                } else {
+                        return TC_ACT_SHOT;
                 }
 
 
@@ -1455,6 +1458,11 @@ int tc_egress(struct __sk_buff *skb)
         
         } else {
                 // ! TODO: update packet number for long header packets
+
+                if (!user_space) { // TODO: actually needed?
+                        bpf_printk("Not a user space packet\n");
+                        return TC_ACT_SHOT;
+                }
 
                 // Long headers will only be sent from userspace
                 bpf_printk("Long header\n");

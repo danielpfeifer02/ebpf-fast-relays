@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
@@ -54,6 +55,7 @@ func client() error {
 				log.Printf("error on read: %v", err)
 				p.SendEOS()
 			}
+			fmt.Printf("Received %d bytes\n", n)
 			log.Printf("writing %v bytes from stream to pipeline", n)
 			_, err = p.Write(buf[:n])
 			if err != nil {
