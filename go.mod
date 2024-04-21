@@ -4,14 +4,14 @@ go 1.22.0
 
 require (
 	github.com/cilium/ebpf v0.13.2
-	github.com/danielpfeifer02/priority-moqtransport v0.1.1-5
-	github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-27
+	github.com/danielpfeifer02/priority-moqtransport v0.1.1-6
+	github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28
 	github.com/mengelbart/gst-go v0.0.4
 )
 
-replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-5 => ../gst-prio-moq-app/priority-moqtransport
+// replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio-moq-app/priority-moqtransport
 
-replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-27 => ../quic-go-prio-packs
+// replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28 => ../quic-go-prio-packs
 
 require (
 	github.com/francoispqt/gojay v1.2.13 // indirect
