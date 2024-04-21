@@ -536,7 +536,7 @@ __attribute__((always_inline)) int32_t get_stream_frame_start(void *payload, uin
 
                 // starting at 1 since the type is also a var int
                 // but already read at this point
-                for (int i=1; i<10; i++) {
+                for (int i=1; i<var_ints; i++) {
                         if (i == var_ints) {
                                 break;
                         }
@@ -1157,16 +1157,19 @@ int tc_egress(struct __sk_buff *skb)
                         return TC_ACT_SHOT;
                 }
 
-                void *stream_start;
-                get_stream_frame_start(payload, payload_size, &stream_start);
-                if (stream_start == NULL) {
-                        bpf_printk("No stream frame found\n");
-                        return TC_ACT_SHOT;
-                }
-
-                // set the payload to the start of the stream frame
-                // since we only care about the stream frame
-                payload = stream_start;
+                // ! Generally this would be the way to go but that seems to be too
+                // ! complex for the bpf verifier.
+                // ! For now this should work since the quic-go-prio-packs impl ensures
+                // ! that stream frames are always send in a separate packet
+                // void *stream_start;
+                // get_stream_frame_start(payload, payload_size, &stream_start);
+                // if (stream_start == NULL) {
+                //         bpf_printk("No stream frame found\n");
+                //         return TC_ACT_SHOT;
+                // }
+                // // set the payload to the start of the stream frame
+                // // since we only care about the stream frame
+                // payload = stream_start;
 
                 // if the frame is a stream frame we need to update the stream offset
                 /*
@@ -1183,7 +1186,6 @@ int tc_egress(struct __sk_buff *skb)
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
                 bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
 
-                // ! should be fixed? TODO: this only works if there is only one frame in the packet
                 if (IS_STREAM_FRAME(frame_type)) {
                         // TODO: update stream offset
                         // TODO: for this add a map which stores the stream offset for each stream! 
