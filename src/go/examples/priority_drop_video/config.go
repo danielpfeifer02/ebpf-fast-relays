@@ -13,8 +13,52 @@ import (
 
 const bpf_enabled = true
 const relay_passing_on = true
-const relay_playing = true
+const relay_playing = false
 const DEBUG_PRINT = false
+
+func generateQUICConfig() *quic.Config {
+	return &quic.Config{
+		Tracer:                 qlog.DefaultTracer,
+		MaxIdleTimeout:         5 * time.Minute,
+		EnableDatagrams:        true,
+		MaxStreamReceiveWindow: 1 << 30,
+	}
+}
+
+func mainConfig() {
+	crypto_turnoff.CRYPTO_TURNED_OFF = true
+	packet_setting.ALLOW_SETTING_PN = false
+	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
+
+	f, err := os.Create("./build/log.txt")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
+	// os.Setenv("QUIC_GO_LOG_LEVEL", "DEBUG") // TODO: not working
+
+	// os.Setenv("QLOGDIR", "./qlog")
+}
+
+func serverConfig() {}
+
+func relayConfig() {
+	// // We only want these functions to be executed in the relay
+	if bpf_enabled {
+		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
+		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
+		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
+		// 	// packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber // TODO: still needed?
+		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
+		packet_setting.SET_ONLY_APP_DATA = true // TODO: fix in prio_packs repo?
+	}
+}
+
+func clientConfig() {
+	os.Setenv("QLOGDIR", "./qlog")
+	packet_setting.PRINT_PACKET_RECEIVING_INFO = false
+}
 
 // // Setup a bare-bones TLS config for the server
 // func generateTLSConfig(klf bool) *tls.Config {
@@ -57,47 +101,3 @@ const DEBUG_PRINT = false
 // 		CipherSuites: []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
 // 	}
 // }
-
-func generateQUICConfig() *quic.Config {
-	return &quic.Config{
-		Tracer:                 qlog.DefaultTracer,
-		MaxIdleTimeout:         5 * time.Minute,
-		EnableDatagrams:        true,
-		MaxStreamReceiveWindow: 1 << 30,
-	}
-}
-
-func mainConfig() {
-	crypto_turnoff.CRYPTO_TURNED_OFF = true
-	packet_setting.ALLOW_SETTING_PN = false
-	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
-
-	f, err := os.Create("./build/log.txt")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	log.SetOutput(f)
-	// os.Setenv("QUIC_GO_LOG_LEVEL", "DEBUG") // TODO: not working
-
-	// os.Setenv("QLOGDIR", "./qlog")
-}
-
-func serverConfig() {}
-
-func relayConfig() {
-	// // We only want these functions to be executed in the relay
-	if bpf_enabled {
-		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
-		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
-		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
-		// packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber // TODO: still needed?
-		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
-		packet_setting.SET_ONLY_APP_DATA = true // TODO: fix in prio_packs repo?
-	}
-}
-
-func clientConfig() {
-	os.Setenv("QLOGDIR", "./qlog")
-	packet_setting.PRINT_PACKET_RECEIVING_INFO = false
-}

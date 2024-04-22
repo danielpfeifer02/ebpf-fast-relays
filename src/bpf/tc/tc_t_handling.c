@@ -39,6 +39,7 @@
 #define NO_VALUE_NEEDED 0
 #define VALUE_NEEDED 1
 
+#define TURNOFF 1
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -734,8 +735,9 @@ __section("ingress")
 int tc_ingress(struct __sk_buff *skb)
 {
 
-        // return TC_ACT_OK;
-
+        if (TURNOFF) {
+                return TC_ACT_OK;
+        }
 
         // uint32_t zero = 0;
         // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
@@ -914,7 +916,7 @@ int tc_egress(struct __sk_buff *skb)
         struct iphdr *ip = (struct iphdr *)(eth + 1);
 
         // Check if the packet is UDP
-        if (ip->protocol != IPPROTO_UDP) {
+        if (ip->protocol != IPPROTO_UDP && ip->protocol != IPPROTO_ICMP) {
                 bpf_printk("Not UDP\n");
                 return TC_ACT_OK;
         }
@@ -944,6 +946,12 @@ int tc_egress(struct __sk_buff *skb)
                 user_space = 1;
         }
 
+        // ! TODO: are there quic icmp packets? looks like it in wireshark
+        if (ip->protocol == IPPROTO_ICMP) {
+                bpf_printk("ICMP packet\n");
+                user_space = 1;
+        }
+
         // Load UDP payload
         void *payload = (void *)(udp + 1);
         uint32_t payload_size = ntohs(udp->len) - sizeof(*udp);
@@ -963,7 +971,11 @@ int tc_egress(struct __sk_buff *skb)
         }
 
         uint8_t quic_flags;
-        bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
+        long read_res = bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
+        if (read_res < 0) {
+                bpf_printk("ERROR: Could not read quic flags\n");
+                return TC_ACT_OK;
+        }
         uint8_t header_form = (quic_flags & 0x80) >> 7;
 
         // redirecting short header packets
@@ -1000,25 +1012,35 @@ int tc_egress(struct __sk_buff *skb)
                         uint8_t byte;
                         uint32_t pn_off_from_quic = 1 /* Short header bits */ + CONN_ID_LEN;
 
+                        bpf_printk("zero: %02x\n", quic_flags); // ! TODO: sometimes 0x00????
+
                         // ^ TODO: turn into loop
                         if (pn_len >= 1) {
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic);
                                 old_pn = byte;
+                                bpf_printk("Old packet number (zero? 1): %08x %02x\n", old_pn, byte);
                         }
                         if (pn_len >= 2) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 1);
                                 old_pn = old_pn | byte;
+                                bpf_printk("Old packet number (zero? 2): %08x\n", old_pn);
                         }
                         if (pn_len >= 3) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 2);
                                 old_pn = old_pn | byte;
+                                bpf_printk("Old packet number (zero? 3): %08x\n", old_pn);
                         }
                         if (pn_len == 4) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 3);
                                 old_pn = old_pn | byte;
+                                bpf_printk("Old packet number (zero? 4): %08x\n", old_pn);
+                        }
+                        // ! TODO: why are there so many 0 pns???
+                        if (old_pn == 0) {
+                                bpf_printk("Packet number is zero (len %d)\n", pn_len);
                         }
 
                         // long res = bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
@@ -1030,7 +1052,6 @@ int tc_egress(struct __sk_buff *skb)
                         //         return TC_ACT_OK;
                         // }
 
-                        bpf_printk("Old packet number: %08x\n", old_pn);
                         // old_pn = ntohs(old_pn);
 
                         // if (old_pn == 0) { // TODO: why does this happen?
@@ -1073,6 +1094,7 @@ int tc_egress(struct __sk_buff *skb)
                                 new_pn_bytes[2] = (*new_pn & 0x0000ff00) >> 8;
                                 new_pn_bytes[3] = *new_pn & 0x000000ff;
                         }
+                        // ! TODO: why is the new pn SMALLER than the old one????
                         bpf_skb_store_bytes(skb, pn_off, new_pn_bytes, pn_len, 0);
                         
 
@@ -1084,7 +1106,7 @@ int tc_egress(struct __sk_buff *skb)
                         bpf_printk("Old packet number: %08x\n", old_pn);
                         bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
 
-                        bpf_printk("Packet number: %d -> %d\n", old_pn, *new_pn);
+                        bpf_printk("Short header (user space) pn mapping change: %d -> %d\n", old_pn, *new_pn);
 
                         // increment the packet number of the connection
                         *new_pn = *new_pn + 1;
@@ -1094,7 +1116,18 @@ int tc_egress(struct __sk_buff *skb)
                         return TC_ACT_OK;
                 }
 
-                
+
+
+                // ! JUST FOR TESTING
+                uint32_t tmepory = 0;
+                uint32_t *other_tempory = bpf_map_lookup_elem(&packet_counter, &tmepory);
+                if (other_tempory == NULL || *other_tempory != 1) {
+                        bpf_printk("Packet counter drop\n");
+                        return TC_ACT_SHOT;
+                }
+                if (TURNOFF) {
+                        return TC_ACT_OK;
+                }
 
 
                 bpf_printk("Received redirected short header!\n");
@@ -1367,7 +1400,35 @@ int tc_egress(struct __sk_buff *skb)
                         }
 
                 } else {
-                        return TC_ACT_SHOT;
+                        // if it's not a stream frame we still need to update the pn
+                        // before sending it out
+                        // ! TODO: cannot just write the packet number into the packet
+                        // ! without knowing the length of the packet number???
+                        uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
+                        uint32_t zero = 0;
+                        if (new_pn == NULL) {
+                                bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
+                                new_pn = &zero;
+                                bpf_printk("No packet number found. Setting to zero\n");
+                        }
+                        uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
+                        uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
+                        bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0);
+
+                        // change mapping for packet number translation
+                        struct client_pn_map_key_t pn_key = {
+                                .key = key,
+                                .packet_number = *new_pn,
+                        };
+                        uint32_t old_pn = 0; // ! TODO: GET THE OLD PN
+                        bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
+
+                        // increment the packet number of the connection
+                        *new_pn = *new_pn + 1;
+                        bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
+
+                        bpf_printk("Packet number: %d\n", *new_pn);
+                        return TC_ACT_OK;
                 }
 
 
@@ -1437,6 +1498,11 @@ int tc_egress(struct __sk_buff *skb)
                 // uint16_t new_pn = htons(old_pn->packet_number); // // TODO: this should not be +50
                 // bpf_skb_store_bytes(skb, pn_off, &new_pn, sizeof(new_pn), 0);
 
+
+                        
+                // ! TODO: cannot just write the packet number into the packet
+                // ! without knowing the length of the packet number???
+
                 uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
                 uint32_t zero = 0;
                 if (new_pn == NULL) {
@@ -1459,9 +1525,20 @@ int tc_egress(struct __sk_buff *skb)
         } else {
                 // ! TODO: update packet number for long header packets
 
+                // ! TODO: cannot just write the packet number into the packet
+                // ! without knowing the length of the packet number???
+
+                // ! UPDATE THE PN MAPPING FOR USER SPACE RETRANSLATION
+
                 if (!user_space) { // TODO: actually needed?
                         bpf_printk("Not a user space packet\n");
                         return TC_ACT_SHOT;
+                }
+
+                // retry packets do not have a packet number
+                if ((quic_flags & 0x30 >> 4) == 3) {
+                        bpf_printk("Retry packet\n");
+                        return TC_ACT_OK;
                 }
 
                 // Long headers will only be sent from userspace
@@ -1487,8 +1564,22 @@ int tc_egress(struct __sk_buff *skb)
                         new_pn = &zero;
                         bpf_printk("No packet number found. Setting to zero\n");
                 }
+
+                // We do not need to update the packet number in the long header
+                // packets since they are only sent in the beginning and therefore
+                // the packet number is staying the same
+
+                // Change the mapping for packet number translation
+                struct client_pn_map_key_t pn_key = {
+                        .key = key,
+                        .packet_number = *new_pn,
+                };
+                bpf_map_update_elem(&connection_pn_translation, &pn_key, new_pn, BPF_ANY);
+
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
+
+                bpf_printk("Long header pn mapping change: %d -> %d\n", *new_pn, *new_pn);
         }
 
         return TC_ACT_OK;

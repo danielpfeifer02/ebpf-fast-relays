@@ -46,7 +46,7 @@ func client() error {
 	})
 	p.Start()
 	log.Println("starting pipeline")
-	go func() {
+	go func(t *moqtransport.ReceiveTrack, p *gst.Pipeline) {
 		for {
 			log.Println("reading from track")
 			buf := make([]byte, 64_000)
@@ -63,7 +63,7 @@ func client() error {
 				p.SendEOS()
 			}
 		}
-	}()
+	}(t, p)
 
 	ml := gst.NewMainLoop()
 	go func() {

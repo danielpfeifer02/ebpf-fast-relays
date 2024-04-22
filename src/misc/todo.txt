@@ -72,3 +72,5 @@
 
 - does the client maybe need everything from the start of the video? would kind of defeat the purpose of possibility to subscribe later?
 
+- The packet number translation seems to have a serious error because the actual pn might become smaller than the one user space choes.
+  This causes issues since actual pns are assumed to be bigger-or-equal to the one from user space!
