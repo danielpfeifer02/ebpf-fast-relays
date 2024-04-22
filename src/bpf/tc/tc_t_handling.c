@@ -970,6 +970,13 @@ int tc_egress(struct __sk_buff *skb)
         
         }
 
+        // ! TODO: does this maybe cause the error with the 0x00 quic flags?
+        // relaod pointers
+        eth = (struct ethhdr *)data;
+        ip = (struct iphdr *)(eth + 1);
+        udp = (struct udphdr *)(ip + 1);
+        payload = (void *)(udp + 1);
+
         uint8_t quic_flags;
         long read_res = bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
         if (read_res < 0) {
