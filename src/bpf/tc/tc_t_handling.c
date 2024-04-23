@@ -40,7 +40,8 @@
 #define NO_VALUE_NEEDED 0
 #define VALUE_NEEDED 1
 
-#define TURNOFF 1
+#define TURNOFF 0
+#define MOQ_PAYLOAD 1
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -1407,36 +1408,93 @@ int tc_egress(struct __sk_buff *skb)
 
                         }
 
-                } else {
-                        // if it's not a stream frame we still need to update the pn
-                        // before sending it out
-                        // ! TODO: cannot just write the packet number into the packet
-                        // ! without knowing the length of the packet number???
-                        uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
-                        uint32_t zero = 0;
-                        if (new_pn == NULL) {
-                                bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
-                                new_pn = &zero;
-                                bpf_printk("No packet number found. Setting to zero\n");
+                        if (MOQ_PAYLOAD) {
+
+                                uint32_t stream_pl_off = frame_off;
+                                
+                                uint32_t stream_id_len = bounded_var_int_len(stream_id.len);
+                                stream_pl_off += 1 << stream_id_len;
+
+                                if (off_bit_set) {
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_pl_off);
+                                        uint8_t stream_offset_len = 1 << (byte >> 6);
+                                        stream_pl_off += bounded_var_int_len(stream_offset_len);
+                                }
+                                if (len_bit_set) {
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_pl_off);
+                                        uint8_t stream_len_len = 1 << (byte >> 6);
+                                        stream_pl_off += bounded_var_int_len(stream_len_len);
+                                }
+
+                                void *stream_pl = payload + stream_pl_off;
+
+
+                                // ! TODO: is the payload of the moq stuff packet contained?
+                                // !       based on wireshark it looks like one moq packet is 
+                                // !       split into multiple packets
+                                /*
+                                uint8_t mt;
+                                bpf_probe_read_kernel(&mt, sizeof(mt), stream_pl);
+                                stream_pl += 1;
+
+                                if (mt != 0x00) {
+                                        // invalid message type
+                                        return TC_ACT_SHOT;
+                                }
+
+                                struct var_int stream_data_len = {0};
+                                uint8_t sd_len_len;
+                                bpf_probe_read_kernel(&sd_len_len, sizeof(sd_len_len), stream_pl);
+                                sd_len_len = 1 << (sd_len_len >> 6);
+
+                                stream_data_len.len = sd_len_len;
+
+                                if (sd_len_len >= 1) {
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl);
+                                        stream_data_len.value = byte & 0x3f;
+                                }
+                                if (sd_len_len >= 2) {
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 1);
+                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
+                                }
+                                if (sd_len_len >= 4) {
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 2);
+                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 3);
+                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
+                                }
+                                if (sd_len_len >= 8) {
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 4);
+                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 5);
+                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 6);
+                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
+                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 7);
+                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
+                                }
+                                stream_pl += bounded_var_int_len(sd_len_len);
+
+                                bpf_printk("Stream data length: %d\n", stream_data_len.value);
+                                
+                                uint8_t id;
+                                bpf_probe_read_kernel(&id, sizeof(id), stream_pl);
+
+                                if (id != 0x00) {
+                                        // invalid track id
+                                        return TC_ACT_SHOT;
+                                }
+
+                                bpf_printk("Stream data length of track id %d: %d\n", id, stream_data_len.value);
+                                */
                         }
-                        uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
-                        uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
-                        bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0);
 
-                        // change mapping for packet number translation
-                        struct client_pn_map_key_t pn_key = {
-                                .key = key,
-                                .packet_number = *new_pn,
-                        };
-                        uint32_t old_pn = 0; // ! TODO: GET THE OLD PN
-                        bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
-
-                        // increment the packet number of the connection
-                        *new_pn = *new_pn + 1;
-                        bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
-
-                        bpf_printk("Packet number: %d\n", *new_pn);
-                        return TC_ACT_OK;
+                } else {
+                        // For now we only pass on stream frames
+                        // if other frames should be passed on as well
+                        // just add another "else if" above with the 
+                        // appropriate frame type check
+                        return TC_ACT_SHOT;
                 }
 
 

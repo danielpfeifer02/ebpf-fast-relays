@@ -443,7 +443,7 @@ func deleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnecti
 
 	client_pn_translator, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_pn_translation", &ebpf.LoadPinOptions{})
 	if err != nil {
-		fmt.Println("Error loading client_pn_translator")
+		debugPrint("Error loading client_pn_translator")
 		panic(err)
 	}
 	err = client_pn_translator.Delete(key)
@@ -451,7 +451,7 @@ func deleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnecti
 		return
 	}
 
-	fmt.Println("Successfully deleted translation")
+	debugPrint("Successfully deleted translation")
 }
 
 // TODO this is probably not the most elegant way to clear the BPF maps
