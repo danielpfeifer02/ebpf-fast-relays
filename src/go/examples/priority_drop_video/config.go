@@ -27,7 +27,7 @@ func generateQUICConfig() *quic.Config {
 
 func mainConfig() {
 	crypto_turnoff.CRYPTO_TURNED_OFF = true
-	packet_setting.ALLOW_SETTING_PN = false
+	packet_setting.ALLOW_SETTING_PN = true
 	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
 
 	f, err := os.Create("./build/log.txt")
@@ -51,6 +51,7 @@ func relayConfig() {
 		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
 		// 	// packet_setting.PacketNumberIncrementBPFHandler = incrementPacketNumber // TODO: still needed?
 		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
+		packet_setting.AckTranslationDeletionBPFHandler = deleteAckPacketNumberTranslation
 		packet_setting.SET_ONLY_APP_DATA = true // TODO: fix in prio_packs repo?
 	}
 }

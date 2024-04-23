@@ -34,11 +34,14 @@ func server() error {
 					log.Fatal(err)
 				}
 				p.SetBufferHandler(func(b gst.Buffer) {
-					if _, err := st.Write(b.Bytes); err != nil {
+					n, err := st.Write(b.Bytes)
+					if err != nil {
 						panic(err)
 					}
+					fmt.Println("Sent", n, "bytes to peer")
 				})
 				p.SetEOSHandler(func() {
+					fmt.Println("STOPPING EOS")
 					p.Stop()
 				})
 				p.SetErrorHandler(func(err error) {

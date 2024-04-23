@@ -80,6 +80,7 @@ func relay() error {
 				log.Printf("error on read: %v", err)
 				return
 			}
+			fmt.Println("Read", n, "bytes from track")
 
 			if relay_playing {
 				fmt.Println("Received", n, "bytes")
@@ -88,12 +89,23 @@ func relay() error {
 			}
 
 			if relay_passing_on {
-				for _, st := range sendTrackList {
-					_, err := st.Write(buf[:n])
+				for i, st := range sendTrackList {
+					// ch := make(chan int)
+					// go func(st moqtransport.SendTrack, buf []byte, ch chan int) {
+					fmt.Println("Trying to send", n, "bytes to peer", i)
+					n, err := st.Write(buf[:n])
 					if err != nil {
 						log.Printf("error on write: %v", err)
 						return
 					}
+					fmt.Println("Sent", n, "bytes to peer", i)
+					// }(st, buf, ch)
+					// select {
+					// case <-ch:
+					// 	//...
+					// case <-time.After(1 * time.Millisecond):
+					// 	fmt.Println("Failed to send to peer", i)
+					// }
 				}
 			}
 		}

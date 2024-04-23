@@ -50,6 +50,7 @@ func client() error {
 		for {
 			log.Println("reading from track")
 			buf := make([]byte, 64_000)
+			fmt.Println("Waiting for data")
 			n, err := t.Read(buf)
 			if err != nil {
 				log.Printf("error on read: %v", err)
@@ -62,6 +63,7 @@ func client() error {
 				log.Printf("error on write: %v", err)
 				p.SendEOS()
 			}
+			fmt.Println("Sent", n, "bytes to player")
 		}
 	}(t, p)
 

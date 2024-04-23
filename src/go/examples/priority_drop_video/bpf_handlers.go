@@ -408,7 +408,8 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 		// 	}
 		// }
 		// debugPrint("Error looking up in client_pn_translator")
-		return 0, fmt.Errorf("No entry for %d", pn)
+		// fmt.Println("Error translating packet number", pn)
+		return 0, fmt.Errorf("no entry for %d", pn)
 	}
 
 	debugPrint(pn, "->", val.Pn)
@@ -416,6 +417,41 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 	translated_pn := int64(val.Pn)
 	debugPrint(translated_pn)
 	return translated_pn, nil
+}
+
+func deleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnection) {
+
+	qconn := conn.(quic.Connection)
+
+	if qconn.RemoteAddr().String() == video_server_address {
+		// fmt.Println("Not deleting translation for server")
+		return
+	}
+	debugPrint("DELETE", pn)
+	debugPrint("Deleted translation for packet number", qconn.RemoteAddr().String())
+
+	ipaddr, port := getIPAndPort(qconn)
+	client_key := client_key_struct{
+		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+		Port:    swapEndianness16(uint16(port)),
+		Padding: [2]uint8{0, 0},
+	}
+	key := client_pn_map_key{
+		Key: client_key,
+		Pn:  uint32(pn),
+	}
+
+	client_pn_translator, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_pn_translation", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading client_pn_translator")
+		panic(err)
+	}
+	err = client_pn_translator.Delete(key)
+	if err != nil {
+		return
+	}
+
+	fmt.Println("Successfully deleted translation")
 }
 
 // TODO this is probably not the most elegant way to clear the BPF maps

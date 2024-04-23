@@ -24,6 +24,7 @@
 #define MAC_LEN 6
 #define MAX_CLIENTS 1024
 #define MAX_STREAMS_PER_CLIENT 16
+#define MAX_PN_TRANSLATIONS 1024 //1<<16 // TODO: what size? how to delete entries?
 
 // TODO: why is 4242 observable in WireShark and 6969 not?
 #define RELAY_PORT htons(4242)
@@ -157,7 +158,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_pn_map_key_t);
     __type(value, uint32_t);
-    __uint(max_entries, MAX_CLIENTS);
+    __uint(max_entries, MAX_PN_TRANSLATIONS);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_pn_translation SEC(".maps");
 
@@ -1126,12 +1127,12 @@ int tc_egress(struct __sk_buff *skb)
 
 
                 // ! JUST FOR TESTING
-                uint32_t tmepory = 0;
-                uint32_t *other_tempory = bpf_map_lookup_elem(&packet_counter, &tmepory);
-                if (other_tempory == NULL || *other_tempory != 1) {
-                        bpf_printk("Packet counter drop\n");
-                        return TC_ACT_SHOT;
-                }
+                // uint32_t tmepory = 0;
+                // uint32_t *other_tempory = bpf_map_lookup_elem(&packet_counter, &tmepory);
+                // if (other_tempory == NULL || *other_tempory != 1) {
+                //         bpf_printk("Packet counter drop\n");
+                //         return TC_ACT_SHOT;
+                // }
                 if (TURNOFF) {
                         return TC_ACT_OK;
                 }
@@ -1583,10 +1584,12 @@ int tc_egress(struct __sk_buff *skb)
                 };
                 bpf_map_update_elem(&connection_pn_translation, &pn_key, new_pn, BPF_ANY);
 
+
+                bpf_printk("Long header pn mapping change: %d -> %d\n", *new_pn, *new_pn);
+
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
-                bpf_printk("Long header pn mapping change: %d -> %d\n", *new_pn, *new_pn);
         }
 
         return TC_ACT_OK;
