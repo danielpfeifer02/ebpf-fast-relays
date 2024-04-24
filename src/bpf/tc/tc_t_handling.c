@@ -40,8 +40,8 @@
 #define NO_VALUE_NEEDED 0
 #define VALUE_NEEDED 1
 
-#define TURNOFF 1
-#define MOQ_PAYLOAD 1
+#define TURNOFF 0
+#define MOQ_PAYLOAD 0
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -1551,6 +1551,8 @@ int tc_egress(struct __sk_buff *skb)
                         
                         }
 
+                } else if (IS_DATAGRAM_FRAME(frame_type)) {
+                        
                 } else {
                         // For now we only pass on stream frames
                         // if other frames should be passed on as well
