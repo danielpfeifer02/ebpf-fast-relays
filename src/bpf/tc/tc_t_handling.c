@@ -40,7 +40,7 @@
 #define NO_VALUE_NEEDED 0
 #define VALUE_NEEDED 1
 
-#define TURNOFF 0
+#define TURNOFF 1
 #define MOQ_PAYLOAD 1
 
 // this key is used to make sure that we can check if a client is already in the map
@@ -182,37 +182,8 @@ struct var_int {
         uint8_t len; 
 };
 
-
-// TODO: not working -> fix
-void read_var_int(void *start, struct var_int *res, uint8_t need_value) {
-
-        uint64_t result = 0;
-        uint8_t byte;
-        bpf_probe_read_kernel(&byte, sizeof(byte), start);
-        uint8_t len = 1 << (byte >> 6);
-        bpf_printk("Stream %d %d", len, byte >> 6);
-        result = byte & 0x3f; 
-
-        if (need_value == NO_VALUE_NEEDED) {
-                res->value = 0;
-                res->len = len;
-                return;
-        }
-
-        for (int i=1; i<8; i++) {
-                if (i >= len) {
-                        break;
-                }
-                result = result << 8;
-                bpf_probe_read_kernel(&byte, sizeof(byte), start + i);
-                result = result | byte;
-        }
-        res->value = result;
-        res->len = len;
-}
-
 // to satisfy the verifier
-__attribute__((always_inline)) uint32_t bounded_var_int_len(uint8_t var_int_len) {
+__attribute__((always_inline)) uint8_t bounded_var_int_len(uint8_t var_int_len) {
         if (var_int_len == 1) {
                 return 1;
         }
@@ -224,6 +195,69 @@ __attribute__((always_inline)) uint32_t bounded_var_int_len(uint8_t var_int_len)
         }
         if (var_int_len == 8) {
                 return 8;
+        }
+        return 0;
+}
+
+
+// TODO: not working -> fix
+__attribute__((always_inline)) int read_var_int(void *start, struct var_int *res, uint8_t need_value) {
+
+        // uint64_t result = 0;
+        // uint8_t byte;
+        // bpf_probe_read_kernel(&byte, sizeof(byte), start);
+        // uint8_t len = 1 << (byte >> 6);
+        // bpf_printk("Stream %d %d", len, byte >> 6);
+        // result = byte & 0x3f; 
+
+        // if (need_value == NO_VALUE_NEEDED) {
+        //         res->value = 0;
+        //         res->len = len;
+        //         return;
+        // }
+
+        // for (int i=1; i<8; i++) {
+        //         if (i >= len) {
+        //                 break;
+        //         }
+        //         result = result << 8;
+        //         bpf_probe_read_kernel(&byte, sizeof(byte), start + i);
+        //         result = result | byte;
+        // }
+        // res->value = result;
+        // res->len = len;
+
+        uint8_t len;
+        bpf_probe_read_kernel(&len, sizeof(len), start);
+        len = 1 << (len >> 6);
+
+        res->len = bounded_var_int_len(len);
+
+        uint8_t byte;
+
+        if (len >= 1) {
+                bpf_probe_read_kernel(&byte, sizeof(byte), start);
+                res->value = byte & 0x3f;
+        }
+        if (len >= 2) {
+                bpf_probe_read_kernel(&byte, sizeof(byte), start + 1);
+                res->value = (res->value << 8) | byte;
+        }
+        if (len >= 4) {
+                bpf_probe_read_kernel(&byte, sizeof(byte), start + 2);
+                res->value = (res->value << 8) | byte;
+                bpf_probe_read_kernel(&byte, sizeof(byte), start + 3);
+                res->value = (res->value << 8) | byte;
+        }
+        if (len >= 8) {
+                bpf_probe_read_kernel(&byte, sizeof(byte), start + 4);
+                res->value = (res->value << 8) | byte;
+                bpf_probe_read_kernel(&byte, sizeof(byte), start + 5);
+                res->value = (res->value << 8) | byte;
+                bpf_probe_read_kernel(&byte, sizeof(byte), start + 6);
+                res->value = (res->value << 8) | byte;
+                bpf_probe_read_kernel(&byte, sizeof(byte), start + 7);
+                res->value = (res->value << 8) | byte;
         }
         return 0;
 }
@@ -615,7 +649,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
 
         if ((void *)payload + payload_size > data_end) {
 
-                bpf_printk("[ingress startup tc] payload is not in the buffer");
+                // bpf_printk("[ingress startup tc] payload is not in the buffer");
 
                 // We need to use bpf_skb_pull_data() to get the rest of the packet
                 if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
@@ -627,17 +661,22 @@ int tc_ingress_from_client(struct __sk_buff *skb)
         
         }
 
+        eth = (struct ethhdr *)data;
+        ip = (struct iphdr *)(eth + 1);
+        udp = (struct udphdr *)(ip + 1);
+        payload = (void *)(udp + 1);
+
         uint8_t quic_flags;
         bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
         uint8_t header_form = (quic_flags & 0x80) >> 7;
 
         if (header_form == 1) {
                 // Long header
-                bpf_printk("Long header\n");
+                // bpf_printk("Long header\n");
 
                 uint8_t packet_type = (quic_flags & 0x30) >> 4;
 
-                bpf_printk("Packet type: %02x\n", packet_type);
+                // bpf_printk("Packet type: %02x\n", packet_type);
 
                 // Packet types are:
                 // 0x00 - Initial
@@ -708,7 +747,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 // Look up the client id
                 uint32_t *cid = bpf_map_lookup_elem(&client_id, &key);
                 if (cid == NULL) {
-                        bpf_printk("First occurence of key\n");
+                        // bpf_printk("First occurence of key\n");
                         // Get the next client id
                         uint32_t zero = 0;
                         uint32_t *next_client_id = bpf_map_lookup_elem(&id_counter, &zero);
@@ -717,13 +756,13 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                                 return TC_ACT_OK;
                         }
                         uint32_t new_counter = (*next_client_id + 1) % MAX_CLIENTS;
-                        bpf_printk("New client id: %d\n", new_counter);
+                        // bpf_printk("New client id: %d\n", new_counter);
                         bpf_map_update_elem(&id_counter, &zero, &new_counter, BPF_ANY);
                         bpf_map_update_elem(&client_id, &key, next_client_id, BPF_ANY);
                         cid = next_client_id;
                 }
 
-                bpf_printk("Client id: %d\n", *cid);
+                // bpf_printk("Client id: %d\n", *cid);
 
                 // Update the client data map
                 bpf_map_update_elem(&client_data, cid, &value, BPF_ANY);
@@ -785,7 +824,7 @@ int tc_ingress(struct __sk_buff *skb)
 
         if ((void *)payload + payload_size > data_end) {
 
-                bpf_printk("[ingress startup tc] payload is not in the buffer");
+                // bpf_printk("[ingress startup tc] payload is not in the buffer");
 
                 // We need to use bpf_skb_pull_data() to get the rest of the packet
                 if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
@@ -796,6 +835,13 @@ int tc_ingress(struct __sk_buff *skb)
                 data = (void *)(long)skb->data;
         
         }
+
+        // ! TODO: does this maybe cause the error with the 0x00 quic flags?
+        // relaod pointers
+        eth = (struct ethhdr *)data;
+        ip = (struct iphdr *)(eth + 1);
+        udp = (struct udphdr *)(ip + 1);
+        payload = (void *)(udp + 1);
 
         uint8_t quic_flags;
         bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
@@ -813,7 +859,7 @@ int tc_ingress(struct __sk_buff *skb)
 
                 // bpf_printk("Type of frame: %02x\n", frame_type);
                 if (!SUPPORTED_FRAME(frame_type)) {
-                        bpf_printk("Not a stream or datagram frame\n");
+                        bpf_printk("Not a stream or datagram frame (%02x)\n", frame_type);
                         return TC_ACT_OK;
                 }
 
@@ -825,7 +871,7 @@ int tc_ingress(struct __sk_buff *skb)
                         return TC_ACT_OK;
                 }
 
-                bpf_printk("Short header - redirecting for %d clients\n", *num_clients);
+                // bpf_printk("Short header - redirecting for %d clients\n", *num_clients);
 
                 // TODO probably not working bc of concurrency (maybe some hash map to look up ctr value for a packet or save inside of packet bytes?)
                 // ! TODO change from packet ctr to aving index inside of packet
@@ -936,14 +982,14 @@ int tc_egress(struct __sk_buff *skb)
 
         // UDP checksum needs to be 0
         if (udp->check != 0) {
-                bpf_printk("Checksum not 0\n");
+                bpf_printk("Checksum not 0 (%d)\n", udp->check);
                 // return TC_ACT_OK;
                 user_space = 1;
         }
 
         // check that the UDP dst port is the port marker
         if (udp->dest != PORT_MARKER) {
-                bpf_printk("Not the correct port\n");
+                bpf_printk("Not the correct port (%d)\n", udp->dest);
                 // return TC_ACT_OK;
                 user_space = 1;
         }
@@ -960,7 +1006,7 @@ int tc_egress(struct __sk_buff *skb)
 
         if ((void *)payload + payload_size > data_end) {
 
-                bpf_printk("[ingress startup tc] payload is not in the buffer");
+                // bpf_printk("[ingress startup tc] payload is not in the buffer");
 
                 // We need to use bpf_skb_pull_data() to get the rest of the packet
                 if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
@@ -1021,31 +1067,31 @@ int tc_egress(struct __sk_buff *skb)
                         uint8_t byte;
                         uint32_t pn_off_from_quic = 1 /* Short header bits */ + CONN_ID_LEN;
 
-                        bpf_printk("zero: %02x\n", quic_flags); // ! TODO: sometimes 0x00????
+                        // bpf_printk("zero: %02x\n", quic_flags); // ! TODO: sometimes 0x00????
 
                         // ^ TODO: turn into loop
                         if (pn_len >= 1) {
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic);
                                 old_pn = byte;
-                                bpf_printk("Old packet number (zero? 1): %08x %02x\n", old_pn, byte);
+                                // bpf_printk("Old packet number (zero? 1): %08x %02x\n", old_pn, byte);
                         }
                         if (pn_len >= 2) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 1);
                                 old_pn = old_pn | byte;
-                                bpf_printk("Old packet number (zero? 2): %08x\n", old_pn);
+                                // bpf_printk("Old packet number (zero? 2): %08x\n", old_pn);
                         }
                         if (pn_len >= 3) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 2);
                                 old_pn = old_pn | byte;
-                                bpf_printk("Old packet number (zero? 3): %08x\n", old_pn);
+                                // bpf_printk("Old packet number (zero? 3): %08x\n", old_pn);
                         }
                         if (pn_len == 4) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 3);
                                 old_pn = old_pn | byte;
-                                bpf_printk("Old packet number (zero? 4): %08x\n", old_pn);
+                                // bpf_printk("Old packet number (zero? 4): %08x\n", old_pn);
                         }
                         // ! TODO: why are there so many 0 pns???
                         if (old_pn == 0) {
@@ -1112,16 +1158,16 @@ int tc_egress(struct __sk_buff *skb)
                                 .key = key,
                                 .packet_number = *new_pn,
                         };
-                        bpf_printk("Old packet number: %08x\n", old_pn);
+                        // bpf_printk("Old packet number: %08x\n", old_pn);
                         bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
 
-                        bpf_printk("Short header (user space) pn mapping change: %d -> %d\n", old_pn, *new_pn);
+                        // bpf_printk("Short header (user space) pn mapping change: %d -> %d\n", old_pn, *new_pn);
 
                         // increment the packet number of the connection
                         *new_pn = *new_pn + 1;
                         bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
-                        bpf_printk("Let packet through from user space\n");
+                        // bpf_printk("Let packet through from user space\n");
                         return TC_ACT_OK;
                 }
 
@@ -1139,7 +1185,7 @@ int tc_egress(struct __sk_buff *skb)
                 }
 
 
-                bpf_printk("Received redirected short header!\n");
+                // bpf_printk("Received redirected short header!\n");
 
                 // // get packet_counter
                 // uint32_t zero = 0;
@@ -1153,7 +1199,7 @@ int tc_egress(struct __sk_buff *skb)
                 uint32_t pack_ctr;
                 void *index_off = payload + 1 /* Short header flags */ + 1 /* Prio in conn id */;
                 bpf_probe_read_kernel(&pack_ctr, sizeof(pack_ctr), index_off);
-                bpf_printk("Packet counter: %d\n", pack_ctr);
+                // bpf_printk("Packet counter: %d\n", pack_ctr);
 
                 // get pack_ctr-th client data
                 struct client_info_t *value;
@@ -1192,7 +1238,7 @@ int tc_egress(struct __sk_buff *skb)
                 uint8_t packet_prio; 
                 bpf_probe_read_kernel(&packet_prio, sizeof(packet_prio), payload + 1 /* Short header flags */);
 
-                bpf_printk("Threshold: %02x - Packet prio: %02x\n", client_prio_drop_limit, packet_prio);
+                // bpf_printk("Threshold: %02x - Packet prio: %02x\n", client_prio_drop_limit, packet_prio);
 
                 // drop the packet if the prio is lower than the client prio drop limit
                 if (packet_prio < client_prio_drop_limit) {
@@ -1325,7 +1371,7 @@ int tc_egress(struct __sk_buff *skb)
                                         return TC_ACT_OK;
                                 }
 
-                                bpf_printk("[stream handling] New Stream Offset will be %08x\n", new_value);
+                                // bpf_printk("[stream handling] New Stream Offset will be %08x\n", new_value);
 
                                 struct var_int new_stream_offset = {
                                         .value = new_value,
@@ -1381,7 +1427,7 @@ int tc_egress(struct __sk_buff *skb)
                                 stream_offset_off += sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
                                 bpf_skb_store_bytes(skb, stream_offset_off, new_stream_offset_bytes, ctr, 0);
 
-                                bpf_printk("[stream handling] Stream offset updated to %08x\n", new_stream_offset.value);
+                                // bpf_printk("[stream handling] Stream offset updated to %08x\n", new_stream_offset.value);
 
 
                         } else { // if no off bit is set then it's the first frame of the stream
@@ -1412,7 +1458,7 @@ int tc_egress(struct __sk_buff *skb)
 
                                 uint32_t stream_pl_off = frame_off;
                                 
-                                uint32_t stream_id_len = bounded_var_int_len(stream_id.len);
+                                uint8_t stream_id_len = bounded_var_int_len(stream_id.len);
                                 stream_pl_off += 1 << stream_id_len;
 
                                 if (off_bit_set) {
@@ -1432,50 +1478,38 @@ int tc_egress(struct __sk_buff *skb)
                                 // ! TODO: is the payload of the moq stuff packet contained?
                                 // !       based on wireshark it looks like one moq packet is 
                                 // !       split into multiple packets
-                                /*
                                 uint8_t mt;
                                 bpf_probe_read_kernel(&mt, sizeof(mt), stream_pl);
                                 stream_pl += 1;
 
                                 if (mt != 0x00) {
-                                        // invalid message type
-                                        return TC_ACT_SHOT;
+                                        // invalid message type likely means
+                                        // we're inside of a payload that
+                                        // has been split into multiple packets
+                                        return TC_ACT_OK;
                                 }
 
                                 struct var_int stream_data_len = {0};
-                                uint8_t sd_len_len;
-                                bpf_probe_read_kernel(&sd_len_len, sizeof(sd_len_len), stream_pl);
-                                sd_len_len = 1 << (sd_len_len >> 6);
+                                read_var_int(stream_pl, &stream_data_len, 1);
+                                stream_pl += bounded_var_int_len(stream_data_len.len);
 
-                                stream_data_len.len = sd_len_len;
+                                // bpf_printk("Stream data length: %d\n", stream_data_len.value);
 
-                                if (sd_len_len >= 1) {
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl);
-                                        stream_data_len.value = byte & 0x3f;
+                                // ! TODO: start at a valid packet for client
+                                // ! NOT WORKING client still gets unknown type error?
+                                // load packet counter
+                                uint32_t zero = 0;
+                                uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+                                if (stream_data_len.value > 10 && stream_data_len.value < 100) {
+                                        if (pack_ctr == NULL || *pack_ctr != 1) {
+                                                uint32_t one = 1;
+                                                bpf_map_update_elem(&packet_counter, &zero, &one, BPF_ANY);
+                                        }
                                 }
-                                if (sd_len_len >= 2) {
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 1);
-                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
+                                if (pack_ctr == NULL || *pack_ctr != 1) {
+                                        return TC_ACT_SHOT;
                                 }
-                                if (sd_len_len >= 4) {
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 2);
-                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 3);
-                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
-                                }
-                                if (sd_len_len >= 8) {
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 4);
-                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 5);
-                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 6);
-                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl + 7);
-                                        stream_data_len.value = (stream_data_len.value << 8) | byte;
-                                }
-                                stream_pl += bounded_var_int_len(sd_len_len);
 
-                                bpf_printk("Stream data length: %d\n", stream_data_len.value);
                                 
                                 uint8_t id;
                                 bpf_probe_read_kernel(&id, sizeof(id), stream_pl);
@@ -1485,8 +1519,36 @@ int tc_egress(struct __sk_buff *skb)
                                         return TC_ACT_SHOT;
                                 }
 
-                                bpf_printk("Stream data length of track id %d: %d\n", id, stream_data_len.value);
-                                */
+                                stream_pl += 1;
+
+                                bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl);
+                                bpf_printk("Stream data: %02x\n", byte);
+
+                                // leave data length alone but
+                                // adapt:
+                                // group sequence ?
+                                // object sequence ?
+                                // object send order ?
+
+                                struct var_int group_seq = {0};
+                                read_var_int(stream_pl, &group_seq, 1);
+                                stream_pl += bounded_var_int_len(group_seq.len);
+
+                                struct var_int obj_seq = {0};
+                                read_var_int(stream_pl, &obj_seq, 1);
+                                stream_pl += bounded_var_int_len(obj_seq.len);
+
+                                struct var_int obj_send_order = {0};
+                                read_var_int(stream_pl, &obj_send_order, 1);
+                                stream_pl += bounded_var_int_len(obj_send_order.len);
+
+
+                                bpf_printk("Stream data length: %d, gs: %08x, os: %08x, oso: %08x\n", 
+                                stream_data_len.value,
+                                group_seq.value,
+                                obj_seq.value,
+                                obj_send_order.value);
+                        
                         }
 
                 } else {
@@ -1580,13 +1642,13 @@ int tc_egress(struct __sk_buff *skb)
                 uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
                 bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0); // heree
 
-                bpf_printk("Packet number: %d\n", *new_pn);
+                // bpf_printk("Packet number: %d\n", *new_pn);
 
                 // increment the packet number of the connection
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
-                bpf_printk("Done editing packet\n");
+                // bpf_printk("Done editing packet\n");
         
         } else {
                 // ! TODO: update packet number for long header packets
@@ -1608,7 +1670,7 @@ int tc_egress(struct __sk_buff *skb)
                 }
 
                 // Long headers will only be sent from userspace
-                bpf_printk("Long header\n");
+                // bpf_printk("Long header\n");
 
                 // TODO: is that sufficient?
                 // increment the packet number of the connection
@@ -1643,7 +1705,7 @@ int tc_egress(struct __sk_buff *skb)
                 bpf_map_update_elem(&connection_pn_translation, &pn_key, new_pn, BPF_ANY);
 
 
-                bpf_printk("Long header pn mapping change: %d -> %d\n", *new_pn, *new_pn);
+                // bpf_printk("Long header pn mapping change: %d -> %d\n", *new_pn, *new_pn);
 
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);

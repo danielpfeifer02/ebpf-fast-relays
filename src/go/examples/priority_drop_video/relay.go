@@ -146,7 +146,7 @@ func relay() error {
 
 					// publish connection established (TODO: correct place for that?)
 					testPublishConnEstablished()
-					go debug_start_transmitting() // ! TODO: remove this
+					// go debug_start_transmitting() // ! TODO: remove this
 
 					// ! TODO: does this maybe help to make it work with the client
 					// ! 	   so that client receives video. (i.e. does client) need
