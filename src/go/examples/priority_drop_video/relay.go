@@ -56,12 +56,12 @@ func relay() error {
 		panic(err)
 	}
 
-	s, err := moqtransport.NewClientSession(quicmoq.New(c), moqtransport.DeliveryRole, true)
+	client_sess, err := moqtransport.NewClientSession(quicmoq.New(c), moqtransport.DeliveryRole, true)
 	if err != nil {
 		return err
 	}
 	fmt.Println("moq peer connected")
-	a, err := s.ReadAnnouncement(context.Background())
+	a, err := client_sess.ReadAnnouncement(context.Background())
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,10 @@ func relay() error {
 
 	subscriptionList := make([]*moqtransport.SendSubscription, 0)
 
-	sub, err := s.Subscribe(context.Background(), 0, 0, a.Namespace(), "video", "")
+	time.Sleep(1 * time.Second)
+
+	// TODO: not returning from Subscribe???
+	client_sub, err := client_sess.Subscribe(context.Background(), 0, 0, a.Namespace(), "video", "")
 	if err != nil {
 		return err
 	}
@@ -79,10 +82,10 @@ func relay() error {
 		go relay_player(player_chan)
 	}
 
-	go func(sub *moqtransport.ReceiveSubscription, player_chan chan []byte) {
+	go func() { //sub *moqtransport.ReceiveSubscription, player_chan chan []byte) {
 		for {
 			buf := make([]byte, 64_000)
-			n, err := sub.Read(buf)
+			n, err := client_sub.Read(buf)
 			if err != nil {
 				log.Printf("error on read: %v", err)
 				return
@@ -117,7 +120,7 @@ func relay() error {
 				}
 			}
 		}
-	}(sub, player_chan)
+	}() //sub, player_chan)
 
 	ctx := context.Background()
 
@@ -137,7 +140,7 @@ func relay() error {
 	if err != nil {
 		return err
 	}
-	server, err := moqtransport.NewServerSession(quicmoq.New(conn), true)
+	server_sess, err := moqtransport.NewServerSession(quicmoq.New(conn), true)
 	if err != nil {
 		return err
 	}
@@ -145,23 +148,23 @@ func relay() error {
 	log.Printf("handling new peer")
 	go func() {
 		var a *moqtransport.Announcement
-		a, err = server.ReadAnnouncement(ctx)
+		a, err = server_sess.ReadAnnouncement(ctx)
 		if err != nil {
 			return
 		}
 		log.Printf("got announcement: %v", a.Namespace())
-		a.Reject(0, "server does not accept announcements")
+		a.Reject(0, "relay does not accept announcements")
 	}()
 
 	go func() {
-		if err = server.Announce(ctx, "video"); err != nil {
+		if err = server_sess.Announce(ctx, "video"); err != nil {
 			return
 		}
 		log.Printf("announced video namespace")
 	}()
 
 	for {
-		server_sub, err := server.ReadSubscription(ctx)
+		server_sub, err := server_sess.ReadSubscription(ctx)
 		if err != nil {
 			return err
 		}
@@ -192,8 +195,6 @@ func relay() error {
 		}
 		*/
 	}
-
-	return nil
 }
 
 // TODO: make better so that this also works for multiple clients
