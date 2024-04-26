@@ -12,8 +12,8 @@ import (
 )
 
 const bpf_enabled = true
-const relay_passing_on = true //true
-const relay_playing = false
+const relay_passing_on = false //true
+const relay_playing = true
 const DEBUG_PRINT = false
 
 func generateQUICConfig() *quic.Config {
