@@ -41,7 +41,9 @@
 #define VALUE_NEEDED 1
 
 #define TURNOFF 0
-#define MOQ_PAYLOAD 0
+#define MOQ_PAYLOAD 1
+#define VP8_VIDEO_PAYLOAD 1
+#define SINGLE_STREAM_USAGE 0
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -777,6 +779,7 @@ int tc_ingress(struct __sk_buff *skb)
 {
 
         if (TURNOFF) {
+                bpf_printk("Dropping because of turn off\n");
                 return TC_ACT_OK;
         }
 
@@ -912,6 +915,7 @@ int tc_ingress(struct __sk_buff *skb)
                         bpf_skb_store_bytes(skb, dst_port_off, &mrk, sizeof(mrk), 0);
 
                         bpf_clone_redirect(skb, veth2_egress_ifindex, 0); // TODO: bpf_redirect or bpf_clone_redirect?
+                
                 }
 
                 // set udp port to RELAY_PORT again
@@ -1181,6 +1185,7 @@ int tc_egress(struct __sk_buff *skb)
                 //         return TC_ACT_SHOT;
                 // }
                 if (TURNOFF) {
+                        bpf_printk("Dropping because of turn off\n");
                         return TC_ACT_OK;
                 }
 
@@ -1275,7 +1280,9 @@ int tc_egress(struct __sk_buff *skb)
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
                 bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
 
-                if (IS_STREAM_FRAME(frame_type)) {
+                // TODO: separation between single and multiple stream usage needed?
+                // TODONEXT: why FLOW_CONTROL_ERROR?
+                if (IS_STREAM_FRAME(frame_type) && SINGLE_STREAM_USAGE) {
                         // TODO: update stream offset
                         // TODO: for this add a map which stores the stream offset for each stream! 
                         // TODO: how to identify the stream? -> stream id in the packet
@@ -1486,6 +1493,7 @@ int tc_egress(struct __sk_buff *skb)
                                         // invalid message type likely means
                                         // we're inside of a payload that
                                         // has been split into multiple packets
+                                        bpf_printk("Invalid message type\n");
                                         return TC_ACT_OK;
                                 }
 
@@ -1495,20 +1503,20 @@ int tc_egress(struct __sk_buff *skb)
 
                                 // bpf_printk("Stream data length: %d\n", stream_data_len.value);
 
-                                // ! TODO: start at a valid packet for client
-                                // ! NOT WORKING client still gets unknown type error?
-                                // load packet counter
-                                uint32_t zero = 0;
-                                uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
-                                if (stream_data_len.value > 10 && stream_data_len.value < 100) {
-                                        if (pack_ctr == NULL || *pack_ctr != 1) {
-                                                uint32_t one = 1;
-                                                bpf_map_update_elem(&packet_counter, &zero, &one, BPF_ANY);
-                                        }
-                                }
-                                if (pack_ctr == NULL || *pack_ctr != 1) {
-                                        return TC_ACT_SHOT;
-                                }
+                                // // ! TODO: start at a valid packet for client
+                                // // ! NOT WORKING client still gets unknown type error?
+                                // // load packet counter
+                                // uint32_t zero = 0;
+                                // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
+                                // if (stream_data_len.value > 10 && stream_data_len.value < 100) {
+                                //         if (pack_ctr == NULL || *pack_ctr != 1) {
+                                //                 uint32_t one = 1;
+                                //                 bpf_map_update_elem(&packet_counter, &zero, &one, BPF_ANY);
+                                //         }
+                                // }
+                                // if (pack_ctr == NULL || *pack_ctr != 1) {
+                                //         return TC_ACT_SHOT;
+                                // }
 
                                 
                                 uint8_t id;
@@ -1516,13 +1524,14 @@ int tc_egress(struct __sk_buff *skb)
 
                                 if (id != 0x00) {
                                         // invalid track id
+                                        bpf_printk("Invalid track id\n");
                                         return TC_ACT_SHOT;
                                 }
 
                                 stream_pl += 1;
 
                                 bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl);
-                                bpf_printk("Stream data: %02x\n", byte);
+                                // bpf_printk("Stream data: %02x\n", byte);
 
                                 // leave data length alone but
                                 // adapt:
@@ -1543,16 +1552,41 @@ int tc_egress(struct __sk_buff *skb)
                                 stream_pl += bounded_var_int_len(obj_send_order.len);
 
 
-                                bpf_printk("Stream data length: %d, gs: %08x, os: %08x, oso: %08x\n", 
-                                stream_data_len.value,
-                                group_seq.value,
-                                obj_seq.value,
-                                obj_send_order.value);
+                                // bpf_printk("Stream data length: %d, gs: %08x, os: %08x, oso: %08x\n", 
+                                // stream_data_len.value,
+                                // group_seq.value,
+                                // obj_seq.value,
+                                // obj_send_order.value);
+
+                                if (VP8_VIDEO_PAYLOAD) {
+
+                                        //  0 1 2 3 4 5 6 7
+                                        // +-+-+-+-+-+-+-+-+
+                                        // |Size0|H| VER |P|
+                                        // +-+-+-+-+-+-+-+-+
+                                        // |     ...       |
+                                        // +-+-+-+-+-+-+-+-+
+
+                                        uint8_t video_ft;
+                                        bpf_probe_read_kernel(&video_ft, sizeof(video_ft), stream_pl);
+                                        bpf_printk("Video frame type: %02x\n", video_ft);
+                                        video_ft = video_ft & 0x01;
+
+                                        if (video_ft == 0) {
+                                                bpf_printk("Intra-/Key-/I-frame\n");
+                                        } else {
+                                                bpf_printk("Inter-/Predicition-/P-frame\n");
+                                        }
+
+                                }
                         
                         }
 
+                } else if (IS_STREAM_FRAME(frame_type) && !SINGLE_STREAM_USAGE) {
+                        // TODO: anything to do for stream frames with individual
+                        // TODO: stream per packet?
                 } else if (IS_DATAGRAM_FRAME(frame_type)) {
-                        
+                        // TODO: anything to do for datagram frames?
                 } else {
                         // For now we only pass on stream frames
                         // if other frames should be passed on as well

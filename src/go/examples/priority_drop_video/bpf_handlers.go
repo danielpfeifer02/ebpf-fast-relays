@@ -428,7 +428,7 @@ func deleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnecti
 		return
 	}
 	debugPrint("DELETE", pn)
-	debugPrint("Deleted translation for packet number", qconn.RemoteAddr().String())
+	debugPrint("Deleted translation for packet from", qconn.RemoteAddr().String())
 
 	ipaddr, port := getIPAndPort(qconn)
 	client_key := client_key_struct{

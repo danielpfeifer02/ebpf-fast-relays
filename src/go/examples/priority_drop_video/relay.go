@@ -68,10 +68,8 @@ func relay() error {
 	log.Printf("got announcement of namespace %v", a.Namespace())
 
 	subscriptionList := make([]*moqtransport.SendSubscription, 0)
+	a.Accept()
 
-	time.Sleep(1 * time.Second)
-
-	// TODO: not returning from Subscribe???
 	client_sub, err := client_sess.Subscribe(context.Background(), 0, 0, a.Namespace(), "video", "")
 	if err != nil {
 		return err
@@ -82,7 +80,7 @@ func relay() error {
 		go relay_player(player_chan)
 	}
 
-	go func() { //sub *moqtransport.ReceiveSubscription, player_chan chan []byte) {
+	go func(sub *moqtransport.ReceiveSubscription, player_chan chan []byte) {
 		for {
 			buf := make([]byte, 64_000)
 			n, err := client_sub.Read(buf)
@@ -120,7 +118,7 @@ func relay() error {
 				}
 			}
 		}
-	}() //sub, player_chan)
+	}(client_sub, player_chan)
 
 	ctx := context.Background()
 
@@ -179,7 +177,7 @@ func relay() error {
 
 		subscriptionList = append(subscriptionList, server_sub)
 
-		/* Increment client counter
+		// Increment client counter
 		if bpf_enabled {
 			client_ctr := uint32(0)
 			err = number_of_clients.Lookup(uint32(0), &client_ctr)
@@ -193,7 +191,7 @@ func relay() error {
 			}
 			fmt.Println("updated number of clients")
 		}
-		*/
+
 	}
 }
 
