@@ -43,7 +43,7 @@
 #define TURNOFF 0
 #define MOQ_PAYLOAD 1
 #define VP8_VIDEO_PAYLOAD 1
-#define SINGLE_STREAM_USAGE 0
+#define SINGLE_STREAM_USAGE 1
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -1153,7 +1153,7 @@ int tc_egress(struct __sk_buff *skb)
                                 new_pn_bytes[2] = (*new_pn & 0x0000ff00) >> 8;
                                 new_pn_bytes[3] = *new_pn & 0x000000ff;
                         }
-                        // ! TODO: why is the new pn SMALLER than the old one????
+                        // ! TODO: why is the new pn SMALLER than the old one???? is it still?
                         bpf_skb_store_bytes(skb, pn_off, new_pn_bytes, pn_len, 0);
                         
 
@@ -1246,10 +1246,11 @@ int tc_egress(struct __sk_buff *skb)
                 // bpf_printk("Threshold: %02x - Packet prio: %02x\n", client_prio_drop_limit, packet_prio);
 
                 // drop the packet if the prio is lower than the client prio drop limit
-                if (packet_prio < client_prio_drop_limit) {
-                        bpf_printk("Packet prio lower than client prio Threshold\n");
-                        return TC_ACT_SHOT;
-                }
+                // TODO: turn back on once prio is set correctly again for streams
+                // if (packet_prio < client_prio_drop_limit) {
+                //         bpf_printk("Packet prio lower than client prio Threshold\n");
+                //         return TC_ACT_SHOT;
+                // }
 
                 // ! Generally this would be the way to go but that seems to be too
                 // ! complex for the bpf verifier.
@@ -1493,7 +1494,7 @@ int tc_egress(struct __sk_buff *skb)
                                         // invalid message type likely means
                                         // we're inside of a payload that
                                         // has been split into multiple packets
-                                        bpf_printk("Invalid message type\n");
+                                        // bpf_printk("Invalid message type (%02x)\n", mt);
                                         return TC_ACT_OK;
                                 }
 
@@ -1560,22 +1561,81 @@ int tc_egress(struct __sk_buff *skb)
 
                                 if (VP8_VIDEO_PAYLOAD) {
 
-                                        //  0 1 2 3 4 5 6 7
-                                        // +-+-+-+-+-+-+-+-+
-                                        // |Size0|H| VER |P|
-                                        // +-+-+-+-+-+-+-+-+
-                                        // |     ...       |
-                                        // +-+-+-+-+-+-+-+-+
+                                        // VP8 payload
+                                        // first look at the payload descriptor
+                                        // see: https://datatracker.ietf.org/doc/html/rfc7741#section-4.2
+                                        uint8_t vp8_pd;
+                                        bpf_probe_read_kernel(&vp8_pd, sizeof(vp8_pd), stream_pl);
+                                        stream_pl += 1;
 
-                                        uint8_t video_ft;
-                                        bpf_probe_read_kernel(&video_ft, sizeof(video_ft), stream_pl);
-                                        bpf_printk("Video frame type: %02x\n", video_ft);
-                                        video_ft = video_ft & 0x01;
+                                        uint8_t vp8_xb, vp8_nb, vp8_sb, vp8_pid;
+                                        vp8_xb = (vp8_pd >> 7) & 0x01;
+                                        vp8_nb = (vp8_pd >> 6) & 0x01;
+                                        vp8_sb = (vp8_pd >> 4) & 0x01;
+                                        vp8_pid = vp8_pd & 0x07;
 
-                                        if (video_ft == 0) {
-                                                bpf_printk("Intra-/Key-/I-frame\n");
-                                        } else {
-                                                bpf_printk("Inter-/Predicition-/P-frame\n");
+                                        // The payload is the beginning of a new frame
+                                        // iff the S bit is set and PID is 0
+                                        // TODO: what to do with frames that are not the 
+                                        // TODO: beginning of a new frame but should still 
+                                        // TODO: be dropped?
+
+                                        // TODO: always 0x00??? seems to be parsed wrongly
+                                        // bpf_printk("[VP8] sb: %d, pid: %d\n", vp8_sb, vp8_pid);
+                                        bpf_printk("VP8 payload descriptor: %02x\n", vp8_pd);
+
+                                        if (vp8_sb && vp8_pid == 0) {
+                                                bpf_printk("Beginning of a new VP8 frame\n");
+
+                                                uint8_t num_optional_bytes = 0;
+                                                if (vp8_xb) {
+                                                        uint8_t vp8_options;
+                                                        bpf_probe_read_kernel(&vp8_options, sizeof(vp8_options), stream_pl);
+                                                        stream_pl += 1;
+                                                        
+                                                        uint8_t vp8_ib, vp8_lb, vp8_tb, vp8_kb;
+                                                        vp8_ib = (vp8_options >> 7) & 0x01;
+                                                        vp8_lb = (vp8_options >> 6) & 0x01;
+                                                        vp8_tb = (vp8_options >> 5) & 0x01;
+                                                        vp8_kb = (vp8_options >> 4) & 0x01;
+
+                                                        num_optional_bytes += vp8_ib;
+                                                        num_optional_bytes += vp8_lb;
+                                                        num_optional_bytes += (vp8_tb || vp8_kb);
+
+                                                        if (vp8_ib) { // case of dual-octet version
+                                                                uint8_t vp8_ib_bytes;
+                                                                bpf_probe_read_kernel(&vp8_ib_bytes, sizeof(vp8_ib_bytes), stream_pl);
+                                                                uint8_t vp8_ib_mb;
+                                                                vp8_ib_mb = (vp8_ib_bytes >> 7) & 0x01;
+                                                                if (vp8_ib_mb) {
+                                                                        num_optional_bytes += 1;
+                                                                }
+                                                        }
+                                                }
+
+                                                stream_pl += num_optional_bytes;
+
+                                                // now we have the payload descriptor and the optional bytes
+                                                // next is the payload header
+
+                                                //  0 1 2 3 4 5 6 7
+                                                // +-+-+-+-+-+-+-+-+
+                                                // |Size0|H| VER |P|
+                                                // +-+-+-+-+-+-+-+-+
+                                                // |     ...       |
+                                                // +-+-+-+-+-+-+-+-+
+
+                                                uint8_t video_ft;
+                                                bpf_probe_read_kernel(&video_ft, sizeof(video_ft), stream_pl);
+                                                bpf_printk("Video frame type: %02x\n", video_ft);
+                                                video_ft = video_ft & 0x01;
+
+                                                if (video_ft == 0) {
+                                                        bpf_printk("Intra-/Key-/I-frame\n");
+                                                } else {
+                                                        bpf_printk("Inter-/Predicition-/P-frame\n");
+                                                }
                                         }
 
                                 }

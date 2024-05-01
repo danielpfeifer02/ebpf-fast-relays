@@ -419,6 +419,7 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 	return translated_pn, nil
 }
 
+// bpftool map dump name connection_pn_t -j | jq ". | length"
 func deleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnection) {
 
 	qconn := conn.(quic.Connection)

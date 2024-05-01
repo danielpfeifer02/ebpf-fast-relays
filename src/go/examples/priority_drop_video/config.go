@@ -13,7 +13,7 @@ import (
 
 const bpf_enabled = true
 const relay_passing_on = false //true
-const relay_playing = true
+const relay_playing = false
 const DEBUG_PRINT = false
 
 func generateQUICConfig() *quic.Config {
