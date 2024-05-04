@@ -74,3 +74,5 @@
 
 - The packet number translation seems to have a serious error because the actual pn might become smaller than the one user space choes.
   This causes issues since actual pns are assumed to be bigger-or-equal to the one from user space!
+
+- multiple stream frames per short header packet?? -> avoid

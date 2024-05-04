@@ -92,11 +92,12 @@ func server() error {
 			cancel(err)
 			return
 		}
-		if _, err := stream.Write(b.Bytes); err != nil {
+		n, err := stream.Write(b.Bytes)
+		if err != nil {
 			cancel(err)
 			return
 		}
-		fmt.Println("Sent", len(b.Bytes), "bytes to peer")
+		fmt.Println("Sent", n, "bytes to peer")
 		if err := stream.Close(); err != nil {
 			cancel(err)
 			return

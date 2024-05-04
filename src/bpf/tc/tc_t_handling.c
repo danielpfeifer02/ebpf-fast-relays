@@ -19,7 +19,7 @@
 	__attribute__((section(NAME), used))
 #endif
 
-#define veth2_egress_ifindex 13 // ! TODO: how to handle better and avoid manual configuration?
+#define veth2_egress_ifindex 14 // ! TODO: how to handle better and avoid manual configuration?
 #define CONN_ID_LEN 16
 #define MAC_LEN 6
 #define MAX_CLIENTS 1024
@@ -43,7 +43,7 @@
 #define TURNOFF 0
 #define MOQ_PAYLOAD 1
 #define VP8_VIDEO_PAYLOAD 1
-#define SINGLE_STREAM_USAGE 1
+#define SINGLE_STREAM_USAGE 0
 
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
@@ -914,6 +914,7 @@ int tc_ingress(struct __sk_buff *skb)
                         uint16_t mrk = PORT_MARKER;
                         bpf_skb_store_bytes(skb, dst_port_off, &mrk, sizeof(mrk), 0);
 
+                        bpf_printk("Redirecting to client %d\n", i);
                         bpf_clone_redirect(skb, veth2_egress_ifindex, 0); // TODO: bpf_redirect or bpf_clone_redirect?
                 
                 }
@@ -1028,6 +1029,16 @@ int tc_egress(struct __sk_buff *skb)
         ip = (struct iphdr *)(eth + 1);
         udp = (struct udphdr *)(ip + 1);
         payload = (void *)(udp + 1);
+
+        bpf_printk("Payload size notice: %d\n", payload_size);
+        uint8_t limit = 23;
+        uint8_t prio_notice = payload_size == limit; // TODO: how to find out the priority notice packets?
+        if (prio_notice) {
+                uint8_t tmp;
+                bpf_probe_read_kernel(&tmp, sizeof(tmp), payload+limit-1);
+                bpf_printk("Priority notice packet: %02x\n", tmp);
+        }
+
 
         uint8_t quic_flags;
         long read_res = bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
@@ -1247,7 +1258,7 @@ int tc_egress(struct __sk_buff *skb)
 
                 // drop the packet if the prio is lower than the client prio drop limit
                 // TODO: turn back on once prio is set correctly again for streams
-                // if (packet_prio < client_prio_drop_limit) {
+                // if (packet_prio < 2) {//client_prio_drop_limit) {
                 //         bpf_printk("Packet prio lower than client prio Threshold\n");
                 //         return TC_ACT_SHOT;
                 // }
@@ -1438,7 +1449,9 @@ int tc_egress(struct __sk_buff *skb)
                                 // bpf_printk("[stream handling] Stream offset updated to %08x\n", new_stream_offset.value);
 
 
-                        } else { // if no off bit is set then it's the first frame of the stream
+                        } 
+                        // TODO: handle len bit not only inside off bit handling
+                        else { // if no off bit is set then it's the first frame of the stream
 
                                 // set an entry in client_stream_offset
                                 struct client_stream_offset_key_t stream_key = {
@@ -1462,7 +1475,7 @@ int tc_egress(struct __sk_buff *skb)
 
                         }
 
-                        if (MOQ_PAYLOAD) {
+                        if (!prio_notice && MOQ_PAYLOAD) {
 
                                 uint32_t stream_pl_off = frame_off;
                                 
@@ -1645,6 +1658,7 @@ int tc_egress(struct __sk_buff *skb)
                 } else if (IS_STREAM_FRAME(frame_type) && !SINGLE_STREAM_USAGE) {
                         // TODO: anything to do for stream frames with individual
                         // TODO: stream per packet?
+                        bpf_printk("Stream frame in individual packet (%d)\n", prio_notice);
                 } else if (IS_DATAGRAM_FRAME(frame_type)) {
                         // TODO: anything to do for datagram frames?
                 } else {
@@ -1652,6 +1666,7 @@ int tc_egress(struct __sk_buff *skb)
                         // if other frames should be passed on as well
                         // just add another "else if" above with the 
                         // appropriate frame type check
+                        bpf_printk("Non-stream frame and non-datagram frame\n");
                         return TC_ACT_SHOT;
                 }
 

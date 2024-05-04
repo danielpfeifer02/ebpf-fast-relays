@@ -28,6 +28,7 @@ func generateQUICConfig() *quic.Config {
 func mainConfig() {
 	crypto_turnoff.CRYPTO_TURNED_OFF = true
 	packet_setting.ALLOW_SETTING_PN = true
+	packet_setting.EXCHANGE_PRIOS = false
 	// packet_setting.OMIT_CONN_ID_RETIREMENT = true
 
 	f, err := os.Create("./build/log.txt")
@@ -41,7 +42,9 @@ func mainConfig() {
 	// os.Setenv("QLOGDIR", "./qlog")
 }
 
-func serverConfig() {}
+func serverConfig() {
+	packet_setting.IS_CLIENT = false
+}
 
 func relayConfig() {
 	// // We only want these functions to be executed in the relay
@@ -54,11 +57,13 @@ func relayConfig() {
 		packet_setting.AckTranslationDeletionBPFHandler = deleteAckPacketNumberTranslation
 		packet_setting.SET_ONLY_APP_DATA = true // TODO: fix in prio_packs repo?
 	}
+	packet_setting.IS_CLIENT = false
 }
 
 func clientConfig() {
 	os.Setenv("QLOGDIR", "./qlog")
 	packet_setting.PRINT_PACKET_RECEIVING_INFO = false
+	packet_setting.IS_CLIENT = true
 }
 
 // // Setup a bare-bones TLS config for the server

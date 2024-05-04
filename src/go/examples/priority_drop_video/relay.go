@@ -89,6 +89,9 @@ func relay() error {
 				return
 			}
 			fmt.Println("Read", n, "bytes from track")
+			if n == 0 {
+				continue
+			}
 
 			if relay_playing {
 				fmt.Println("Received", n, "bytes")
