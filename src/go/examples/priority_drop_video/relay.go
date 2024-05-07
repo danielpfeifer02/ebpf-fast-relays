@@ -80,6 +80,8 @@ func relay() error {
 		go relay_player(player_chan)
 	}
 
+	var cache [][]byte // deque.Deque[[]byte]
+
 	go func(sub *moqtransport.ReceiveSubscription, player_chan chan []byte) {
 		for {
 			buf := make([]byte, 64_000)
@@ -88,7 +90,7 @@ func relay() error {
 				log.Printf("error on read: %v", err)
 				return
 			}
-			fmt.Println("Read", n, "bytes from track")
+			// fmt.Println("Read", n, "bytes from track")
 			if n == 0 {
 				continue
 			}
@@ -97,6 +99,14 @@ func relay() error {
 				fmt.Println("Received", n, "bytes")
 				player_chan <- buf[:n]
 				fmt.Println("Sent", n, "bytes to player")
+			}
+
+			if relay_caching {
+				// cache.PushBack(buf[:n])
+				cache = append(cache, buf[:n])
+				if len(cache) > 100 {
+					cache = cache[1:] // TODO: handle with deque?
+				}
 			}
 
 			if relay_passing_on {
@@ -141,6 +151,25 @@ func relay() error {
 	if err != nil {
 		return err
 	}
+
+	go func(conn quic.Connection) {
+		if !relay_printing_rtt {
+			return
+		}
+		for {
+			stats := conn.GetRTTStats()
+
+			fmt.Println("Min RTT:", stats.MinRTT.Milliseconds())
+			fmt.Println("Latest RTT:", stats.LatestRTT.Milliseconds())
+			fmt.Println("Smoothed RTT:", stats.SmoothedRTT.Milliseconds())
+			fmt.Println("Max RTT Variance:", stats.RTTVariance.Milliseconds())
+			fmt.Println("Max Ack Delay:", stats.MaxAckDelay.Milliseconds())
+			fmt.Println("\n-----------------------------------------\n")
+
+			time.Sleep(1 * time.Second)
+		}
+	}(conn)
+
 	server_sess, err := moqtransport.NewServerSession(quicmoq.New(conn), true)
 	if err != nil {
 		return err
@@ -178,22 +207,46 @@ func relay() error {
 		server_sub.Accept()
 		log.Printf("subscription accepted")
 
+		// cache_copy := cache.Copy()
+		// send cached data
+		if relay_caching {
+			// for cache_copy.Len() > 0 {
+			// 	buf := cache_copy.PopFront().([]byte)
+			for _, buf := range cache {
+				stream, err := server_sub.NewObjectStream(0, 0, 0)
+				if err != nil {
+					log.Printf("error on NewObjectStream: %v", err)
+					panic(err)
+				}
+				_, err = stream.Write(buf)
+				if err != nil {
+					log.Printf("error on write: %v", err)
+					panic(err)
+				}
+				err = stream.Close()
+				if err != nil {
+					log.Printf("error on close: %v", err)
+					panic(err)
+				}
+			}
+		}
+
 		subscriptionList = append(subscriptionList, server_sub)
 
-		// Increment client counter
-		if bpf_enabled {
-			client_ctr := uint32(0)
-			err = number_of_clients.Lookup(uint32(0), &client_ctr)
-			if err != nil {
-				panic(err)
-			}
-			client_ctr++
-			err = number_of_clients.Update(uint32(0), client_ctr, 0)
-			if err != nil {
-				panic(err)
-			}
-			fmt.Println("updated number of clients")
-		}
+		// // Increment client counter
+		// if bpf_enabled {
+		// 	client_ctr := uint32(0)
+		// 	err = number_of_clients.Lookup(uint32(0), &client_ctr)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
+		// 	client_ctr++
+		// 	err = number_of_clients.Update(uint32(0), client_ctr, 0)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
+		// 	fmt.Println("updated number of clients")
+		// }
 
 	}
 }
