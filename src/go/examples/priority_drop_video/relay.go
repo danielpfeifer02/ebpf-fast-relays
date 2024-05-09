@@ -233,20 +233,20 @@ func relay() error {
 
 		subscriptionList = append(subscriptionList, server_sub)
 
-		// // Increment client counter
-		// if bpf_enabled {
-		// 	client_ctr := uint32(0)
-		// 	err = number_of_clients.Lookup(uint32(0), &client_ctr)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		// 	client_ctr++
-		// 	err = number_of_clients.Update(uint32(0), client_ctr, 0)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		// 	fmt.Println("updated number of clients")
-		// }
+		// Increment client counter
+		if bpf_enabled {
+			client_ctr := uint32(0)
+			err = number_of_clients.Lookup(uint32(0), &client_ctr)
+			if err != nil {
+				panic(err)
+			}
+			client_ctr++
+			err = number_of_clients.Update(uint32(0), client_ctr, 0)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("updated number of clients")
+		}
 
 	}
 }

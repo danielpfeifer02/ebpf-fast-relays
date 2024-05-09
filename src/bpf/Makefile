@@ -1,13 +1,20 @@
 TC = tc_t # tc_poc
-TC_PATH = tc
+TC_PATH = tc/main
 BPF_TC = ${TC_PATH}/${TC:=_handling}
-BPF_TC_C = ${BPF_TC:=.c}
-BPF_TC_OBJ = ${BPF_TC_C:.c=.o}
+# BPF_TC_OBJ = ${BPF_TC:=.o}
+TC_C_FILES := $(wildcard ${TC_PATH}/*.c)
+BPF_TC_OBJ := $(patsubst ${TC_PATH}/%.c,${TC_PATH}/%.o,$(TC_C_FILES))
+
+# TODO: make more resilient to changes?
+BPF_TC_OBJ_ING_CLIENT := ${TC_PATH}/tc_ingress_client_side.o
+BPF_TC_OBJ_ING_SERVER := ${TC_PATH}/tc_ingress_server_side.o
+BPF_TC_OBJ_EG_CLIENT := ${TC_PATH}/tc_egress_client_side.o
+
 
 BPF_TC_PINNED_PATH := /sys/fs/bpf/$(TC)
 
 TC_IN_TO_EG = tc_poc
-TC_IN_TO_EG_PATH = tc
+TC_IN_TO_EG_PATH = tc/proof_of_concept_redirection
 BPF_TC_IN_TO_EG = ${TC_IN_TO_EG_PATH}/${TC_IN_TO_EG:=_handling}
 BPF_TC_IN_TO_EG_C = ${BPF_TC_IN_TO_EG:=.c}
 BPF_TC_IN_TO_EG_OBJ = ${BPF_TC_IN_TO_EG_C:.c=.o}
@@ -39,12 +46,12 @@ poc: $(BPF_TC_IN_TO_EG_OBJ) tc_poc
 	fi
 	go build -o ${INGRESS_TO_EGRESS_PATH}/build ${INGRESS_TO_EGRESS_PATH}/main.go
 
-tc_main: $(BPF_TC_OBJ)
+tc_main:
 	tc qdisc add dev ${DEV_IN} clsact
 	tc qdisc add dev ${DEV_EG} clsact
-	tc filter add dev ${DEV_IN} ingress bpf da obj ${BPF_TC_OBJ} sec ingress
-	tc filter add dev ${DEV_EG} egress bpf da obj ${BPF_TC_OBJ} sec egress
-	tc filter add dev ${DEV_EG} ingress bpf da obj ${BPF_TC_OBJ} sec ingress_from_client
+	tc filter add dev ${DEV_IN} ingress bpf da obj ${BPF_TC_OBJ_ING_SERVER} sec ingress
+	tc filter add dev ${DEV_EG} egress bpf da obj ${BPF_TC_OBJ_EG_CLIENT} sec egress
+	tc filter add dev ${DEV_EG} ingress bpf da obj ${BPF_TC_OBJ_ING_CLIENT} sec ingress_from_client
 	tc filter show dev ${DEV_IN} ingress
 	tc filter show dev ${DEV_EG} egress
 
@@ -81,7 +88,7 @@ $(BPF_TC_IN_TO_EG_OBJ): ${TC_IN_TO_EG_PATH}/%.o: ${TC_IN_TO_EG_PATH}/%.c
 clean:
 	sudo rm -f $(BPF_TC_PINNED_PATH)
 
-	@if [ -e "$(BPF_TC_OBJ)" ]; then \
+	@if [ -e "$(BPF_TC_OBJ_ING_SERVER)" ]; then \
 		echo "Deleting TC filters and maps"; \
 		tc filter del dev ${DEV_EG} egress; \
 		tc filter del dev ${DEV_IN} ingress; \
