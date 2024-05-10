@@ -41,6 +41,7 @@
 #define VALUE_NEEDED 1
 
 #define TURNOFF 0
+#define PRIO_DROP 0
 #define MOQ_PAYLOAD 1
 #define VP8_VIDEO_PAYLOAD 1
 #define SINGLE_STREAM_USAGE 0

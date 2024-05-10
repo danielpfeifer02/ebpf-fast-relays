@@ -1,140 +1,134 @@
 #include "tc_common.c"
 
+/*
+ - This program will intercept every packet going from the relay to the client.
+ - This includes the packets that have been redirected from ingress to egress
+ - without going through userspace.
+*/
+
 __section("egress")
 int tc_egress(struct __sk_buff *skb)
 {
 
-        // Before redirecting we need to: 
-
-        //      1) change src ethernet 
-        //      2) change dst ethernet
-        //      3) change src ip
-        //      4) change dst ip
-        //      5) change dst port (or set it in code)
-        //      6) change connection id (setup maps for that)
-
-        // TODO: also filter for direction so that connection establishment from client is not affected
-
+        // Get data pointers from the buffer.
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
 
+        // If the packet is too small to contain the headers we expect
+        // we can directly pass it through.
         if (data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) > data_end) {
                 bpf_printk("Not enough data\n");
                 return TC_ACT_OK; // Not enough data
         }
 
-        // Load ethernet header
+        // Load ethernet header.
         struct ethhdr *eth = (struct ethhdr *)data;
 
-        // Load IP header
+        // Load IP header.
         struct iphdr *ip = (struct iphdr *)(eth + 1);
 
-        // Check if the packet is UDP
+        // TODO: is ICMP needed?
+        // If the packet is not a UDP packet we can pass it through
+        // since QUIC is built on top of UDP.
         if (ip->protocol != IPPROTO_UDP && ip->protocol != IPPROTO_ICMP) {
                 bpf_printk("Not UDP\n");
                 return TC_ACT_OK;
         }
 
-        // Load UDP header
+        // Load UDP header.
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
-        // Check if the packet is QUIC
+        // If the packet is not sent from the port where our relay is
+        // listening we can pass it through since the packet is from a 
+        // different program.
         if (udp->source != RELAY_PORT) {
                 bpf_printk("Not QUIC\n");
                 return TC_ACT_OK;
         }
 
+        // We need a separate indicator if the packet has come from userspace
+        // so that we can, in case the packet is QUIC, do the packet number 
+        // translation to avoid protocol violations / disturbances caused by
+        // wrong packet numbers. This could happen since the userspace effectively
+        // does not know about the packets that are redirected from ingress.
         uint8_t user_space = 0;
 
-        // UDP checksum needs to be 0
+        // In case the packet was redirected from ingress the packet number is always
+        // set to zero.
         if (udp->check != 0) {
                 bpf_printk("Checksum not 0 (%d)\n", udp->check);
-                // return TC_ACT_OK;
                 user_space = 1;
         }
 
-        // check that the UDP dst port is the port marker
+        // In case the packet was redirected from ingress the destination port is always
+        // set to a special port marker.
         if (udp->dest != PORT_MARKER) {
                 bpf_printk("Not the correct port (%d)\n", udp->dest);
-                // return TC_ACT_OK;
                 user_space = 1;
         }
 
-        // ! TODO: are there quic icmp packets? looks like it in wireshark
+        // TODO: needed? Wireshark shows ICMP packets that also have a QUIC payload? 
+        // Since QUIC can also send ICMP packets we need to consider them as well.
         if (ip->protocol == IPPROTO_ICMP) {
                 bpf_printk("ICMP packet\n");
                 user_space = 1;
         }
 
-        // Load UDP payload
+        // Load UDP payload as well as UDP payload size.
         void *payload = (void *)(udp + 1);
         uint32_t payload_size = ntohs(udp->len) - sizeof(*udp);
 
+        // If the payload is not in the buffer we need to pull it in.
         if ((void *)payload + payload_size > data_end) {
 
-                // bpf_printk("[ingress startup tc] payload is not in the buffer");
-
-                // We need to use bpf_skb_pull_data() to get the rest of the packet
+                // We need to use bpf_skb_pull_data() to get the rest of the packet.
+                // If the pull fails we can pass the packet through.
                 if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
                         bpf_printk("[ingress startup tc] failed to pull data");
                         return TC_ACT_OK;
                 }
+
+                // Once we have pulled the data we need to update the pointers.
                 data_end = (void *)(long)skb->data_end;
                 data = (void *)(long)skb->data;
-        
+                eth = (struct ethhdr *)data;
+                ip = (struct iphdr *)(eth + 1);
+                udp = (struct udphdr *)(ip + 1);
+                payload = (void *)(udp + 1);
         }
 
-        // ! TODO: does this maybe cause the error with the 0x00 quic flags?
-        // relaod pointers
-        eth = (struct ethhdr *)data;
-        ip = (struct iphdr *)(eth + 1);
-        udp = (struct udphdr *)(ip + 1);
-        payload = (void *)(udp + 1);
+        // In case the priorities of a stream are exchanged on the stream when creating
+        // it we might want to catch such a (likely 1 byte) payload and directly pass
+        // it on to the client (considering packet number translation of course).
 
-        bpf_printk("Payload size notice: %d\n", payload_size);
-        uint8_t limit = 23;
-        uint8_t prio_notice = payload_size == limit; // TODO: how to find out the priority notice packets?
-        if (prio_notice) {
-                uint8_t tmp;
-                bpf_probe_read_kernel(&tmp, sizeof(tmp), payload+limit-1);
-                bpf_printk("Priority notice packet: %02x\n", tmp);
-        }
-
-
+        // We load the first byte of the QUIC payload to determine the header form.
         uint8_t quic_flags;
         long read_res = bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
-        if (read_res < 0) {
+        if (read_res < 0) { // TODO: make all reads save
                 bpf_printk("ERROR: Could not read quic flags\n");
                 return TC_ACT_OK;
         }
         uint8_t header_form = (quic_flags & 0x80) >> 7;
 
-        // redirecting short header packets
+        // The redirected packet is a short header
         if (header_form == 0) {
 
                 // When a short header packet arrives at the egress interface
-                // which is sent from user space we update the packet number
-                // ! TODO seems to have fixed the error after prio dropping
+                // which is sent from user space we only update the packet number
                 if (user_space) {
 
-                        // read dst ip and port
+                        // Read dst ip and port.
                         uint32_t dst_ip_addr;
                         bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
                         uint16_t dst_port;
                         bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
 
-                        // now we have to update the packet number
+                        // Create key to update the client information
                         struct client_info_key_t key = {
                                 .ip_addr = dst_ip_addr,
                                 .port = dst_port,
                         };
 
-                        // // struct pn_value_t pn_value = {
-                        // //         .packet_number = old_pn + 1,
-                        // //         .changed = 0,
-                        // // };
-                        // // bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
-                        
                         // Here we translate the packet number of the outgoing packet to 
                         // the packet number which will actually be sent out (the one in
                         // the bpf map)
@@ -143,69 +137,56 @@ int tc_egress(struct __sk_buff *skb)
                         uint8_t byte;
                         uint32_t pn_off_from_quic = 1 /* Short header bits */ + CONN_ID_LEN;
 
-                        // bpf_printk("zero: %02x\n", quic_flags); // ! TODO: sometimes 0x00????
-
-                        // ^ TODO: turn into loop
+                        // For some reason the bpf verifier does not like this
+                        // whole thing being put into a loop.
                         if (pn_len >= 1) {
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic);
                                 old_pn = byte;
-                                // bpf_printk("Old packet number (zero? 1): %08x %02x\n", old_pn, byte);
                         }
                         if (pn_len >= 2) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 1);
                                 old_pn = old_pn | byte;
-                                // bpf_printk("Old packet number (zero? 2): %08x\n", old_pn);
                         }
                         if (pn_len >= 3) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 2);
                                 old_pn = old_pn | byte;
-                                // bpf_printk("Old packet number (zero? 3): %08x\n", old_pn);
                         }
                         if (pn_len == 4) {
                                 old_pn = old_pn << 8;
                                 bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 3);
                                 old_pn = old_pn | byte;
-                                // bpf_printk("Old packet number (zero? 4): %08x\n", old_pn);
-                        }
-                        // ! TODO: why are there so many 0 pns???
-                        if (old_pn == 0) {
-                                bpf_printk("Packet number is zero (len %d)\n", pn_len);
                         }
 
-                        // long res = bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
-                        //                                                 + 1 /* Short header bits */
-                        //                                                 + CONN_ID_LEN /* Connection ID */);
+                        // Here we read the old packer number for the connection in question.
+                        // We will store that one in the translation map so that the userspace
+                        // can retranslate any incoming ACKs.
+                        bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
+                                                                        + 1 /* Short header bits */
+                                                                        + CONN_ID_LEN /* Connection ID */);
+                        old_pn = ntohs(old_pn);
 
-                        // if (res != 0) {
-                        //         bpf_printk("Could not read packet number\n");
-                        //         return TC_ACT_OK;
-                        // }
-
-                        // old_pn = ntohs(old_pn);
-
-                        // if (old_pn == 0) { // TODO: why does this happen?
-                        //         uint16_t ipcheck;
-                        //         bpf_probe_read_kernel(&ipcheck, sizeof(ipcheck), &ip->check);
-                        //         bpf_printk("packet number is zero? ip check: %04x\n", ipcheck);
-                        //         return TC_ACT_OK;
-                        // }
-                        // ^
-
-                        // lookup the next packet number for a connection
+                        // Now we lookup the next packet number for the connection.
                         uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key);
                         uint32_t zero = 0;
+                        // If there is no packet number found it is the first request for that
+                        // connection so we create a new entry of zero in the map.
                         if (new_pn == NULL) {
                                 bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
                                 new_pn = &zero;
-                                bpf_printk("No packet number found. Setting to zero\n");
                         }
                         
-                        // update the packet number in the packet
+                        // Saving the offset of the packetnumber within the short header.
                         uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
-                        // uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
-                        // bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0); // heree
+                        
+                        // Here we make sure that we use all the bytes that were used for the packet number
+                        // in the initial packet (and only those).
+                        // TODO: this might cause a problem if the packet number length e.g. is still 
+                        // TODO: two bytes for the userspace packet but needs more (i.e. something like
+                        // TODO: four) bytes to store the packet number that is acutally used. This could
+                        // TODO: e.g. be circumvented by always using four bytes, or by telling userspace 
+                        // TODO: the needed size.
                         uint8_t new_pn_bytes[4];
                         if (pn_len == 1) {
                                 new_pn_bytes[0] = *new_pn;
@@ -225,141 +206,110 @@ int tc_egress(struct __sk_buff *skb)
                                 new_pn_bytes[2] = (*new_pn & 0x0000ff00) >> 8;
                                 new_pn_bytes[3] = *new_pn & 0x000000ff;
                         }
-                        // ! TODO: why is the new pn SMALLER than the old one???? is it still?
                         bpf_skb_store_bytes(skb, pn_off, new_pn_bytes, pn_len, 0);
                         
 
-                        // we also need to save the mapping for later
+                        // We create a key for the mapping of kernel- to user-packet-number.
                         struct client_pn_map_key_t pn_key = {
                                 .key = key,
                                 .packet_number = *new_pn,
                         };
-                        // bpf_printk("Old packet number: %08x\n", old_pn);
                         bpf_map_update_elem(&connection_pn_translation, &pn_key, &old_pn, BPF_ANY);
 
-                        // bpf_printk("Short header (user space) pn mapping change: %d -> %d\n", old_pn, *new_pn);
-
-                        // increment the packet number of the connection
+                        // Increment the kernel packet number of the connection and update the
+                        // internal counter.
                         *new_pn = *new_pn + 1;
                         bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
-                        // bpf_printk("Let packet through from user space\n");
                         return TC_ACT_OK;
                 }
 
-
-
-                // ! JUST FOR TESTING
-                // uint32_t tmepory = 0;
-                // uint32_t *other_tempory = bpf_map_lookup_elem(&packet_counter, &tmepory);
-                // if (other_tempory == NULL || *other_tempory != 1) {
-                //         bpf_printk("Packet counter drop\n");
-                //         return TC_ACT_SHOT;
-                // }
-                if (TURNOFF) {
-                        bpf_printk("Dropping because of turn off\n");
-                        return TC_ACT_OK;
-                }
-
-
-                // bpf_printk("Received redirected short header!\n");
-
-                // // get packet_counter
-                // uint32_t zero = 0;
-                // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
-
-                // if (pack_ctr == NULL) {
-                //         bpf_printk("No packet counter found\n");
-                //         return TC_ACT_OK;
-                // }
-
-                uint32_t pack_ctr;
+                // We retreive the index that has been stored in the connection id
+                // at ingress. The index is the second byte of the connection id.
+                uint32_t index;
                 void *index_off = payload + 1 /* Short header flags */ + 1 /* Prio in conn id */;
-                bpf_probe_read_kernel(&pack_ctr, sizeof(pack_ctr), index_off);
-                // bpf_printk("Packet counter: %d\n", pack_ctr);
+                bpf_probe_read_kernel(&index, sizeof(index), index_off);
 
-                // get pack_ctr-th client data
+                // Now we get the client information for the index-th client.
+                // This assumes that we can linearly access the clients in the map.
                 struct client_info_t *value;
 
-                // TODO this assumes that they are linear in the map (verify)
-                // TODO remove dependency on packet_counter
-                // TODO  is it made sure that the client ids are always sequential?
-                value = bpf_map_lookup_elem(&client_data, &pack_ctr);
+                // TODO: this might cause errors if we allow removal of clients
+                // TODO: because then the clients are no longer linearly accessible.
+                value = bpf_map_lookup_elem(&client_data, &index);
+                // In case there is no index-th client, just drop the packet
+                // as it is an unnecessary duplication.
                 if (value == NULL) {
-                        bpf_printk("No client data found for packet ctr %d\n", pack_ctr);
+                        bpf_printk("No client data found for redirection index %d\n", index);
                         return TC_ACT_SHOT;
                 }
 
-
-                // if the connection with this client is not yet established
-                // drop the packet
-                // load connection_established map                
+                // Create the key to access the client information.               
                 struct client_info_key_t key = {
                         .ip_addr = value->dst_ip_addr,
                         .port = value->dst_port,
                 };
 
-                // ! TODO: fix within go code
-                // uint8_t *conn_est = bpf_map_lookup_elem(&connection_established, &key);
-                // if (conn_est == NULL) {
-                //         bpf_printk("No connection established found for %d %d\n", key.ip_addr, key.port);
-                //         return TC_ACT_SHOT;
-                // }
-                // if (*conn_est == 0) {
-                //         bpf_printk("Connection not established\n");
-                //         return TC_ACT_SHOT;
-                // }
-
-
+                // The first byte of the connection id is the priority of the packet.
+                // We load the priority and in case priority-drop is set we drop / pass
+                // the packet based on the priority.
                 uint8_t client_prio_drop_limit = value->priority_drop_limit;
                 uint8_t packet_prio; 
                 bpf_probe_read_kernel(&packet_prio, sizeof(packet_prio), payload + 1 /* Short header flags */);
 
-                // bpf_printk("Threshold: %02x - Packet prio: %02x\n", client_prio_drop_limit, packet_prio);
+                if (PRIO_DROP && packet_prio < client_prio_drop_limit) {
+                        bpf_printk("Packet priority lower than client priority threshold!\n");
+                        return TC_ACT_SHOT;
+                }
 
-                // drop the packet if the prio is lower than the client prio drop limit
-                // TODO: turn back on once prio is set correctly again for streams
-                // if (packet_prio < 2) {//client_prio_drop_limit) {
-                //         bpf_printk("Packet prio lower than client prio Threshold\n");
-                //         return TC_ACT_SHOT;
-                // }
 
-                // ! Generally this would be the way to go but that seems to be too
-                // ! complex for the bpf verifier.
-                // ! For now this should work since the quic-go-prio-packs impl ensures
-                // ! that stream frames are always send in a separate packet
-                // void *stream_start;
-                // get_stream_frame_start(payload, payload_size, &stream_start);
-                // if (stream_start == NULL) {
-                //         bpf_printk("No stream frame found\n");
-                //         return TC_ACT_SHOT;
-                // }
-                // // set the payload to the start of the stream frame
-                // // since we only care about the stream frame
-                // payload = stream_start;
+                // Generally we would want to find the stream frames in the QUIC payload
+                // generically by using a function like the following, but this seems to
+                // be too complex for the bpf verifier to handle.
+                // For now it suffices to assume the first frame is a stream frame since
+                // the underlying QUIC implementation will ensure this.
 
-                // if the frame is a stream frame we need to update the stream offset
+                // Set the payload to the start of the stream frame
+                // since we only care about the stream frame
                 /*
-                STREAM Frame {
-                  Type (i) = 0x08..0x0f,
-                  Stream ID (i),
-                  [Offset (i)],
-                  [Length (i)],
-                  Stream Data (..),
-                }                        
+                void *stream_start;
+                get_stream_frame_start(payload, payload_size, &stream_start);
+                if (stream_start == NULL) {
+                        bpf_printk("No stream frame found\n");
+                        return TC_ACT_SHOT;
+                }
+                payload = stream_start;
                 */
+                
+               // To be able to access the payload we need to know the length of the packet number.
+               // Then we can read the frame type and determine if it is a stream frame or a datagram frame.
                 uint8_t pn_len = (quic_flags & 0x03) + 1;
                 uint8_t frame_type;
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
                 bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
 
-                // TODO: separation between single and multiple stream usage needed?
-                // TODONEXT: why FLOW_CONTROL_ERROR?
+                // In case we have a stream frame and the stream is used for multiple packets
+                // (i.e. not one stream per packet) we need to make some extra considerations 
+                // like handling the stream offset.
+                // TODO: distinction single vs. multiple stream usage needed?
+                // TODO: FLOW_CONTROL_ERROR still occuring?
                 if (IS_STREAM_FRAME(frame_type) && SINGLE_STREAM_USAGE) {
+
+                        /*
+                        STREAM Frame {
+                        Type (i) = 0x08..0x0f,
+                        Stream ID (i),
+                        [Offset (i)],
+                        [Length (i)],
+                        Stream Data (..),
+                        }                        
+                        */
                         // TODO: update stream offset
                         // TODO: for this add a map which stores the stream offset for each stream! 
                         // TODO: how to identify the stream? -> stream id in the packet
 
+                        // We need the bits of the header that indicate if the offset 
+                        // and length are present.
                         uint8_t off_bit_set = frame_type & 0x04;
                         uint8_t len_bit_set = frame_type & 0x02;
                         // uint8_t fin_bit_set = frame_type & 0x01;
@@ -368,35 +318,15 @@ int tc_egress(struct __sk_buff *skb)
 
                         uint32_t stream_id_off = frame_off + 1 /* Frame type */;
                         struct var_int stream_id = {0};
-                        // read_var_int(payload + stream_id_off, &stream_id_off, VALUE_NEEDED); // TODO: fix
-                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off);
-                        stream_id.len = 1 << (byte >> 6);
-                        stream_id.value = byte & 0x3f; 
-                        for (int i=1; i<8; i++) {
-                                if (i >= stream_id.len) {
-                                        break;
-                                }
-                                stream_id.value = stream_id.value << 8;
-                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_id_off + i);
-                                stream_id.value = stream_id.value | byte;
-                        }
+                        read_var_int(payload + stream_id_off, &stream_id, VALUE_NEEDED);
 
+                        // ^ TODO: clean up vvvvvv
                         if (off_bit_set) {
 
+                                // if the offset field is present we read it.
                                 uint32_t stream_offset_off = stream_id_off + bounded_var_int_len(stream_id.len);
                                 struct var_int stream_offset = {0};
-                                // read_var_int(payload + stream_offset_off, &stream_offset, VALUE_NEEDED); // TODO: fix
-                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_offset_off);
-                                stream_offset.len = 1 << (byte >> 6);
-                                stream_offset.value = byte & 0x3f; 
-                                for (int i=1; i<8; i++) {
-                                        if (i >= stream_offset.len) {
-                                                break;
-                                        }
-                                        stream_offset.value = stream_offset.value << 8;
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_offset_off + i);
-                                        stream_offset.value = stream_offset.value | byte;
-                                }
+                                read_var_int(payload + stream_offset_off, &stream_offset, VALUE_NEEDED);
 
                                 struct client_stream_offset_key_t stream_key = {
                                         .key = key,
@@ -404,22 +334,15 @@ int tc_egress(struct __sk_buff *skb)
                                 };
                                 
                                 uint64_t data_length = 0;
+
+                                // If the length field is present we read it.
+                                // TODO: this should be outside of off_bit_set handling
+                                // TODO: since offset and length are independent
                                 if (len_bit_set) {
 
                                         struct var_int stream_len = {0};
                                         uint32_t stream_len_off = stream_offset_off + bounded_var_int_len(stream_offset.len);
-                                        // read_var_int(payload + stream_len_off, &stream_len, VALUE_NEEDED); // TODO: fix
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_len_off);
-                                        stream_len.len = 1 << (byte >> 6);
-                                        stream_len.value = byte & 0x3f;
-                                        for (int i=1; i<8; i++) {
-                                                if (i >= stream_len.len) {
-                                                        break;
-                                                }
-                                                stream_len.value = stream_len.value << 8;
-                                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_len_off + i);
-                                                stream_len.value = stream_len.value | byte;
-                                        }
+                                        read_var_int(payload + stream_len_off, &stream_len, VALUE_NEEDED);                                        
                                         data_length = stream_len.value;
                                         stream_offset_off += bounded_var_int_len(stream_len.len);
 
@@ -431,8 +354,6 @@ int tc_egress(struct __sk_buff *skb)
                                                                 - bounded_var_int_len(stream_id.len)
                                                                 - bounded_var_int_len(stream_offset.len);
                                 }
-
-                                // bpf_printk("Stream data length: %d\n", data_length);
 
                                 struct var_int *old_stream_offset = bpf_map_lookup_elem(&client_stream_offset, &stream_key);
                                 struct var_int zero = {
@@ -536,7 +457,10 @@ int tc_egress(struct __sk_buff *skb)
 
                         }
 
-                        if (!prio_notice && MOQ_PAYLOAD) {
+                        if (MOQ_PAYLOAD) {
+
+                                // Get the beginning of the stream payload after the stream frame header.
+                                // This is where the MoQ data starts.
 
                                 uint32_t stream_pl_off = frame_off;
                                 
@@ -642,11 +566,10 @@ int tc_egress(struct __sk_buff *skb)
                                         bpf_probe_read_kernel(&vp8_pd, sizeof(vp8_pd), stream_pl);
                                         stream_pl += 1;
 
-                                        uint8_t vp8_xb, vp8_nb, vp8_sb, vp8_pid;
-                                        vp8_xb = (vp8_pd >> 7) & 0x01;
-                                        vp8_nb = (vp8_pd >> 6) & 0x01;
-                                        vp8_sb = (vp8_pd >> 4) & 0x01;
-                                        vp8_pid = vp8_pd & 0x07;
+                                        uint8_t vp8_xb = (vp8_pd >> 7) & 0x01;
+                                        // uint8_t vp8_nb = (vp8_pd >> 6) & 0x01;
+                                        uint8_t vp8_sb = (vp8_pd >> 4) & 0x01;
+                                        uint8_t vp8_pid = vp8_pd & 0x07;
 
                                         // The payload is the beginning of a new frame
                                         // iff the S bit is set and PID is 0
@@ -716,168 +639,139 @@ int tc_egress(struct __sk_buff *skb)
                         
                         }
 
+                        // ^ TODO: clean up ^^^^^^
+
                 } else if (IS_STREAM_FRAME(frame_type) && !SINGLE_STREAM_USAGE) {
                         // TODO: anything to do for stream frames with individual
                         // TODO: stream per packet?
-                        bpf_printk("Stream frame in individual packet (%d)\n", prio_notice);
                 } else if (IS_DATAGRAM_FRAME(frame_type)) {
                         // TODO: anything to do for datagram frames?
                 } else {
-                        // For now we only pass on stream frames
-                        // if other frames should be passed on as well
+                        // For now we only pass on stream frames and datagram 
+                        // frames. If other frames should be passed on as well
                         // just add another "else if" above with the 
-                        // appropriate frame type check
+                        // appropriate frame type check.
                         bpf_printk("Non-stream frame and non-datagram frame\n");
                         return TC_ACT_SHOT;
                 }
 
+                // We have read the client information and can now change the packet
+                // such that it is correctly sent to the client.
 
-                // set src_mac to value->src_mac
+                // For the mac addresses it is enough to use value->mac
+                // instead of &value->mac mac is saved as an array.
+                
+                // Set src_mac to value->src_mac.
                 uint32_t src_mac_off = 6 /* DST MAC */;
-                bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0); // TODO &value->src_mac?
+                bpf_skb_store_bytes(skb, src_mac_off, value->src_mac, MAC_LEN, 0);
 
-                // set dst_mac to value->dst_mac
+                // Set dst_mac to value->dst_mac.
                 uint32_t dst_mac_off = 0;
                 bpf_skb_store_bytes(skb, dst_mac_off, value->dst_mac, MAC_LEN, 0);
 
-                // ^ TODO turn ip addr setting to function: https://elixir.bootlin.com/linux/v4.9/source/samples/bpf/tcbpf1_kern.c#L51
-                // set src_ip to value->src_ip_addr
+                // TODO: turn ip addr setting to function: https://elixir.bootlin.com/linux/v4.9/source/samples/bpf/tcbpf1_kern.c#L51
+                // Set src_ip to value->src_ip_addr.
                 uint32_t src_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */;
                 uint32_t old_src_ip;
                 bpf_probe_read_kernel(&old_src_ip, sizeof(old_src_ip), &ip->saddr);
                 bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_src_ip, value->src_ip_addr, sizeof(value->src_ip_addr));
                 bpf_skb_store_bytes(skb, src_ip_off, &value->src_ip_addr, sizeof(value->src_ip_addr), 0);
 
-                // set dst_ip to value->dst_ip_addr
+                // TODO: turn ip addr setting to function: https://elixir.bootlin.com/linux/v4.9/source/samples/bpf/tcbpf1_kern.c#L51
+                // Set dst_ip to value->dst_ip_addr.
                 uint32_t dst_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */ +  4 /* SRC IP */;
                 uint32_t old_dst_ip;
                 bpf_probe_read_kernel(&old_dst_ip, sizeof(old_dst_ip), &ip->daddr);
                 bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_dst_ip, value->dst_ip_addr, sizeof(value->dst_ip_addr));
                 bpf_skb_store_bytes(skb, dst_ip_off, &value->dst_ip_addr, sizeof(value->dst_ip_addr), 0);
-                // ^
 
-                // set src_port to value->src_port
+                // Set src_port to value->src_port.
                 uint16_t src_port_tmp = value->src_port;
                 uint32_t src_port_tmp_off = sizeof(struct ethhdr) + sizeof(struct iphdr);
                 bpf_skb_store_bytes(skb, src_port_tmp_off, &src_port_tmp, sizeof(src_port_tmp), 0);
 
-                // set dst_port to value->dst_port
+                // Set dst_port to value->dst_port.
                 uint16_t dst_port_tmp = value->dst_port;
                 uint32_t dst_port_tmp_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 2 /* SRC PORT */;
                 bpf_skb_store_bytes(skb, dst_port_tmp_off, &dst_port_tmp, sizeof(dst_port_tmp), 0);
 
-                // set connection_id to value->connection_id
+                // Set connection_id to value->connection_id.
                 uint32_t conn_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */;
                 bpf_skb_store_bytes(skb, conn_id_off, value->connection_id, CONN_ID_LEN, 0);
-
-                // TODO get rid of packet_counter and store lut index in packet (possible bc of clone_redirect?)
-                // set pack_ctr to pack_ctr + 1 and write it back
-                // *pack_ctr = *pack_ctr + 1;
-                // bpf_map_update_elem(&packet_counter, &zero, pack_ctr, BPF_ANY);
-
-
-                // // setting the packet number so that user space can update it
-                // struct client_info_key_t key = {
-                //         .ip_addr = value->dst_ip_addr,
-                //         .port = value->dst_port,
-                // };
-                // struct pn_value_t *old_pn = bpf_map_lookup_elem(&client_pn, &key);
-                // if (old_pn == NULL) {
-                //         bpf_printk("No packet number found\n");
-                //         return TC_ACT_OK;
-                // }
-                // struct pn_value_t pn_value = {
-                //         .packet_number = old_pn->packet_number + 1, // // TODO: this should not be +100
-                //         .changed = 1,
-                // };
-                // bpf_map_update_elem(&client_pn, &key, &pn_value, BPF_ANY);
-
-                // // // TODO: i thought this might fix the problem of not receiving at client but apparently it does not
-                // // // set packet number in packet to old_pn->packet_number + 50
-                // uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
-                // uint16_t new_pn = htons(old_pn->packet_number); // // TODO: this should not be +50
-                // bpf_skb_store_bytes(skb, pn_off, &new_pn, sizeof(new_pn), 0);
-
-
                         
-                // ! TODO: cannot just write the packet number into the packet
-                // ! without knowing the length of the packet number???
+                // TODO: We cannot just write the packet number into the packet
+                // TODO: without knowing the length of the packet number!
 
                 uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
                 uint32_t zero = 0;
+                // If there is no packet number found it is the first request for that
+                // connection so we create a new entry of zero in the map.
                 if (new_pn == NULL) {
                         bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
                         new_pn = &zero;
-                        bpf_printk("No packet number found. Setting to zero\n");
                 }
                 uint32_t pn_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1 /* Short header flags */ + CONN_ID_LEN;
-                uint16_t new_pn_net = htons(*new_pn); // TODO: correct htons?
-                bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0); // heree
+                uint16_t new_pn_net = htons(*new_pn);
+                bpf_skb_store_bytes(skb, pn_off, &new_pn_net, sizeof(new_pn_net), 0);
 
-                // bpf_printk("Packet number: %d\n", *new_pn);
-
-                // increment the packet number of the connection
+                // Increment the packet number of the connection.
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
-
-                // bpf_printk("Done editing packet\n");
         
         } else {
-                // ! TODO: update packet number for long header packets
 
-                // ! TODO: cannot just write the packet number into the packet
-                // ! without knowing the length of the packet number???
+                // TODO: We cannot just write the packet number into the packet
+                // TODO: without knowing the length of the packet number!
 
-                // ! UPDATE THE PN MAPPING FOR USER SPACE RETRANSLATION
-
-                if (!user_space) { // TODO: actually needed?
+                // If we receive a long header packet and it is not from userspace
+                // something went wrong since long header packets should not be
+                // redirected from ingress. We can just drop the packet.
+                if (!user_space) {
                         bpf_printk("Not a user space packet\n");
                         return TC_ACT_SHOT;
                 }
 
-                // retry packets do not have a packet number
+                // Retry packets do not have a packet number
+                // so we can just ignore them.
                 if ((quic_flags & 0x30 >> 4) == 3) {
                         bpf_printk("Retry packet\n");
                         return TC_ACT_OK;
                 }
 
-                // Long headers will only be sent from userspace
-                // bpf_printk("Long header\n");
-
-                // TODO: is that sufficient?
-                // increment the packet number of the connection
-                // read dst ip and port
+                // Read dst ip and port.
                 uint32_t dst_ip_addr;
                 bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
                 uint16_t dst_port;
                 bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
 
-                // now we have to update the packet number
+                // Now we have to update the packet number.
                 struct client_info_key_t key = {
                         .ip_addr = dst_ip_addr,
                         .port = dst_port,
                 };
                 uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
                 uint32_t zero = 0;
+                // If there is no packet number found it is the first request for that
+                // connection so we create a new entry of zero in the map.
                 if (new_pn == NULL) {
                         bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
                         new_pn = &zero;
-                        bpf_printk("No packet number found. Setting to zero\n");
                 }
 
                 // We do not need to update the packet number in the long header
                 // packets since they are only sent in the beginning and therefore
-                // the packet number is staying the same
+                // the packet number is staying the same. This is kind of hacky
+                // and only works if the long headers are sent only in the beginning
+                // without any short header packets in between.
+                // For now this seems to be sufficient.
 
+                // TODO: actually read real old packet number (should be the same as new_pn).
                 // Change the mapping for packet number translation
                 struct client_pn_map_key_t pn_key = {
                         .key = key,
                         .packet_number = *new_pn,
                 };
                 bpf_map_update_elem(&connection_pn_translation, &pn_key, new_pn, BPF_ANY);
-
-
-                // bpf_printk("Long header pn mapping change: %d -> %d\n", *new_pn, *new_pn);
 
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);

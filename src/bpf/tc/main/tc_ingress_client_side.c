@@ -82,7 +82,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 // 0x01 - 0-RTT
                 // 0x02 - Handshake
                 // 0x03 - Retry
-                uint8_t packet_type = (quic_flags & 0x30) >> 4;
+                // uint8_t packet_type = (quic_flags & 0x30) >> 4;
 
                 // Save connection id offsets.
                 uint8_t dst_connection_id_offset = 6;
