@@ -16,10 +16,6 @@ type id_struct struct {
 	Id uint32
 }
 
-type conn_established_struct struct {
-	Established uint8
-}
-
 type client_key_struct struct {
 	Ipaddr  uint32
 	Port    uint16

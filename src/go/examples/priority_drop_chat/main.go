@@ -103,9 +103,6 @@ func main_advanced() {
 				server.sendToAll("foobar low\n", priority_setting.LowPriority, USE_DATAGRAMS)
 				time.Sleep(sleeping_time)
 			case 5:
-				fmt.Println("Changing priority drop threshold")
-				time.Sleep(sleeping_time)
-			case 6:
 				fmt.Println("Exiting")
 				server.interrupt_chan <- true
 				time.Sleep(sleeping_time)

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -80,7 +79,7 @@ func relay() error {
 		go relay_player(player_chan)
 	}
 
-	var cache [][]byte // deque.Deque[[]byte]
+	var cache [][]byte
 
 	go func(sub *moqtransport.ReceiveSubscription, player_chan chan []byte) {
 		for {
@@ -90,7 +89,6 @@ func relay() error {
 				log.Printf("error on read: %v", err)
 				return
 			}
-			// fmt.Println("Read", n, "bytes from track")
 			if n == 0 {
 				continue
 			}
@@ -102,7 +100,6 @@ func relay() error {
 			}
 
 			if relay_caching {
-				// cache.PushBack(buf[:n])
 				cache = append(cache, buf[:n])
 				if len(cache) > 100 {
 					cache = cache[1:] // TODO: handle with deque?
@@ -207,11 +204,11 @@ func relay() error {
 		server_sub.Accept()
 		log.Printf("subscription accepted")
 
-		// cache_copy := cache.Copy()
-		// send cached data
+		// TODO: maybe use a ring buffer here?
+		// TODO: maybe copy cache and only send copy?
+		// TODO: if copying, increment the client counter before
+		// TODO: hand to avoid missing packets.
 		if relay_caching {
-			// for cache_copy.Len() > 0 {
-			// 	buf := cache_copy.PopFront().([]byte)
 			for _, buf := range cache {
 				stream, err := server_sub.NewObjectStream(0, 0, 0)
 				if err != nil {
@@ -248,37 +245,6 @@ func relay() error {
 			fmt.Println("updated number of clients")
 		}
 
-	}
-}
-
-// TODO: make better so that this also works for multiple clients
-func testPublishConnEstablished() {
-	// time.Sleep(1 * time.Second)
-	if bpf_enabled {
-		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
-		if err != nil {
-			panic(err)
-		}
-
-		ipaddr := net.IPv4(192, 168, 11, 1)
-		port := uint16(4242)
-		ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
-		port_key := swapEndianness16(port)
-
-		key := client_key_struct{
-			Ipaddr:  ipaddr_key,
-			Port:    port_key,
-			Padding: [2]uint8{0, 0},
-		}
-		estab := &conn_established_struct{
-			Established: uint8(1),
-		}
-		err = connection_map.Update(key, estab, 0)
-		debugPrint("Update at point nr.", 10)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println("R: Connection established")
 	}
 }
 

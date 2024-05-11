@@ -71,7 +71,7 @@
 
 // These definitions are mostly used for development purposes.
 #define TURNOFF 0
-#define PRIO_DROP 0
+#define PRIO_DROP 1
 #define MOQ_PAYLOAD 1
 #define VP8_VIDEO_PAYLOAD 1
 #define SINGLE_STREAM_USAGE 0
@@ -213,7 +213,7 @@ struct {
 // program considering a new client. This can be useful
 // in case some setup would need to be done before the
 // client is fully operational.
-// TODO: currently not used
+// TODO: currently only used in the chat example.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);

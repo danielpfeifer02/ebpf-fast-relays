@@ -8,23 +8,17 @@ import (
 )
 
 func clearScreen() {
-	// For Windows
 	if runtime.GOOS == "windows" {
 		cmd := exec.Command("cmd", "/c", "cls")
 		cmd.Stdout = os.Stdout
 		cmd.Run()
-	} else { // For other systems (Linux, MacOS)
+	} else {
 		fmt.Print("\033[H\033[2J")
 	}
 }
 
+// TODO: fix timeout issues when there is nothing happening
 func main() {
-	main_advanced()
-}
-
-// TODO: fix timeout issues when there is no stuff happening
-
-func main_advanced() {
 
 	mainConfig()
 	os.Remove("tls.keylog")

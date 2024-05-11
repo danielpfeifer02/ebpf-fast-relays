@@ -11,35 +11,6 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 )
 
-func publishConnectionEstablished(conn quic.Connection) {
-	time.Sleep(1 * time.Second)
-	if bpf_enabled {
-		connection_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
-		if err != nil {
-			panic(err)
-		}
-
-		ipaddr, port := getIPAndPort(conn)
-		ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
-		port_key := swapEndianness16(port)
-
-		key := client_key_struct{
-			Ipaddr:  ipaddr_key,
-			Port:    port_key,
-			Padding: [2]uint8{0, 0},
-		}
-		estab := &conn_established_struct{
-			Established: uint8(1),
-		}
-		err = connection_map.Update(key, estab, 0)
-		debugPrint("Update at point nr.", 10)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println("R: Connection established")
-	}
-}
-
 func packetNumberHandler(conn quic.Connection) {
 
 	// client_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_pn", &ebpf.LoadPinOptions{})
@@ -463,7 +434,6 @@ func clearBPFMaps() {
 		"client_id",
 		"id_counter",
 		"number_of_clients",
-		"connection_established",
 		"client_pn",
 		"connection_current_pn",
 		"connection_pn_translation",

@@ -746,7 +746,7 @@ int tc_egress(struct __sk_buff *skb)
                 // without any short header packets in between.
                 // For now this seems to be sufficient.
 
-                // TODO: actually read real old packet number (should be the same as new_pn).
+                // TODO: actually read the "real" old packet number (should be the same as new_pn).
                 // Change the mapping for packet number translation
                 struct client_pn_map_key_t pn_key = {
                         .key = key,
