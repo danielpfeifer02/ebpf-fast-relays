@@ -19,13 +19,7 @@ func client() error {
 	conn, err := quic.DialAddr(ctx, relay_server_address, &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"moq-00"},
-	}, &quic.Config{
-		EnableDatagrams:            true,
-		MaxIncomingStreams:         1 << 60,
-		MaxStreamReceiveWindow:     1 << 60,
-		MaxIncomingUniStreams:      1 << 60,
-		MaxConnectionReceiveWindow: 1 << 60,
-	})
+	}, generateQUICConfig())
 	if err != nil {
 		return err
 	}

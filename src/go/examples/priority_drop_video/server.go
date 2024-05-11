@@ -14,14 +14,8 @@ import (
 
 func server() error {
 
-	tlsConfig := video_generateTLSConfig(true)
-	listener, err := quic.ListenAddr(video_server_address, tlsConfig, &quic.Config{
-		EnableDatagrams:            true,
-		MaxIncomingStreams:         1 << 60,
-		MaxStreamReceiveWindow:     1 << 60,
-		MaxIncomingUniStreams:      1 << 60,
-		MaxConnectionReceiveWindow: 1 << 60,
-	})
+	tlsConfig := generateTLSConfig(true)
+	listener, err := quic.ListenAddr(video_server_address, tlsConfig, generateQUICConfig())
 	if err != nil {
 		return err
 	}

@@ -1,13 +1,5 @@
 package main
 
-import "github.com/danielpfeifer02/quic-go-prio-packs"
-
-type pn_struct struct {
-	Pn      uint16
-	Changed uint8
-	Padding [3]uint8
-}
-
 type connnection_pn_stuct struct {
 	Pn uint32
 }
@@ -37,14 +29,4 @@ type client_data_struct struct {
 	ConnectionID      [16]uint8
 	PriorityDropLimit uint8
 	Padding           [3]uint8
-}
-
-type StreamingStream struct {
-	stream     quic.Stream
-	connection quic.Connection
-}
-
-type client_connection struct {
-	conn   quic.Connection
-	stream quic.Stream
 }
