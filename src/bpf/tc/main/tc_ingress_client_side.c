@@ -71,7 +71,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
 
         // We load the first byte of the QUIC payload to determine the header form.
         uint8_t quic_flags;
-        bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
+        SAVE_BPF_PROBE_READ_KERNEL(&quic_flags, sizeof(quic_flags), payload);
         uint8_t header_form = (quic_flags & 0x80) >> 7;
 
         // We only consider long headers here.
@@ -93,24 +93,24 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 uint8_t src_connection_id[CONN_ID_LEN];
 
                 // Load the connection ids for the client and the relay.
-                bpf_probe_read_kernel(dst_connection_id, sizeof(dst_connection_id), payload + dst_connection_id_offset);
-                bpf_probe_read_kernel(src_connection_id, sizeof(src_connection_id), payload + src_connection_id_offset);
+                SAVE_BPF_PROBE_READ_KERNEL(dst_connection_id, sizeof(dst_connection_id), payload + dst_connection_id_offset);
+                SAVE_BPF_PROBE_READ_KERNEL(src_connection_id, sizeof(src_connection_id), payload + src_connection_id_offset);
 
                 // Load mac, ip and port information for the client and the relay.
                 // Both src and dst mac are correct here since
                 // src mac does not change and dst mac is the relay.
                 uint8_t src_mac[MAC_LEN]; // mac address of the client
-                bpf_probe_read_kernel(src_mac, sizeof(src_mac), eth->h_source);
+                SAVE_BPF_PROBE_READ_KERNEL(src_mac, sizeof(src_mac), eth->h_source);
                 uint8_t dst_mac[MAC_LEN]; // mac address of the relay
-                bpf_probe_read_kernel(dst_mac, sizeof(dst_mac), eth->h_dest);
+                SAVE_BPF_PROBE_READ_KERNEL(dst_mac, sizeof(dst_mac), eth->h_dest);
                 uint32_t src_ip_addr; // ip address of the client
-                bpf_probe_read_kernel(&src_ip_addr, sizeof(src_ip_addr), &ip->saddr);
+                SAVE_BPF_PROBE_READ_KERNEL(&src_ip_addr, sizeof(src_ip_addr), &ip->saddr);
                 uint32_t dst_ip_addr; // ip address of the relay
-                bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
+                SAVE_BPF_PROBE_READ_KERNEL(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
                 uint16_t src_port; // port of the client
-                bpf_probe_read_kernel(&src_port, sizeof(src_port), &udp->source);
+                SAVE_BPF_PROBE_READ_KERNEL(&src_port, sizeof(src_port), &udp->source);
                 uint16_t dst_port; // port of the relay
-                bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
+                SAVE_BPF_PROBE_READ_KERNEL(&dst_port, sizeof(dst_port), &udp->dest);
 
                 // Create a key to index the map containing client information.
                 // Identification will be the ip and the port of the client.

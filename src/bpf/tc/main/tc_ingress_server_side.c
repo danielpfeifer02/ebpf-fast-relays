@@ -77,7 +77,7 @@ int tc_ingress(struct __sk_buff *skb)
 
         // We load the first byte of the QUIC payload to determine the header form.
         uint8_t quic_flags;
-        bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
+        SAVE_BPF_PROBE_READ_KERNEL(&quic_flags, sizeof(quic_flags), payload);
         uint8_t header_form = (quic_flags & 0x80) >> 7;
 
         // We only consider short header packets here.
@@ -93,7 +93,7 @@ int tc_ingress(struct __sk_buff *skb)
                 // - Connection ID (16 bytes - per design)
                 // - Packet number (variable length - read before)
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
-                bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
+                SAVE_BPF_PROBE_READ_KERNEL(&frame_type, sizeof(frame_type), payload + frame_off);
 
                 // Checking that the frame is supported.
                 if (!SUPPORTED_FRAME(frame_type)) {
@@ -115,18 +115,18 @@ int tc_ingress(struct __sk_buff *skb)
                 // However, we need to save the old checksum since we will
                 // still pass the initial packet up to userspace.
                 uint16_t old_checksum;
-                bpf_probe_read_kernel(&old_checksum, sizeof(old_checksum), &udp->check);
+                SAVE_BPF_PROBE_READ_KERNEL(&old_checksum, sizeof(old_checksum), &udp->check);
                 uint16_t zero_checksum = 0;
                 uint32_t checksum_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 6 /* Everything before checksum */;
                 bpf_skb_store_bytes(skb, checksum_off, &zero_checksum, sizeof(zero_checksum), 0);
 
                 // We also need to save the old port since we will redirect the packet to userspace.
                 uint16_t old_port;
-                bpf_probe_read_kernel(&old_port, sizeof(old_port), &udp->dest);
+                SAVE_BPF_PROBE_READ_KERNEL(&old_port, sizeof(old_port), &udp->dest);
 
                 // We also need to save the old connection id since we will redirect the packet to userspace.
                 uint8_t old_conn_id[CONN_ID_LEN];
-                bpf_probe_read_kernel(old_conn_id, sizeof(old_conn_id), payload + 1 /* Short header flags */);
+                SAVE_BPF_PROBE_READ_KERNEL(old_conn_id, sizeof(old_conn_id), payload + 1 /* Short header flags */);
                 uint32_t conn_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 1;
 
                 for (uint32_t i=0; i<MAX_CLIENTS; i++) {

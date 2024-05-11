@@ -103,11 +103,7 @@ int tc_egress(struct __sk_buff *skb)
 
         // We load the first byte of the QUIC payload to determine the header form.
         uint8_t quic_flags;
-        long read_res = bpf_probe_read_kernel(&quic_flags, sizeof(quic_flags), payload);
-        if (read_res < 0) { // TODO: make all reads save
-                bpf_printk("ERROR: Could not read quic flags\n");
-                return TC_ACT_OK;
-        }
+        SAVE_BPF_PROBE_READ_KERNEL(&quic_flags, sizeof(quic_flags), payload);
         uint8_t header_form = (quic_flags & 0x80) >> 7;
 
         // The redirected packet is a short header
@@ -119,9 +115,9 @@ int tc_egress(struct __sk_buff *skb)
 
                         // Read dst ip and port.
                         uint32_t dst_ip_addr;
-                        bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
+                        SAVE_BPF_PROBE_READ_KERNEL(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
                         uint16_t dst_port;
-                        bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
+                        SAVE_BPF_PROBE_READ_KERNEL(&dst_port, sizeof(dst_port), &udp->dest);
 
                         // Create key to update the client information
                         struct client_info_key_t key = {
@@ -140,29 +136,29 @@ int tc_egress(struct __sk_buff *skb)
                         // For some reason the bpf verifier does not like this
                         // whole thing being put into a loop.
                         if (pn_len >= 1) {
-                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic);
+                                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic);
                                 old_pn = byte;
                         }
                         if (pn_len >= 2) {
                                 old_pn = old_pn << 8;
-                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 1);
+                                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 1);
                                 old_pn = old_pn | byte;
                         }
                         if (pn_len >= 3) {
                                 old_pn = old_pn << 8;
-                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 2);
+                                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 2);
                                 old_pn = old_pn | byte;
                         }
                         if (pn_len == 4) {
                                 old_pn = old_pn << 8;
-                                bpf_probe_read_kernel(&byte, sizeof(byte), payload + pn_off_from_quic + 3);
+                                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 3);
                                 old_pn = old_pn | byte;
                         }
 
                         // Here we read the old packer number for the connection in question.
                         // We will store that one in the translation map so that the userspace
                         // can retranslate any incoming ACKs.
-                        bpf_probe_read_kernel(&old_pn, sizeof(old_pn), payload
+                        SAVE_BPF_PROBE_READ_KERNEL(&old_pn, sizeof(old_pn), payload
                                                                         + 1 /* Short header bits */
                                                                         + CONN_ID_LEN /* Connection ID */);
                         old_pn = ntohs(old_pn);
@@ -228,7 +224,7 @@ int tc_egress(struct __sk_buff *skb)
                 // at ingress. The index is the second byte of the connection id.
                 uint32_t index;
                 void *index_off = payload + 1 /* Short header flags */ + 1 /* Prio in conn id */;
-                bpf_probe_read_kernel(&index, sizeof(index), index_off);
+                SAVE_BPF_PROBE_READ_KERNEL(&index, sizeof(index), index_off);
 
                 // Now we get the client information for the index-th client.
                 // This assumes that we can linearly access the clients in the map.
@@ -255,7 +251,7 @@ int tc_egress(struct __sk_buff *skb)
                 // the packet based on the priority.
                 uint8_t client_prio_drop_limit = value->priority_drop_limit;
                 uint8_t packet_prio; 
-                bpf_probe_read_kernel(&packet_prio, sizeof(packet_prio), payload + 1 /* Short header flags */);
+                SAVE_BPF_PROBE_READ_KERNEL(&packet_prio, sizeof(packet_prio), payload + 1 /* Short header flags */);
 
                 if (PRIO_DROP && packet_prio < client_prio_drop_limit) {
                         bpf_printk("Packet priority lower than client priority threshold!\n");
@@ -286,7 +282,7 @@ int tc_egress(struct __sk_buff *skb)
                 uint8_t pn_len = (quic_flags & 0x03) + 1;
                 uint8_t frame_type;
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
-                bpf_probe_read_kernel(&frame_type, sizeof(frame_type), payload + frame_off);
+                SAVE_BPF_PROBE_READ_KERNEL(&frame_type, sizeof(frame_type), payload + frame_off);
 
                 // In case we have a stream frame and the stream is used for multiple packets
                 // (i.e. not one stream per packet) we need to make some extra considerations 
@@ -468,12 +464,12 @@ int tc_egress(struct __sk_buff *skb)
                                 stream_pl_off += 1 << stream_id_len;
 
                                 if (off_bit_set) {
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_pl_off);
+                                        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + stream_pl_off);
                                         uint8_t stream_offset_len = 1 << (byte >> 6);
                                         stream_pl_off += bounded_var_int_len(stream_offset_len);
                                 }
                                 if (len_bit_set) {
-                                        bpf_probe_read_kernel(&byte, sizeof(byte), payload + stream_pl_off);
+                                        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + stream_pl_off);
                                         uint8_t stream_len_len = 1 << (byte >> 6);
                                         stream_pl_off += bounded_var_int_len(stream_len_len);
                                 }
@@ -485,7 +481,7 @@ int tc_egress(struct __sk_buff *skb)
                                 // !       based on wireshark it looks like one moq packet is 
                                 // !       split into multiple packets
                                 uint8_t mt;
-                                bpf_probe_read_kernel(&mt, sizeof(mt), stream_pl);
+                                SAVE_BPF_PROBE_READ_KERNEL(&mt, sizeof(mt), stream_pl);
                                 stream_pl += 1;
 
                                 if (mt != 0x00) {
@@ -519,7 +515,7 @@ int tc_egress(struct __sk_buff *skb)
 
                                 
                                 uint8_t id;
-                                bpf_probe_read_kernel(&id, sizeof(id), stream_pl);
+                                SAVE_BPF_PROBE_READ_KERNEL(&id, sizeof(id), stream_pl);
 
                                 if (id != 0x00) {
                                         // invalid track id
@@ -529,7 +525,7 @@ int tc_egress(struct __sk_buff *skb)
 
                                 stream_pl += 1;
 
-                                bpf_probe_read_kernel(&byte, sizeof(byte), stream_pl);
+                                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), stream_pl);
                                 // bpf_printk("Stream data: %02x\n", byte);
 
                                 // leave data length alone but
@@ -563,7 +559,7 @@ int tc_egress(struct __sk_buff *skb)
                                         // first look at the payload descriptor
                                         // see: https://datatracker.ietf.org/doc/html/rfc7741#section-4.2
                                         uint8_t vp8_pd;
-                                        bpf_probe_read_kernel(&vp8_pd, sizeof(vp8_pd), stream_pl);
+                                        SAVE_BPF_PROBE_READ_KERNEL(&vp8_pd, sizeof(vp8_pd), stream_pl);
                                         stream_pl += 1;
 
                                         uint8_t vp8_xb = (vp8_pd >> 7) & 0x01;
@@ -587,7 +583,7 @@ int tc_egress(struct __sk_buff *skb)
                                                 uint8_t num_optional_bytes = 0;
                                                 if (vp8_xb) {
                                                         uint8_t vp8_options;
-                                                        bpf_probe_read_kernel(&vp8_options, sizeof(vp8_options), stream_pl);
+                                                        SAVE_BPF_PROBE_READ_KERNEL(&vp8_options, sizeof(vp8_options), stream_pl);
                                                         stream_pl += 1;
                                                         
                                                         uint8_t vp8_ib, vp8_lb, vp8_tb, vp8_kb;
@@ -602,7 +598,7 @@ int tc_egress(struct __sk_buff *skb)
 
                                                         if (vp8_ib) { // case of dual-octet version
                                                                 uint8_t vp8_ib_bytes;
-                                                                bpf_probe_read_kernel(&vp8_ib_bytes, sizeof(vp8_ib_bytes), stream_pl);
+                                                                SAVE_BPF_PROBE_READ_KERNEL(&vp8_ib_bytes, sizeof(vp8_ib_bytes), stream_pl);
                                                                 uint8_t vp8_ib_mb;
                                                                 vp8_ib_mb = (vp8_ib_bytes >> 7) & 0x01;
                                                                 if (vp8_ib_mb) {
@@ -624,7 +620,7 @@ int tc_egress(struct __sk_buff *skb)
                                                 // +-+-+-+-+-+-+-+-+
 
                                                 uint8_t video_ft;
-                                                bpf_probe_read_kernel(&video_ft, sizeof(video_ft), stream_pl);
+                                                SAVE_BPF_PROBE_READ_KERNEL(&video_ft, sizeof(video_ft), stream_pl);
                                                 bpf_printk("Video frame type: %02x\n", video_ft);
                                                 video_ft = video_ft & 0x01;
 
@@ -673,7 +669,7 @@ int tc_egress(struct __sk_buff *skb)
                 // Set src_ip to value->src_ip_addr.
                 uint32_t src_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */;
                 uint32_t old_src_ip;
-                bpf_probe_read_kernel(&old_src_ip, sizeof(old_src_ip), &ip->saddr);
+                SAVE_BPF_PROBE_READ_KERNEL(&old_src_ip, sizeof(old_src_ip), &ip->saddr);
                 bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_src_ip, value->src_ip_addr, sizeof(value->src_ip_addr));
                 bpf_skb_store_bytes(skb, src_ip_off, &value->src_ip_addr, sizeof(value->src_ip_addr), 0);
 
@@ -681,7 +677,7 @@ int tc_egress(struct __sk_buff *skb)
                 // Set dst_ip to value->dst_ip_addr.
                 uint32_t dst_ip_off = sizeof(struct ethhdr) + 12 /* Everything before SRC IP */ +  4 /* SRC IP */;
                 uint32_t old_dst_ip;
-                bpf_probe_read_kernel(&old_dst_ip, sizeof(old_dst_ip), &ip->daddr);
+                SAVE_BPF_PROBE_READ_KERNEL(&old_dst_ip, sizeof(old_dst_ip), &ip->daddr);
                 bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_dst_ip, value->dst_ip_addr, sizeof(value->dst_ip_addr));
                 bpf_skb_store_bytes(skb, dst_ip_off, &value->dst_ip_addr, sizeof(value->dst_ip_addr), 0);
 
@@ -740,9 +736,9 @@ int tc_egress(struct __sk_buff *skb)
 
                 // Read dst ip and port.
                 uint32_t dst_ip_addr;
-                bpf_probe_read_kernel(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
+                SAVE_BPF_PROBE_READ_KERNEL(&dst_ip_addr, sizeof(dst_ip_addr), &ip->daddr);
                 uint16_t dst_port;
-                bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &udp->dest);
+                SAVE_BPF_PROBE_READ_KERNEL(&dst_port, sizeof(dst_port), &udp->dest);
 
                 // Now we have to update the packet number.
                 struct client_info_key_t key = {

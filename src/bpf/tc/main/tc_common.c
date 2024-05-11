@@ -46,6 +46,17 @@
 #define VP8_VIDEO_PAYLOAD 1
 #define SINGLE_STREAM_USAGE 0
 
+#define CONCAT(a, b) a##b
+#define LINE_EXPAND(a, b) CONCAT(a, b)
+#define UNQ_NAME(name) LINE_EXPAND(name, __LINE__)
+
+#define SAVE_BPF_PROBE_READ_KERNEL(dest, size, ptr)                                \
+        long UNQ_NAME(unq_) = bpf_probe_read_kernel(dest, size, ptr);   \
+        if (UNQ_NAME(unq_) < 0) {                                       \
+                bpf_printk("Failed to read memory!\n");                 \
+                return TC_ACT_OK;                                       \
+        }                                                           
+
 // this key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
 // all map entries
@@ -208,7 +219,7 @@ __attribute__((always_inline)) int read_var_int(void *start, struct var_int *res
 
         // uint64_t result = 0;
         // uint8_t byte;
-        // bpf_probe_read_kernel(&byte, sizeof(byte), start);
+        // SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start);
         // uint8_t len = 1 << (byte >> 6);
         // bpf_printk("Stream %d %d", len, byte >> 6);
         // result = byte & 0x3f; 
@@ -224,14 +235,14 @@ __attribute__((always_inline)) int read_var_int(void *start, struct var_int *res
         //                 break;
         //         }
         //         result = result << 8;
-        //         bpf_probe_read_kernel(&byte, sizeof(byte), start + i);
+        //         SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + i);
         //         result = result | byte;
         // }
         // res->value = result;
         // res->len = len;
 
         uint8_t len;
-        bpf_probe_read_kernel(&len, sizeof(len), start);
+        SAVE_BPF_PROBE_READ_KERNEL(&len, sizeof(len), start);
         len = 1 << (len >> 6);
 
         res->len = bounded_var_int_len(len);
@@ -239,27 +250,27 @@ __attribute__((always_inline)) int read_var_int(void *start, struct var_int *res
         uint8_t byte;
 
         if (len >= 1) {
-                bpf_probe_read_kernel(&byte, sizeof(byte), start);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start);
                 res->value = byte & 0x3f;
         }
         if (len >= 2) {
-                bpf_probe_read_kernel(&byte, sizeof(byte), start + 1);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + 1);
                 res->value = (res->value << 8) | byte;
         }
         if (len >= 4) {
-                bpf_probe_read_kernel(&byte, sizeof(byte), start + 2);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + 2);
                 res->value = (res->value << 8) | byte;
-                bpf_probe_read_kernel(&byte, sizeof(byte), start + 3);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + 3);
                 res->value = (res->value << 8) | byte;
         }
         if (len >= 8) {
-                bpf_probe_read_kernel(&byte, sizeof(byte), start + 4);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + 4);
                 res->value = (res->value << 8) | byte;
-                bpf_probe_read_kernel(&byte, sizeof(byte), start + 5);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + 5);
                 res->value = (res->value << 8) | byte;
-                bpf_probe_read_kernel(&byte, sizeof(byte), start + 6);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + 6);
                 res->value = (res->value << 8) | byte;
-                bpf_probe_read_kernel(&byte, sizeof(byte), start + 7);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + 7);
                 res->value = (res->value << 8) | byte;
         }
         return 0;
@@ -558,7 +569,7 @@ __attribute__((always_inline)) int32_t get_stream_frame_start(void *payload, uin
         for (int frame_ctr=0; frame_ctr<10; frame_ctr++) { // TODO: change to while loop possible?
                 // TODO: handle special cases like NEW_TOKEN_FRAME with skipping token
                 uint8_t byte;
-                bpf_probe_read_kernel(&byte, sizeof(byte), payload);
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload);
 
                 if (IS_STREAM_FRAME(byte)) {
                         *stream_frame_start = payload;
