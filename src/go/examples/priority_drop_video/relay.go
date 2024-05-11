@@ -322,19 +322,6 @@ func relay_player(recv_chan chan []byte) error {
 	return nil
 }
 
-func debug_start_transmitting() {
-	packet_counter, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packet_counter", &ebpf.LoadPinOptions{})
-	if err != nil {
-		panic(err)
-	}
-	time.Sleep(3 * time.Second)
-	err = packet_counter.Update(uint32(0), uint32(1), 0)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("R: Start transmitting")
-}
-
 /*
 func relay_old_gst() error {
 
@@ -469,7 +456,6 @@ func relay_old_gst() error {
 
 					// publish connection established (TODO: correct place for that?)
 					testPublishConnEstablished()
-					// go debug_start_transmitting() // ! TODO: remove this
 
 					// ! TODO: does this maybe help to make it work with the client
 					// ! 	   so that client receives video. (i.e. does client) need

@@ -100,7 +100,6 @@ clean:
 		rm -f /sys/fs/bpf/tc/globals/client_data; \
 		rm -f /sys/fs/bpf/tc/globals/number_of_clients; \
 		rm -f /sys/fs/bpf/tc/globals/client_id; \
-		rm -f /sys/fs/bpf/tc/globals/packet_counter; \
 		rm -f /sys/fs/bpf/tc/globals/connection_established; \
 		rm -f /sys/fs/bpf/tc/globals/client_pn; \
 		rm -f /sys/fs/bpf/tc/globals/connection_current_pn; \

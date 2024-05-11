@@ -498,21 +498,6 @@ int tc_egress(struct __sk_buff *skb)
 
                                 // bpf_printk("Stream data length: %d\n", stream_data_len.value);
 
-                                // // ! TODO: start at a valid packet for client
-                                // // ! NOT WORKING client still gets unknown type error?
-                                // // load packet counter
-                                // uint32_t zero = 0;
-                                // uint32_t *pack_ctr = bpf_map_lookup_elem(&packet_counter, &zero);
-                                // if (stream_data_len.value > 10 && stream_data_len.value < 100) {
-                                //         if (pack_ctr == NULL || *pack_ctr != 1) {
-                                //                 uint32_t one = 1;
-                                //                 bpf_map_update_elem(&packet_counter, &zero, &one, BPF_ANY);
-                                //         }
-                                // }
-                                // if (pack_ctr == NULL || *pack_ctr != 1) {
-                                //         return TC_ACT_SHOT;
-                                // }
-
                                 
                                 uint8_t id;
                                 SAVE_BPF_PROBE_READ_KERNEL(&id, sizeof(id), stream_pl);

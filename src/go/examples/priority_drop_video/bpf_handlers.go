@@ -464,7 +464,6 @@ func clearBPFMaps() {
 		"id_counter",
 		"number_of_clients",
 		"connection_established",
-		"packet_counter",
 		"client_pn",
 		"connection_current_pn",
 		"connection_pn_translation",

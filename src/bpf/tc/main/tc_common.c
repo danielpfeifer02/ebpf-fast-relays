@@ -2,70 +2,109 @@
 #include <bpf_helpers.h>
 #include <linux/pkt_cls.h>
 #include <stdint.h>
-#include <iproute2/bpf_elf.h>
 #include <arpa/inet.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/icmp.h>
 
-// https://github.com/iproute2/iproute2.git
+#include "tc_frame_length_lut.c"
 
-// bpf_skb_store_bytes flag for CSUM: BPF_F_RECOMPUTE_CSUM
+// In case the checksum should be recomputed when using
+// bpf_skb_store_bytes(...) the flag BPF_F_RECOMPUTE_CSUM
+// can be used.
 
-
+// Definition of BPF section
 #ifndef __section
 # define __section(NAME)                  \
 	__attribute__((section(NAME), used))
 #endif
 
-#define veth2_egress_ifindex 13 // ! TODO: how to handle better and avoid manual configuration?
+// ++++++++++++++++++ CONFIG DEFINITIONS ++++++++++++++++++ //
+
+// The ingress to egress redirection happens from the veth1 interface to the veth2 interface.
+// For that the program needs to know the ifindex of the veth2 interface. 
+// TODO: handle better and avoid manual configuration?
+#define veth2_egress_ifindex 13
+
+// The connection id length will always be 16 bytes since the underlying QUIC library
+// is expected to use a fixed length connection id. This is just for convenience since
+// otherwise the bpf program would need to keep state on how long the connection id is.
 #define CONN_ID_LEN 16
+
+// The MAC length is always 6 bytes.
 #define MAC_LEN 6
+
+// Restrictions regarding number of clients as well as the number of streams per client
+// and number of storable packet number translations.
+// These have been arbitrarily chosen and can be adjusted.
 #define MAX_CLIENTS 1024
 #define MAX_STREAMS_PER_CLIENT 16
-#define MAX_PN_TRANSLATIONS 1024 //1<<16 // TODO: what size? how to delete entries?
+// Since the packet number translations are deleted by the userspace program
+// 1024 might not even be necessary and this could be lowered.
+#define MAX_PN_TRANSLATIONS 1024
+// The maximum number of frames that are expected to be in a packet.
+// For now this is just an arbitrary number and can be adjusted.
+// Not sure if there is any limit defined in the QUIC standard.
+#define MAX_FRAMES_PER_PACKET 16
 
-// TODO: why is 4242 observable in WireShark and 6969 not?
+// Ports are used to identify the QUIC connection. The relay will always use the same port
+// which is also used in the userspace program (i.e. should be changed with care).
 #define RELAY_PORT htons(4242)
 #define SERVER_PORT htons(4242)
 #define PORT_MARKER htons(6969)
 
+// For now only stream and datagram frames are supported.
 #define IS_STREAM_FRAME(x) ((x) >= 0x08 && (x) <= 0x0f)
 #define IS_DATAGRAM_FRAME(x) ((x) >= 0x30 && (x) <= 0x31)
 #define SUPPORTED_FRAME(x) (IS_STREAM_FRAME(x) || IS_DATAGRAM_FRAME(x))
 
+// The IP header checksum offset is always the same.
+// We need this to adapt the checksum when changing the packet
+// since otherwise the client would discard the packet.
 #define IP_CSUM_OFF (ETH_HLEN + offsetof(struct iphdr, check))
 
+// When reading variable length integers we can provide info if the value 
+// is needed or not. This can provide a small performance improvement.
 #define NO_VALUE_NEEDED 0
 #define VALUE_NEEDED 1
 
+// These definitions are mostly used for development purposes.
 #define TURNOFF 0
 #define PRIO_DROP 0
 #define MOQ_PAYLOAD 1
 #define VP8_VIDEO_PAYLOAD 1
 #define SINGLE_STREAM_USAGE 0
 
+// A definition to avoid having to check the return value of a probe read
+// manually all the time. This cannot be a wrapper since in case of an error
+// we want to return TC_ACT_OK.
 #define CONCAT(a, b) a##b
 #define LINE_EXPAND(a, b) CONCAT(a, b)
 #define UNQ_NAME(name) LINE_EXPAND(name, __LINE__)
 
-#define SAVE_BPF_PROBE_READ_KERNEL(dest, size, ptr)                                \
+#define SAVE_BPF_PROBE_READ_KERNEL(dest, size, ptr)                     \
         long UNQ_NAME(unq_) = bpf_probe_read_kernel(dest, size, ptr);   \
         if (UNQ_NAME(unq_) < 0) {                                       \
                 bpf_printk("Failed to read memory!\n");                 \
                 return TC_ACT_OK;                                       \
         }                                                           
 
-// this key is used to make sure that we can check if a client is already in the map
+
+// ++++++++++++++++++ STRUCT DEFINITIONS ++++++++++++++++++ //
+
+// This key is used to make sure that we can check if a client is already in the map
 // it is not meant to be known for fan-out purposes since there we will just go over
-// all map entries
+// all map entries in a linear fashion.
 struct client_info_key_t {
         uint32_t ip_addr;
         uint16_t port;
         uint8_t padding[2];
 };
 
+// This struct is used to store the client information in the map.
+// The priority drop limit will be the smallest priority that the
+// client is **still accepting**. 
 struct client_info_t {
         uint8_t src_mac[MAC_LEN];
         uint8_t dst_mac[MAC_LEN];
@@ -74,20 +113,49 @@ struct client_info_t {
         uint16_t src_port;
         uint16_t dst_port;
         uint8_t connection_id[CONN_ID_LEN];
-        uint8_t priority_drop_limit; // this is the smallest priority that is still accepted
+        uint8_t priority_drop_limit;
 };
 
+// This struct is used to resemble a packet number value.
+// TODO: Adapt packet_number to be a larger integer type
+// TODO: since the standard allows values > 16 bit.
 struct pn_value_t {
-        // TODO: assume only 16 bit pn for now
         uint16_t packet_number;
         uint8_t changed;
         uint8_t padding[3];
 };
 
-// map for storing client information
-// i.e. mac, ip, port, connection id
-// key will be an integer id so that
+// This struct is used to store the value of a variable length integer
+// as well as the **minimum** length (in bytes) it needs within the QUIC
+// packet to be stores correctly (i.e. with the variable length integer
+// encoding).
+struct var_int {
+        uint64_t value;
+        uint8_t len; 
+};
+
+// Struct that represents the key for the map
+// containing the packet number translations.
+struct client_pn_map_key_t {
+        struct client_info_key_t key;
+        uint32_t packet_number;
+};
+
+// Struct that represents the key for the map
+// containing the stream offsets.
+struct client_stream_offset_key_t {
+        struct client_info_key_t key;
+        uint32_t stream_id;
+};
+
+// ++++++++++++++++++ BPF MAP DEFINITIONS ++++++++++++++++++ //
+
+// Map for storing client information
+// (e.g. mac, ip, port, connection id).
+// The key will be an integer id so that
 // we can easily iterate over all clients
+// within the egress bpf program (since we
+// do not know the client id at this point).
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, uint32_t);
@@ -96,8 +164,9 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } client_data SEC(".maps");
 
-// this map is used to get the client id
-// based on the client_info_key_t
+// This map is used to get the client id
+// based on the client_info_key_t.
+// TODO: how to handle deletion of clients?
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);
@@ -106,10 +175,10 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } client_id SEC(".maps");
 
-// this map will be used to update the packet
+// This map will be used to update the packet
 // number of a client after the bpf program
 // sent out packets which are unknown to the
-// user-space program
+// user-space program.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);
@@ -118,8 +187,10 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } client_pn SEC(".maps");
 
-// this map is used to get the number of clients
-// this will be set mainly from userspace
+// This map is used to get the number of clients
+// this will only be changed by the userspace program
+// since handling connection establishment in bpf
+// is more complex. 
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, uint32_t);
@@ -128,9 +199,8 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } number_of_clients SEC(".maps");
 
-// this map is used to get the next client id
-// TODO: keeping this consistent will likely happen
-// TODO: in userspace
+// This map is used to get the next client id
+// that will identify a client in the client_data.
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, uint32_t);
@@ -139,14 +209,11 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } id_counter SEC(".maps");
 
-struct {
-    __uint(type, BPF_MAP_TYPE_ARRAY);
-    __type(key, uint32_t);
-    __type(value, uint32_t);
-    __uint(max_entries, 1);
-    __uint(pinning, LIBBPF_PIN_BY_NAME);
-} packet_counter SEC(".maps");
-
+// This map can be used to delay the start of the bpf
+// program considering a new client. This can be useful
+// in case some setup would need to be done before the
+// client is fully operational.
+// TODO: currently not used
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);
@@ -155,7 +222,9 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_established SEC(".maps");
 
-
+// This map saves the first packet number that is
+// free to use for a new packet. 
+// This is used when doing packet number translations. 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);
@@ -164,11 +233,10 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_current_pn SEC(".maps");
 
-struct client_pn_map_key_t {
-        struct client_info_key_t key;
-        uint32_t packet_number;
-};
-
+// This map is storing how a packet number was translated.
+// The userspace program will use this to retranslate the
+// packet number. It will also delete any entries that are
+// not needed anymore to keep the map from overflowing.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_pn_map_key_t);
@@ -177,11 +245,7 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_pn_translation SEC(".maps");
 
-struct client_stream_offset_key_t {
-        struct client_info_key_t key;
-        uint32_t stream_id;
-};
-
+// This map is used to store the current offset within a stream.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_stream_offset_key_t);
@@ -190,13 +254,11 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } client_stream_offset SEC(".maps");
 
-struct var_int {
-        uint64_t value;
-        // len for saved values in the stream offset map provide the MINIMAL length of value in bytes
-        uint8_t len; 
-};
 
-// to satisfy the verifier
+// ++++++++++++++++++ FUNCTION DEFINITIONS ++++++++++++++++++ //
+
+// This function is necessary to satisfy the verifier as it does treat
+// the lengths saved in the variable integer struct as unbounded.
 __attribute__((always_inline)) uint8_t bounded_var_int_len(uint8_t var_int_len) {
         if (var_int_len == 1) {
                 return 1;
@@ -213,39 +275,21 @@ __attribute__((always_inline)) uint8_t bounded_var_int_len(uint8_t var_int_len) 
         return 0;
 }
 
-
-// TODO: not working -> fix
+// This function is used to read a variable length integer from a buffer.
+// The variable length integer is expected to use the encoding described in 
+// RFC9000:
+// https://datatracker.ietf.org/doc/html/rfc9000#name-variable-length-integer-enc
 __attribute__((always_inline)) int read_var_int(void *start, struct var_int *res, uint8_t need_value) {
-
-        // uint64_t result = 0;
-        // uint8_t byte;
-        // SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start);
-        // uint8_t len = 1 << (byte >> 6);
-        // bpf_printk("Stream %d %d", len, byte >> 6);
-        // result = byte & 0x3f; 
-
-        // if (need_value == NO_VALUE_NEEDED) {
-        //         res->value = 0;
-        //         res->len = len;
-        //         return;
-        // }
-
-        // for (int i=1; i<8; i++) {
-        //         if (i >= len) {
-        //                 break;
-        //         }
-        //         result = result << 8;
-        //         SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), start + i);
-        //         result = result | byte;
-        // }
-        // res->value = result;
-        // res->len = len;
 
         uint8_t len;
         SAVE_BPF_PROBE_READ_KERNEL(&len, sizeof(len), start);
         len = 1 << (len >> 6);
 
         res->len = bounded_var_int_len(len);
+
+        if (need_value == NO_VALUE_NEEDED) {
+                return 0;
+        }
 
         uint8_t byte;
 
@@ -276,7 +320,10 @@ __attribute__((always_inline)) int read_var_int(void *start, struct var_int *res
         return 0;
 }
 
+// This function determines the minimal number of bytes needed to encode
+// a variable length integer as described in RFC9000:
 // https://datatracker.ietf.org/doc/html/rfc9000#name-variable-length-integer-enc
+// The return value is already given in the encoding specified above.
 __attribute__((always_inline)) uint8_t determine_minimal_length_encoded(uint64_t value) {
         if (value <= 63) {
                 return 0b00;
@@ -293,281 +340,21 @@ __attribute__((always_inline)) uint8_t determine_minimal_length_encoded(uint64_t
         return 0b100;
 }
 
-
-#define PADDING_FRAME 0x00
-#define PING_FRAME 0x01
-#define ACK_FRAME 0x02
-#define ACK_ECN_FRAME 0x03
-#define RESET_STREAM_FRAME 0x04
-#define STOP_SENDING_FRAME 0x05
-#define CRYPTO_FRAME 0x06
-#define NEW_TOKEN_FRAME 0x07
-
-#define STREAM_FRAME 0x08
-#define OFF_BIT 0x04
-#define LEN_BIT 0x02
-#define FIN_BIT 0x01
-#define STREAM_WITH_OFF (STREAM_FRAME | OFF_BIT)
-#define STREAM_WITH_LEN (STREAM_FRAME | LEN_BIT)
-#define STREAM_WITH_FIN (STREAM_FRAME | FIN_BIT)
-#define STREAM_WITH_OFF_LEN (STREAM_FRAME | OFF_BIT | LEN_BIT)
-#define STREAM_WITH_OFF_FIN (STREAM_FRAME | OFF_BIT | FIN_BIT)
-#define STREAM_WITH_LEN_FIN (STREAM_FRAME | LEN_BIT | FIN_BIT)
-#define STREAM_WITH_OFF_LEN_FIN (STREAM_FRAME | OFF_BIT | LEN_BIT | FIN_BIT)
-
-#define MAX_DATA_FRAME 0x10
-#define MAX_STREAM_DATA_FRAME 0x11
-#define DATA_BLOCKED_FRAME 0x14
-#define STREAM_DATA_BLOCKED_FRAME 0x15
-#define NEW_CONNECTION_ID_FRAME 0x18
-#define RETIRE_CONNECTION_ID_FRAME 0x19
-#define PATH_CHALLENGE_FRAME 0x1a
-#define PATH_RESPONSE_FRAME 0x1b
-#define HANDSHAKE_DONE_FRAME 0x1e
-
-#define INVALID_FRAME 0xff
-
-// https://datatracker.ietf.org/doc/html/rfc9000#frames
-uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
-        switch (frame_id) {
-                /*
-                PADDING Frame {
-                  Type (i) = 0x00,
-                }
-                */
-                case PADDING_FRAME:
-                        return 1;
-
-                /*
-                PING Frame {
-                  Type (i) = 0x01,
-                }
-                */
-                case PING_FRAME:
-                        return 1;
-
-                /*
-                ACK Frame {
-                  Type (i) = 0x02..0x03,
-                  Largest Acknowledged (i),
-                  ACK Delay (i),
-                  ACK Range Count (i),
-                  First ACK Range (i),
-                  ACK Range (..) ...,
-                  [ECN Counts (..)],
-                }
-                ACK Range {
-                  Gap (i),
-                  ACK Range Length (i),
-                }
-                ECN Counts {
-                  ECT0 Count (i),
-                  ECT1 Count (i),
-                  ECN-CE Count (i),
-                }
-                */
-                case ACK_FRAME:
-                        return 5;
-                case ACK_ECN_FRAME: 
-                        return 8; //TODO: ACK Range (has two varints) and ECN Counts (has three varints???
-                
-                /*
-                RESET_STREAM Frame {
-                  Type (i) = 0x04,
-                  Stream ID (i),
-                  Application Protocol Error Code (i),
-                  Final Size (i),
-                }
-                */
-                case RESET_STREAM_FRAME:
-                        return 4;
-                
-                /*
-                STOP_SENDING Frame {
-                  Type (i) = 0x05,
-                  Stream ID (i),
-                  Application Protocol Error Code (i),
-                }
-                */
-                case STOP_SENDING_FRAME:
-                        return 3;
-                
-                /*
-                CRYPTO Frame {
-                  Type (i) = 0x06,
-                  Offset (i),
-                  Length (i),
-                  Crypto Data (..),
-                }
-                */
-                case CRYPTO_FRAME:
-                        return 3; //TODO: plus crypto data
-                
-                /*
-                NEW_TOKEN Frame {
-                  Type (i) = 0x07,
-                  Token Length (i),
-                  Token (..),
-                }
-                */
-                case NEW_TOKEN_FRAME:
-                        return 2; //TODO: second one is token length
-
-                /*
-                STREAM Frame {
-                  Type (i) = 0x08..0x0f,
-                  Stream ID (i),
-                  [Offset (i)],
-                  [Length (i)],
-                  Stream Data (..),
-                }
-                */
-                case STREAM_FRAME:
-                case STREAM_WITH_FIN:
-                        return 2;
-                case STREAM_WITH_LEN:
-                case STREAM_WITH_OFF:
-                case STREAM_WITH_LEN_FIN:
-                case STREAM_WITH_OFF_FIN:
-                        return 3;
-                case STREAM_WITH_OFF_LEN:
-                case STREAM_WITH_OFF_LEN_FIN:
-                        return 4;
-                
-                /*
-                MAX_DATA Frame {
-                  Type (i) = 0x10,
-                  Maximum Data (i),
-                }
-                */
-                case MAX_DATA_FRAME:
-                        return 2;
-                
-                /*
-                MAX_STREAM_DATA Frame {
-                  Type (i) = 0x11,
-                  Stream ID (i),
-                  Maximum Stream Data (i),
-                }
-                */
-                case MAX_STREAM_DATA_FRAME:
-                        return 3;
-                
-                /*
-                MAX_STREAMS Frame {
-                  Type (i) = 0x12..0x13,
-                  Maximum Streams (i),
-                }
-                */
-                case 0x12: // MAX_STREAMS
-                case 0x13:
-                        return 2;
-                
-                /*
-                DATA_BLOCKED Frame {
-                  Type (i) = 0x14,
-                  Maximum Data (i),
-                }
-                */
-                case DATA_BLOCKED_FRAME:
-                        return 2;
-                
-                /*
-                STREAM_DATA_BLOCKED Frame {
-                  Type (i) = 0x15,
-                  Stream ID (i),
-                  Maximum Stream Data (i),
-                }
-                */
-                case STREAM_DATA_BLOCKED_FRAME: 
-                        return 3;
-                
-                /*
-                STREAMS_BLOCKED Frame {
-                  Type (i) = 0x16..0x17,
-                  Maximum Streams (i),
-                }
-                */
-                case 0x16: // STREAMS_BLOCKED
-                case 0x17:
-                        return 2;
-                
-                /*
-                NEW_CONNECTION_ID Frame {
-                  Type (i) = 0x18,
-                  Sequence Number (i),
-                  Retire Prior To (i),
-                  Length (8),
-                  Connection ID (8..160),
-                  Stateless Reset Token (128),
-                }
-                */
-                case NEW_CONNECTION_ID_FRAME:
-                        return 3;
-                
-                /*
-                RETIRE_CONNECTION_ID Frame {
-                  Type (i) = 0x19,
-                  Sequence Number (i),
-                }
-                */
-                case RETIRE_CONNECTION_ID_FRAME:
-                        return 2;
-                
-                /*
-                PATH_CHALLENGE Frame {
-                  Type (i) = 0x1a,
-                  Data (64),
-                }
-                */
-                case PATH_CHALLENGE_FRAME:
-                        return 1;
-                
-                /*
-                PATH_RESPONSE Frame {
-                  Type (i) = 0x1b,
-                  Data (64),
-                }
-                */
-                case PATH_RESPONSE_FRAME:
-                        return 1;
-                
-                /*
-                CONNECTION_CLOSE Frame {
-                  Type (i) = 0x1c..0x1d,
-                  Error Code (i),
-                  [Frame Type (i)],
-                  Reason Phrase Length (i),
-                  Reason Phrase (..),
-                }
-                */
-                case 0x1c: // CONNECTION_CLOSE
-                case 0x1d:
-                        return 3; //TODO: when is frame type there?
-                
-                /*
-                HANDSHAKE_DONE Frame {
-                  Type (i) = 0x1e,
-                }       
-                */
-                case HANDSHAKE_DONE_FRAME:
-                        return 1;       
-                
-                /*
-                  In this case the frame read is not valid
-                */
-                default: // unknown frame
-                        return INVALID_FRAME;
-        }
-}
-
 // This function returns the start of the QUIC stream frame
 // or NULL if the payload of the packet does not contain
-// a QUIC stream frame
+// a QUIC stream frame.
+// This would be the optimal way to handle packets from the bpf
+// program but this approach seems to be too complex for the verifier.
+// Therefore the underlying QUIC library is expected to send supported
+// frams in separate packets for easy handling within bpf.
 __attribute__((always_inline)) int32_t get_stream_frame_start(void *payload, uint32_t payload_length, void **stream_frame_start) {
 
-        for (int frame_ctr=0; frame_ctr<10; frame_ctr++) { // TODO: change to while loop possible?
-                // TODO: handle special cases like NEW_TOKEN_FRAME with skipping token
+        // Normally this would be a while loop but one could assume that
+        // a frame does not have a huge amount of different frame within
+        // it.
+        for (int frame_ctr=0; frame_ctr<MAX_FRAMES_PER_PACKET; frame_ctr++) {
+                // TODO: special cases e.g. NEW_TOKEN_FRAME with skipping token
+                // TODO: still not considered.
                 uint8_t byte;
                 SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload);
 
@@ -578,15 +365,15 @@ __attribute__((always_inline)) int32_t get_stream_frame_start(void *payload, uin
 
                 payload++;
 
-                // read how many var ints are in the frame
+                // Read how many var ints are in the frame.
                 uint8_t var_ints = get_number_of_var_ints_of_frame(byte);
                 if (var_ints == INVALID_FRAME) {
                         *stream_frame_start = NULL;
                         return 0;
                 }
 
-                // starting at 1 since the type is also a var int
-                // but already read at this point
+                // Starting at 1 since the type is also a var int
+                // but already read at this point.
                 for (int i=1; i<var_ints; i++) {
                         if (i == var_ints) {
                                 break;
@@ -598,14 +385,14 @@ __attribute__((always_inline)) int32_t get_stream_frame_start(void *payload, uin
                                 // In case the frame is an ACK frame we need to 
                                 // find out how many ACK ranges there are (fourth var int
                                 // is the number of ACK ranges) and add 2 var ints for each
-                                // ACK range present
+                                // ACK range present.
                                 read_var_int(payload, &res, VALUE_NEEDED);
                                 var_ints += 2 * res.value;
                         }
                         payload += bounded_var_int_len(res.len);
                 }
 
-        } //while (payload < payload + payload_length);
+        } // while (payload < payload + payload_length);
 
         *stream_frame_start = NULL;
         return 0;
