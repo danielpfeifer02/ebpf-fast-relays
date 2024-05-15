@@ -47,6 +47,8 @@
 // For now this is just an arbitrary number and can be adjusted.
 // Not sure if there is any limit defined in the QUIC standard.
 #define MAX_FRAMES_PER_PACKET 16
+// The maximum number of packets in the queue that have to be registered
+#define MAX_REGISTER_QUEUE_SIZE 1<<12 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
 // which is also used in the userspace program (i.e. should be changed with care).
@@ -146,6 +148,14 @@ struct client_pn_map_key_t {
 struct client_stream_offset_key_t {
         struct client_info_key_t key;
         uint32_t stream_id;
+};
+
+// Struct that represents a packet that has to be registered
+// by the userspace program.
+struct register_packet_t { // TODO: what fields are necessary?
+        uint32_t packet_number;
+        uint8_t valid;
+        uint8_t padding[3];
 };
 
 // ++++++++++++++++++ BPF MAP DEFINITIONS ++++++++++++++++++ //
@@ -254,8 +264,46 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } client_stream_offset SEC(".maps");
 
+// This map is used to store the packets that have to be registered
+// by the userspace program. This is necessary to allow the congestion
+// control to work correctly.
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, uint32_t);
+    __type(value, struct register_packet_t);
+    __uint(max_entries, MAX_REGISTER_QUEUE_SIZE);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} packets_to_register SEC(".maps");
+
+// This map is used to store the index of the next packet that has to be registered.
+// The "packet_to_register" map is a used as a ring buffer.
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, uint32_t);
+    __type(value, uint32_t);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} index_packets_to_register SEC(".maps");
+
 
 // ++++++++++++++++++ FUNCTION DEFINITIONS ++++++++++++++++++ //
+
+// This function is used to store a packet that has to be registered
+// by the userspace program.
+__attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) {
+
+        bpf_printk("Storing packet to register with pn (%d)\n", packet.packet_number);
+
+        uint32_t index = 0;
+        uint32_t zero = 0;
+        SAVE_BPF_PROBE_READ_KERNEL(&index, sizeof(index), &index_packets_to_register);
+        bpf_map_update_elem(&packets_to_register, &index, &packet, BPF_ANY);
+
+        index = (index + 1) % MAX_REGISTER_QUEUE_SIZE;
+        bpf_map_update_elem(&index_packets_to_register, &zero, &index, BPF_ANY);
+
+        return 0;
+}
 
 // This function is necessary to satisfy the verifier as it does treat
 // the lengths saved in the variable integer struct as unbounded.

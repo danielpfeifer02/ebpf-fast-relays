@@ -217,6 +217,13 @@ int tc_egress(struct __sk_buff *skb)
                         *new_pn = *new_pn + 1;
                         bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
+                        // Userspace packets do not need to be registered.
+                        // struct register_packet_t pack_to_reg = {
+                        //         .packet_number = pn_key.packet_number,
+                        //         .valid = 1,
+                        // };
+                        // store_packet_to_register(pack_to_reg);
+
                         return TC_ACT_OK;
                 }
 
@@ -253,7 +260,7 @@ int tc_egress(struct __sk_buff *skb)
                 uint8_t packet_prio; 
                 SAVE_BPF_PROBE_READ_KERNEL(&packet_prio, sizeof(packet_prio), payload + 1 /* Short header flags */);
 
-                if (PRIO_DROP && packet_prio < client_prio_drop_limit) {
+                if (PRIO_DROP && packet_prio == 1) { // < client_prio_drop_limit) {
                         bpf_printk("Packet priority lower than client priority threshold!\n");
                         return TC_ACT_SHOT;
                 }
@@ -698,6 +705,12 @@ int tc_egress(struct __sk_buff *skb)
                 // Increment the packet number of the connection.
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
+
+                struct register_packet_t pack_to_reg = {
+                        .packet_number = *new_pn - 1,
+                        .valid = 1,
+                };
+                store_packet_to_register(pack_to_reg);
         
         } else {
 
@@ -756,6 +769,13 @@ int tc_egress(struct __sk_buff *skb)
 
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
+
+                // Userspace packets do not need to be registered.
+                // struct register_packet_t pack_to_reg = {
+                //         .packet_number = pn_key.packet_number,
+                //         .valid = 1,
+                // };
+                // store_packet_to_register(pack_to_reg);
 
         }
 

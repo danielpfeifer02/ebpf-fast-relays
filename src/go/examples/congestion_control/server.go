@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
@@ -23,6 +24,26 @@ func server() error {
 	ctx := context.Background()
 
 	conn, err := listener.Accept(ctx)
+
+	// Printing the rttStats of the connection
+	go func() {
+		for {
+			stats := conn.GetRTTStats()
+			min := stats.MinRTT
+			latest := stats.LatestRTT
+			smoothed := stats.SmoothedRTT
+			variance := stats.RTTVariance
+			delay := stats.MaxAckDelay
+			fmt.Printf("MinRtt: %v\n", min)
+			fmt.Printf("LatestRtt: %v\n", latest)
+			fmt.Printf("SmoothedRtt: %v\n", smoothed)
+			fmt.Printf("Variance: %v\n", variance)
+			fmt.Printf("MaxAckDelay: %v\n", delay)
+			fmt.Println()
+			time.Sleep(1 * time.Second)
+		}
+	}()
+
 	if err != nil {
 		return err
 	}
@@ -102,12 +123,12 @@ func server() error {
 			cancel(err)
 			return
 		}
-		n, err := stream.Write(b.Bytes)
+		_, err = stream.Write(b.Bytes)
 		if err != nil {
 			cancel(err)
 			return
 		}
-		fmt.Println("Sent", n, "bytes to peer")
+		// fmt.Println("Sent", n, "bytes to peer")
 		if err := stream.Close(); err != nil {
 			cancel(err)
 			return

@@ -30,3 +30,13 @@ type client_data_struct struct {
 	PriorityDropLimit uint8
 	Padding           [3]uint8
 }
+
+type packet_register_struct struct {
+	PacketNumber uint32
+	Valid        uint8
+	Padding      [3]uint8
+}
+
+type index_key_struct struct {
+	Index uint32
+}

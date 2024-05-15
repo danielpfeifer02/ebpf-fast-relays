@@ -6,7 +6,6 @@ require (
 	github.com/cilium/ebpf v0.13.2
 	github.com/danielpfeifer02/priority-moqtransport v0.1.1-6
 	github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28
-	github.com/gammazero/deque v0.2.1
 	github.com/mengelbart/gst-go v0.0.4
 )
 

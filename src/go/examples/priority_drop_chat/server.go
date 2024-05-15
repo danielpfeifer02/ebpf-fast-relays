@@ -50,7 +50,7 @@ func (s *StreamingServer) run() error {
 
 	// delete tls.keylog file if present
 	// os.Remove("tls.keylog")
-	listener, err := quic.ListenAddr(server_addr, generateTLSConfig(true), generateQUICConfig())
+	listener, err := quic.ListenAddr(server_addr, generateTLSConfig(false), generateQUICConfig())
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
@@ -57,11 +56,14 @@ func (c *StreamingClient) handleStream(stream quic.Stream) {
 
 func (c *StreamingClient) connectToServer() error {
 
+	// tlsConf := &tls.Config{
+	// 	InsecureSkipVerify: true,
+	// 	NextProtos:         []string{"quic-streaming-example"},
+	// }
+
 	// dial address
-	tlsConf := &tls.Config{
-		InsecureSkipVerify: true,
-		NextProtos:         []string{"quic-streaming-example"},
-	}
+	tlsConf := generateTLSConfig(false)
+
 	fmt.Println("C: Dialing address", relay_addr)
 	// client_addr := net.IPv4(192, 168, 1, 4)
 	// conn, err := quic.DialAddrExt(context.Background(), relay_addr, "veth3", tlsConf, generateQUICConfig())

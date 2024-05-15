@@ -132,7 +132,7 @@ func relay() error {
 
 	ctx := context.Background()
 
-	tlsConfig := generateTLSConfig(true)
+	tlsConfig := generateTLSConfig(false)
 
 	listener, err := quic.ListenAddr(relay_server_address, tlsConfig, generateQUICConfig())
 	if err != nil {
@@ -142,6 +142,9 @@ func relay() error {
 	if err != nil {
 		return err
 	}
+
+	// Run goroutine that will register the packets sent by the BPF program
+	go registerBPFPacket(conn)
 
 	go func(conn quic.Connection) {
 		if !relay_printing_rtt {

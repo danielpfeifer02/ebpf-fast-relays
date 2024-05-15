@@ -15,7 +15,7 @@ func client() error {
 
 	ctx := context.Background()
 
-	conn, err := quic.DialAddr(ctx, relay_server_address, generateTLSConfig(false), generateQUICConfig())
+	conn, err := quic.DialAddr(ctx, video_server_address, generateTLSConfig(false), generateQUICConfig())
 	if err != nil {
 		return err
 	}

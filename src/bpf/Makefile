@@ -105,6 +105,8 @@ clean:
 		rm -f /sys/fs/bpf/tc/globals/connection_current_pn; \
 		rm -f /sys/fs/bpf/tc/globals/connection_pn_translation; \
 		rm -f /sys/fs/bpf/tc/globals/client_stream_offset; \
+		rm -f /sys/fs/bpf/tc/globals/packets_to_register; \
+		rm -f /sys/fs/bpf/tc/globals/index_packets_to_register; \
 	fi
 
 	sudo rm -f $(BPF_TC_IN_TO_EG_PINNED_PATH)

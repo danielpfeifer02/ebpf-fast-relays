@@ -299,3 +299,49 @@ func clearBPFMaps() {
 		fmt.Println(string(stdout))
 	}
 }
+
+// This function is used for registering the packets that have been sent by the
+// BPF program.
+func registerBPFPacket(conn quic.Connection) {
+
+	// index_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packets_to_register_index", &ebpf.LoadPinOptions{})
+	// if err != nil {
+	// 	debugPrint("Error loading index map")
+	// 	panic(err)
+	// }
+
+	buffer_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packets_to_register", &ebpf.LoadPinOptions{})
+	if err != nil {
+		debugPrint("Error loading buffer map")
+		panic(err)
+	}
+
+	max_register_queue_size := 1 << 12
+	val := &packet_register_struct{}
+	current_index := index_key_struct{
+		Index: 0,
+	}
+
+	fmt.Println("Start registering packets...")
+
+	for {
+
+		// Check if there are packets to register
+		err = buffer_map.Lookup(current_index, val)
+		if err == nil && val.Valid == 1 { // TODO: why not valid?
+
+			fmt.Println("Register packet number", val.PacketNumber)
+
+			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
+
+			// go func() { // TODO: speed up when using goroutines?
+			packet := packet_setting.PacketRegisterContainerBPF{
+				PacketNumber: int64(val.PacketNumber),
+			}
+
+			conn.RegisterBPFPacket(packet)
+			// }()
+		}
+
+	}
+}
