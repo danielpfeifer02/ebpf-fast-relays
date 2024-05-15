@@ -48,7 +48,7 @@
 // Not sure if there is any limit defined in the QUIC standard.
 #define MAX_FRAMES_PER_PACKET 16
 // The maximum number of packets in the queue that have to be registered
-#define MAX_REGISTER_QUEUE_SIZE 1<<12 // TODO: what size is sufficient?
+#define MAX_REGISTER_QUEUE_SIZE 2048 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
 // which is also used in the userspace program (i.e. should be changed with care).
@@ -292,15 +292,21 @@ struct {
 // by the userspace program.
 __attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) {
 
-        bpf_printk("Storing packet to register with pn (%d)\n", packet.packet_number);
-
-        uint32_t index = 0;
         uint32_t zero = 0;
-        SAVE_BPF_PROBE_READ_KERNEL(&index, sizeof(index), &index_packets_to_register);
-        bpf_map_update_elem(&packets_to_register, &index, &packet, BPF_ANY);
+        uint32_t *index = bpf_map_lookup_elem(&index_packets_to_register, &zero);
+        if (index == NULL) {
+                bpf_printk("Failed to get index for packets to register\n");
+                return 1;
+        }
+        bpf_map_update_elem(&packets_to_register, index, &packet, BPF_ANY);
 
-        index = (index + 1) % MAX_REGISTER_QUEUE_SIZE;
-        bpf_map_update_elem(&index_packets_to_register, &zero, &index, BPF_ANY);
+        bpf_printk("Storing packet to register with pn %d at index %d\n", packet.packet_number, *index);
+
+        *index = *index + 1;
+        if (*index == MAX_REGISTER_QUEUE_SIZE) { // TODO: why modulo not working?
+                *index = 0;
+        }
+        bpf_map_update_elem(&index_packets_to_register, &zero, index, BPF_ANY);
 
         return 0;
 }

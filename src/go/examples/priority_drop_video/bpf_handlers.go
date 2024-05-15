@@ -316,7 +316,7 @@ func registerBPFPacket(conn quic.Connection) {
 		panic(err)
 	}
 
-	max_register_queue_size := 1 << 12
+	max_register_queue_size := 2048
 	val := &packet_register_struct{}
 	current_index := index_key_struct{
 		Index: 0,
@@ -330,7 +330,7 @@ func registerBPFPacket(conn quic.Connection) {
 		err = buffer_map.Lookup(current_index, val)
 		if err == nil && val.Valid == 1 { // TODO: why not valid?
 
-			fmt.Println("Register packet number", val.PacketNumber)
+			fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index)
 
 			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
 
