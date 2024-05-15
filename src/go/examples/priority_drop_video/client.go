@@ -39,7 +39,19 @@ func client() error {
 	}
 	log.Printf("subscribed to %v/%v", a.Namespace(), "video")
 	ctx, cancel := context.WithCancelCause(ctx)
-	p, err := gst.NewPipeline("appsrc name=src ! video/x-vp8 ! vp8dec ! video/x-raw,width=480,height=320,framerate=30/1 ! autovideosink")
+
+	p := new(gst.Pipeline)
+	if test_video {
+		p, err = gst.NewPipeline("appsrc name=src ! video/x-vp8 ! vp8dec ! video/x-raw,width=480,height=320,framerate=30/1 ! autovideosink")
+	} else {
+		launch_str := `
+			appsrc name=src
+			! video/x-vp8 ! vp8dec 
+			! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1 
+			! autovideosink
+		`
+		p, err = gst.NewPipeline(launch_str)
+	}
 	if err != nil {
 		return err
 	}

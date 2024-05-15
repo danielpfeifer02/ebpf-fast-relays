@@ -65,7 +65,23 @@ func server() error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	p, err := gst.NewPipeline("videotestsrc is-live=true ! video/x-raw,width=480,height=320,framerate=30/1 ! clocksync ! vp8enc name=encoder target-bitrate=10000000 cpu-used=16 deadline=1 keyframe-max-dist=10 ! appsink name=appsink")
+	p := new(gst.Pipeline)
+	if test_video {
+		p, err = gst.NewPipeline("videotestsrc is-live=true ! video/x-raw,width=480,height=320,framerate=30/1 ! clocksync ! vp8enc name=encoder target-bitrate=10000000 cpu-used=16 deadline=1 keyframe-max-dist=10 ! appsink name=appsink")
+	} else {
+		launch_str := `
+			filesrc location=../../../video/example.mp4
+			! decodebin
+			! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1
+			! clocksync ! vp8enc name=encoder target-bitrate=10000000 cpu-used=16 deadline=1 keyframe-max-dist=10
+			! appsink name=appsink
+		`
+		p, err = gst.NewPipeline(launch_str)
+
+		// gst-launch-1.0 filesrc location=src/video/example.mp4 ! decodebin ! "video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1" ! clocksync ! vp8enc name=encoder target-bitrate=10000000 cpu-used=16 deadline=1 keyframe-max-dist=10 ! udpsink host=127.0.0.1 port=5600
+		// gst-launch-1.0 udpsrc port=5600 ! video/x-vp8 ! vp8dec ! "video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1" ! autovideosink
+	}
+
 	if err != nil {
 		err = errors.New("internal error")
 		sub.Reject(0, err.Error())

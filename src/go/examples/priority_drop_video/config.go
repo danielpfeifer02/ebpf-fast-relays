@@ -36,13 +36,20 @@ const relay_playing = false
 // Caching for relays is mentioned in this standard in section "1.1.4 Relays":
 // https://datatracker.ietf.org/doc/draft-ietf-moq-transport/
 // This is not yet completely implemented.
-const relay_caching = false
+const relay_caching = false // TODO: causes protocol violation
+
+// Specify number of packets being cached at most
+const cache_packet_size = 1024
 
 // Specify if the relay should print the round trip time information of the
 // connections it manages.
 // This will be the data on which the relay will base its decision to
 // drop packets / adapt streaming rates to the client(s).
 const relay_printing_rtt = false
+
+// Specify wether the default test video should be played by the server
+// or if an actual video file should be played.
+const test_video = false
 
 // Specify if any prints related to debugging should be printed.
 const DEBUG_PRINT = false
