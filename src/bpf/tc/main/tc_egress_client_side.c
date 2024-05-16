@@ -220,6 +220,8 @@ int tc_egress(struct __sk_buff *skb)
                         // Userspace packets do not need to be registered.
                         // struct register_packet_t pack_to_reg = {
                         //         .packet_number = pn_key.packet_number,
+                        //         .timestamp = bpf_ktime_get_ns(),
+                        //         .length = payload_size,
                         //         .valid = 1,
                         // };
                         // store_packet_to_register(pack_to_reg);
@@ -707,7 +709,9 @@ int tc_egress(struct __sk_buff *skb)
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
                 struct register_packet_t pack_to_reg = {
-                        .packet_number = *new_pn - 1,
+                        .packet_number = (uint64_t)(*new_pn - 1),
+                        .timestamp = bpf_ktime_get_ns(),
+                        .length = payload_size,
                         .valid = 1,
                 };
                 store_packet_to_register(pack_to_reg);
@@ -773,6 +777,8 @@ int tc_egress(struct __sk_buff *skb)
                 // Userspace packets do not need to be registered.
                 // struct register_packet_t pack_to_reg = {
                 //         .packet_number = pn_key.packet_number,
+                //         .timestamp = bpf_ktime_get_ns(),
+                //         .length = payload_size,
                 //         .valid = 1,
                 // };
                 // store_packet_to_register(pack_to_reg);

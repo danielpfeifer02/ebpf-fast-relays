@@ -109,6 +109,9 @@ func relayConfig() {
 
 		// TODO: fix in prio_packs repo?
 		packet_setting.SET_ONLY_APP_DATA = true
+
+		// Set the registration of BPF packets to on
+		packet_setting.BPF_PACKET_REGISTRATION = true
 	}
 
 	// Specify if the calling program is the client to be able to access

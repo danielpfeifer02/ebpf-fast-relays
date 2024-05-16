@@ -330,13 +330,15 @@ func registerBPFPacket(conn quic.Connection) {
 		err = buffer_map.Lookup(current_index, val)
 		if err == nil && val.Valid == 1 { // TODO: why not valid?
 
-			fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index)
+			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index)
 
 			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
 
 			// go func() { // TODO: speed up when using goroutines?
 			packet := packet_setting.PacketRegisterContainerBPF{
 				PacketNumber: int64(val.PacketNumber),
+				SentTime:     int64(val.SentTime),
+				Length:       int64(val.Length),
 			}
 
 			conn.RegisterBPFPacket(packet)

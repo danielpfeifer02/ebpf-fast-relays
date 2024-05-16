@@ -25,7 +25,7 @@
 // The ingress to egress redirection happens from the veth1 interface to the veth2 interface.
 // For that the program needs to know the ifindex of the veth2 interface. 
 // TODO: handle better and avoid manual configuration?
-#define veth2_egress_ifindex 13
+#define veth2_egress_ifindex 14
 
 // The connection id length will always be 16 bytes since the underlying QUIC library
 // is expected to use a fixed length connection id. This is just for convenience since
@@ -153,9 +153,11 @@ struct client_stream_offset_key_t {
 // Struct that represents a packet that has to be registered
 // by the userspace program.
 struct register_packet_t { // TODO: what fields are necessary?
-        uint32_t packet_number;
+        uint64_t packet_number;
+        uint64_t timestamp;
+        uint64_t length;
         uint8_t valid;
-        uint8_t padding[3];
+        uint8_t padding[7];
 };
 
 // ++++++++++++++++++ BPF MAP DEFINITIONS ++++++++++++++++++ //
