@@ -16,6 +16,7 @@ BRIDGE_IP="192.168.10.10"
 BRIDGE_NET_ADDR="192.168.10.0"
 
 BRIDGE_INTERFACE="v-net-0"
+BRIDGE_VETH_TO_REL="veth1-br"
 
 if [[ $EUID -ne 0 ]]; then
     echo "You must be root to run this script"
@@ -108,3 +109,6 @@ ip netns exec ${RELAY_NS} echo "nameserver 8.8.4.4" >> /etc/netns/${RELAY_NS}/re
 
 # TODO: remove later (for now not that big of a deal)
 iptables -P FORWARD ACCEPT
+
+# Add a delay to the bridge connecting relay and client
+tc qdisc add dev ${BRIDGE_VETH_TO_REL} root netem delay 100ms

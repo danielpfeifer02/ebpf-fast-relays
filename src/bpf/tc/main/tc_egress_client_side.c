@@ -217,14 +217,17 @@ int tc_egress(struct __sk_buff *skb)
                         *new_pn = *new_pn + 1;
                         bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
-                        // Userspace packets do not need to be registered.
-                        // struct register_packet_t pack_to_reg = {
-                        //         .packet_number = pn_key.packet_number,
-                        //         .timestamp = bpf_ktime_get_ns(),
-                        //         .length = payload_size,
-                        //         .valid = 1,
-                        // };
-                        // store_packet_to_register(pack_to_reg);
+                        // Userspace packets do not need to be registered (in theory).
+                        // However somehow the userspace needs to know the translation of the
+                        // packet number so an easy way is to also register the packet.
+                        // TODO: other way to tell userspace the translation?
+                        struct register_packet_t pack_to_reg = {
+                                .packet_number = pn_key.packet_number,
+                                .timestamp = bpf_ktime_get_tai_ns(),
+                                .length = payload_size,
+                                .valid = 1,
+                        };
+                        store_packet_to_register(pack_to_reg);
 
                         return TC_ACT_OK;
                 }
@@ -249,11 +252,18 @@ int tc_egress(struct __sk_buff *skb)
                         return TC_ACT_SHOT;
                 }
 
-                // Create the key to access the client information.               
+                // Change the key to access the client information.               
                 struct client_info_key_t key = {
                         .ip_addr = value->dst_ip_addr,
                         .port = value->dst_port,
                 };
+
+                // Drop if the connection is not yet fully established.
+                uint8_t *established = bpf_map_lookup_elem(&connection_established, &key);
+                if (established == NULL || *established == 0) {
+                        bpf_printk("Connection not established\n");
+                        return TC_ACT_SHOT;
+                }
 
                 // The first byte of the connection id is the priority of the packet.
                 // We load the priority and in case priority-drop is set we drop / pass
@@ -708,9 +718,15 @@ int tc_egress(struct __sk_buff *skb)
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
+                // Do not use bpf_ktime_get_ns() since that's only time since boot.
+                // https://lore.kernel.org/netdev/CAEf4Bzb9KA=mzYo_x42ExRoZjm=dF6up1DxrUL_eqkDYs9+UUg@mail.gmail.com/T/
+                // https://man7.org/linux/man-pages/man7/bpf-helpers.7.html
+                uint64_t time_ns = bpf_ktime_get_tai_ns();
+                bpf_printk("Current nanoseconds: %llu\n", time_ns);
+
                 struct register_packet_t pack_to_reg = {
                         .packet_number = (uint64_t)(*new_pn - 1),
-                        .timestamp = bpf_ktime_get_ns(),
+                        .timestamp = time_ns,
                         .length = payload_size,
                         .valid = 1,
                 };
@@ -774,14 +790,17 @@ int tc_egress(struct __sk_buff *skb)
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
-                // Userspace packets do not need to be registered.
-                // struct register_packet_t pack_to_reg = {
-                //         .packet_number = pn_key.packet_number,
-                //         .timestamp = bpf_ktime_get_ns(),
-                //         .length = payload_size,
-                //         .valid = 1,
-                // };
-                // store_packet_to_register(pack_to_reg);
+                // Userspace packets do not need to be registered (in theory).
+                // However somehow the userspace needs to know the translation of the
+                // packet number so an easy way is to also register the packet.
+                // TODO: other way to tell userspace the translation?
+                struct register_packet_t pack_to_reg = {
+                        .packet_number = pn_key.packet_number,
+                        .timestamp = bpf_ktime_get_tai_ns(),
+                        .length = payload_size,
+                        .valid = 1,
+                };
+                store_packet_to_register(pack_to_reg);
 
         }
 

@@ -16,6 +16,7 @@ BRIDGE_IP="192.168.11.10"
 BRIDGE_NET_ADDR="192.168.11.0"
 
 BRIDGE_INTERFACE="v-net-1"
+BRIDGE_VETH_TO_CLI="veth3-br"
 
 if [[ $EUID -ne 0 ]]; then
     echo "You must be root to run this script"
@@ -106,3 +107,6 @@ echo 1 > /proc/sys/net/ipv4/ip_forward
 ip netns exec ${CLIENT_NS} mkdir -p /etc/netns/${CLIENT_NS}
 ip netns exec ${CLIENT_NS} echo "nameserver 8.8.8.8" > /etc/netns/${CLIENT_NS}/resolv.conf
 ip netns exec ${CLIENT_NS} echo "nameserver 8.8.4.4" >> /etc/netns/${CLIENT_NS}/resolv.conf
+
+# Add a delay to the bridge connecting relay and client
+tc qdisc add dev ${BRIDGE_VETH_TO_CLI} root netem delay 100ms

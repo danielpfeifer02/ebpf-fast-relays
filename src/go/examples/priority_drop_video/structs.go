@@ -8,6 +8,10 @@ type id_struct struct {
 	Id uint32
 }
 
+type established_val_struct struct {
+	Established uint8
+}
+
 type client_key_struct struct {
 	Ipaddr  uint32
 	Port    uint16

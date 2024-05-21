@@ -119,6 +119,15 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                         .port = src_port,
                 };
 
+                // If the connection established map has no entry for the client
+                // we need to create one.
+                // TODO: if there exists an entry we probably do not need to be here -> check
+                uint8_t *established = bpf_map_lookup_elem(&connection_established, &key);
+                if (established == NULL) {
+                        uint8_t zero = 0;
+                        bpf_map_update_elem(&connection_established, &key, &zero, BPF_ANY);
+                }
+
                 // Store the client information in a struct to be stored in the 
                 // map containing client information.
                 struct client_info_t value = {

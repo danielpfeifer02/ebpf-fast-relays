@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os/exec"
 	"sync"
 	"time"
@@ -316,7 +317,7 @@ func registerBPFPacket(conn quic.Connection) {
 		panic(err)
 	}
 
-	max_register_queue_size := 2048
+	max_register_queue_size := 1 << 11 // 2048
 	val := &packet_register_struct{}
 	current_index := index_key_struct{
 		Index: 0,
@@ -332,18 +333,55 @@ func registerBPFPacket(conn quic.Connection) {
 
 			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index)
 
+			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
+				packet := packet_setting.PacketRegisterContainerBPF{
+					PacketNumber: int64(val.PacketNumber),
+					SentTime:     int64(val.SentTime),
+					Length:       int64(val.Length),
+				}
+
+				conn.RegisterBPFPacket(packet)
+
+				// Set valid to 0 to indicate that the packet has been registered
+				val.Valid = 0
+				err = mp.Update(idx, val, ebpf.UpdateAny)
+				if err != nil {
+					fmt.Println("Error updating buffer map")
+					panic(err)
+				}
+
+			}(*val, current_index, buffer_map) // this pass by copy is necessary since the goroutine might be executed after the next iteration
+
 			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
-
-			// go func() { // TODO: speed up when using goroutines?
-			packet := packet_setting.PacketRegisterContainerBPF{
-				PacketNumber: int64(val.PacketNumber),
-				SentTime:     int64(val.SentTime),
-				Length:       int64(val.Length),
-			}
-
-			conn.RegisterBPFPacket(packet)
-			// }()
 		}
 
 	}
+}
+
+func setConnectionEstablished(ip net.IP, port uint16) error {
+
+	key := client_key_struct{
+		Ipaddr:  swapEndianness32(ipToInt32(ip)),
+		Port:    swapEndianness16(uint16(port)),
+		Padding: [2]uint8{0, 0},
+	}
+
+	established, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_established", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading established")
+		return err
+	}
+
+	est := &established_val_struct{
+		Established: uint8(1),
+	}
+
+	err = established.Update(key, est, ebpf.UpdateAny)
+	if err != nil {
+		fmt.Println("Error updating established", err)
+		return err
+	}
+
+	fmt.Println("Connection established for", ip, ":", port)
+	return nil
 }

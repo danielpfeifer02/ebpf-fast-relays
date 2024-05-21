@@ -146,6 +146,13 @@ func relay() error {
 	// Run goroutine that will register the packets sent by the BPF program
 	go registerBPFPacket(conn)
 
+	// Now we set the connection to be established
+	ip, port := getIPAndPort(conn)
+	err = setConnectionEstablished(ip, port)
+	if err != nil {
+		return err
+	}
+
 	go func(conn quic.Connection) {
 		if !relay_printing_rtt {
 			return

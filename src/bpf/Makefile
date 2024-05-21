@@ -107,6 +107,7 @@ clean:
 		rm -f /sys/fs/bpf/tc/globals/client_stream_offset; \
 		rm -f /sys/fs/bpf/tc/globals/packets_to_register; \
 		rm -f /sys/fs/bpf/tc/globals/index_packets_to_register; \
+		rm -f /sys/fs/bpf/tc/globals/connection_established; \
 	fi
 
 	sudo rm -f $(BPF_TC_IN_TO_EG_PINNED_PATH)

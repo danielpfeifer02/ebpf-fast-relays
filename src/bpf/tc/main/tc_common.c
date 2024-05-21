@@ -48,7 +48,7 @@
 // Not sure if there is any limit defined in the QUIC standard.
 #define MAX_FRAMES_PER_PACKET 16
 // The maximum number of packets in the queue that have to be registered
-#define MAX_REGISTER_QUEUE_SIZE 2048 // TODO: what size is sufficient?
+#define MAX_REGISTER_QUEUE_SIZE 1<<11 // 2048 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
 // which is also used in the userspace program (i.e. should be changed with care).
@@ -225,7 +225,7 @@ struct {
 // program considering a new client. This can be useful
 // in case some setup would need to be done before the
 // client is fully operational.
-// TODO: currently only used in the chat example.
+// TODO: might now be needed because of "number of clients"?
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);
