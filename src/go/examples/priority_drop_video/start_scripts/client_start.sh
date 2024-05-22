@@ -4,8 +4,4 @@ set -x
 
 clear
 
-CLIENT_NS="client_ns"
-
-export PATH=${PATH}:/usr/local/go/bin
-cd ..
-ip netns exec ${CLIENT_NS} go run *.go client
+sudo ip netns exec client_ns sh -c 'export PATH=$PATH:/usr/local/go/bin && exec bash'

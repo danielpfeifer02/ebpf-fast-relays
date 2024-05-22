@@ -23,6 +23,7 @@ BPF_TC_IN_TO_EG_PINNED_PATH := /sys/fs/bpf/$(TC_IN_TO_EG)
 
 DEV_IN := veth1
 DEV_EG := veth2
+DEV_EG_INDEX := $(shell ip link show $(DEV_EG) | awk '/^[0-9]/ {print $$1}' | sed 's/://')
 
 # TODO: other way to export PATH
 export PATH := $(PATH):/usr/local/go/bin
@@ -34,7 +35,9 @@ INGRESS_TO_EGRESS_PATH := ../go/examples/ingress_to_egress
 .PHONY: clean all tc_main tc_poc chat
 
 all: $(BPF_TC_OBJ) tc_main
-	go build -o ${PRIO_DROP_PATH_VIDEO}/build/main ${PRIO_DROP_PATH_VIDEO}/*.go
+	@echo "ifindex for $(DEV_EG): $(DEV_EG_INDEX)"
+#	TODO: better practice to work with compiled go code?
+#	go build -o ${PRIO_DROP_PATH_VIDEO}/build/main ${PRIO_DROP_PATH_VIDEO}/*.go
 
 chat: $(BPF_TC_OBJ) tc_main
 	go build -o ${PRIO_DROP_PATH_CHAT}/build/main ${PRIO_DROP_PATH_CHAT}/*.go
@@ -66,6 +69,7 @@ tc_poc: $(BPF_TC_IN_TO_EG_OBJ)
 # TODO add -Werror flag 
 $(BPF_TC_OBJ): ${TC_PATH}/%.o: ${TC_PATH}/%.c
 	clang -S \
+		-Dveth2_egress_ifindex=${DEV_EG_INDEX} \
 		-g \
 		-target bpf \
 	  -I../../libbpf/src\
@@ -77,6 +81,7 @@ $(BPF_TC_OBJ): ${TC_PATH}/%.o: ${TC_PATH}/%.c
 # TODO add -Werror flag 
 $(BPF_TC_IN_TO_EG_OBJ): ${TC_IN_TO_EG_PATH}/%.o: ${TC_IN_TO_EG_PATH}/%.c
 	clang -S \
+		-Dveth2_egress_ifindex=${DEV_EG_INDEX} \
 		-g \
 		-target bpf \
 	  -I../../libbpf/src\

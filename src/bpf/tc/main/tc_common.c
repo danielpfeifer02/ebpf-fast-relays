@@ -24,8 +24,10 @@
 
 // The ingress to egress redirection happens from the veth1 interface to the veth2 interface.
 // For that the program needs to know the ifindex of the veth2 interface. 
-// TODO: handle better and avoid manual configuration?
-#define veth2_egress_ifindex 14
+// This will be defined in the Makefile
+// since the ifindex can change and has
+// to be read from the system.
+// #define veth2_egress_ifindex ??
 
 // The connection id length will always be 16 bytes since the underlying QUIC library
 // is expected to use a fixed length connection id. This is just for convenience since
