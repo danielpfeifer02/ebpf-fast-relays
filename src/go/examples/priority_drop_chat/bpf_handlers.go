@@ -422,7 +422,9 @@ func clearBPFMaps() {
 		"client_pn",
 		"connection_current_pn",
 		"connection_pn_translation",
-		"client_stream_offset"}
+		"client_stream_offset",
+		"packets_to_register",
+		"index_packets_to_register"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {

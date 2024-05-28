@@ -20,6 +20,14 @@
 	__attribute__((section(NAME), used))
 #endif
 
+// This is just to suppress the IDE warnings about the
+// missing symbol of veth2_egress_ifindex.
+// The symbol is defined in the Makefile
+// so this case should never be reached.
+#ifndef veth2_egress_ifindex
+# define veth2_egress_ifindex 0
+#endif
+
 // ++++++++++++++++++ CONFIG DEFINITIONS ++++++++++++++++++ //
 
 // The ingress to egress redirection happens from the veth1 interface to the veth2 interface.
