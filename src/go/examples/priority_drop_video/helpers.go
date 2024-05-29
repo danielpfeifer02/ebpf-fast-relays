@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/go-gst/go-gst/gst"
 )
 
 func getConnectionIDsKey(qconn quic.Connection) [6]byte {
@@ -53,4 +54,17 @@ func debugPrint(p ...interface{}) {
 	if DEBUG_PRINT {
 		fmt.Println(p...)
 	}
+}
+
+func getElementByName(pipeline *gst.Pipeline, name string) *gst.Element {
+	elements, err := pipeline.GetElements()
+	if err != nil {
+		panic(err)
+	}
+	for _, element := range elements {
+		if element.GetName() == name {
+			return element
+		}
+	}
+	return nil
 }

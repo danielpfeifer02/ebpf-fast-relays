@@ -12,7 +12,6 @@ import (
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
-	"github.com/mengelbart/gst-go"
 )
 
 func relay() error {
@@ -253,53 +252,65 @@ func relay() error {
 }
 
 func relay_player(recv_chan chan []byte) error {
-	closeCh := make(chan struct{})
 
-	p := new(gst.Pipeline)
-	err := error(nil)
-	if test_video {
-		p, err = gst.NewPipeline("appsrc name=src ! video/x-vp8 ! vp8dec ! video/x-raw,width=480,height=320,framerate=30/1 ! autovideosink")
-	} else {
-		launch_str := `
-			appsrc name=src
-			! video/x-vp8 ! vp8dec 
-			! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1 
-			! autovideosink
-		`
-		p, err = gst.NewPipeline(launch_str)
-	}
+	pipeline, err := createReceivePipelineFromChannel(recv_chan)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	p.SetEOSHandler(func() {
-		p.Stop()
-		closeCh <- struct{}{}
-	})
-	p.SetErrorHandler(func(err error) {
-		log.Println(err)
-		p.Stop()
-		closeCh <- struct{}{}
-	})
-	p.Start()
-	log.Println("starting pipeline")
-	go func() {
-		for {
-			buf := <-recv_chan
-			n := len(buf)
-			fmt.Println("Received", n, "bytes")
-			_, err = p.Write(buf[:n])
-			if err != nil {
-				log.Printf("error on write: %v", err)
-				p.SendEOS()
-			}
-		}
-	}()
 
-	ml := gst.NewMainLoop()
-	go func() {
-		<-closeCh
-		ml.Stop()
-	}()
-	ml.Run()
+	pipeline.Start()
 	return nil
 }
+
+// func relay_player_old(recv_chan chan []byte) error {
+// 	closeCh := make(chan struct{})
+
+// 	p := new(gst.Pipeline)
+// 	err := error(nil)
+// 	if test_video {
+// 		p, err = gst.NewPipeline("appsrc name=src ! video/x-vp8 ! vp8dec ! video/x-raw,width=480,height=320,framerate=30/1 ! autovideosink")
+// 	} else {
+// 		launch_str := `
+// 			appsrc name=src
+// 			! video/x-vp8
+// 			! vp8dec
+// 			! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1
+// 			! autovideosink
+// 		`
+// 		p, err = gst.NewPipeline(launch_str)
+// 	}
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	p.SetEOSHandler(func() {
+// 		p.Stop()
+// 		closeCh <- struct{}{}
+// 	})
+// 	p.SetErrorHandler(func(err error) {
+// 		log.Println(err)
+// 		p.Stop()
+// 		closeCh <- struct{}{}
+// 	})
+// 	p.Start()
+// 	log.Println("starting pipeline")
+// 	go func() {
+// 		for {
+// 			buf := <-recv_chan
+// 			n := len(buf)
+// 			fmt.Println("Received", n, "bytes")
+// 			_, err = p.Write(buf[:n])
+// 			if err != nil {
+// 				log.Printf("error on write: %v", err)
+// 				p.SendEOS()
+// 			}
+// 		}
+// 	}()
+
+// 	ml := gst.NewMainLoop()
+// 	go func() {
+// 		<-closeCh
+// 		ml.Stop()
+// 	}()
+// 	ml.Run()
+// 	return nil
+// }

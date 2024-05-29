@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
+	"syscall"
+
+	"github.com/go-gst/go-gst/gst"
 )
 
 func clearScreen() {
@@ -58,4 +65,51 @@ func main() {
 
 	}
 
+}
+
+// TODO:
+// REMOVE
+// REMOVE
+func main_testing() {
+	fmt.Println("Starting...")
+	server := flag.Bool("server", false, "Run as server and send media (true) or run as client and receive media (false)")
+	addr := flag.String("addr", video_server_address, "address")
+	flag.Parse()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM)
+	done := make(chan struct{}, 1)
+
+	go func() {
+		if err := run(ctx, *server, *addr); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	<-done
+}
+
+func run(ctx context.Context, server bool, addr string) error {
+	gst.Init(nil)
+	defer gst.Deinit()
+
+	if server {
+		s, err := newSender(ctx, addr)
+		if err != nil {
+			return err
+		}
+		s.start()
+		<-ctx.Done()
+		return s.Close()
+	}
+	r, err := newReceiver(ctx, addr)
+	if err != nil {
+		return err
+	}
+	r.start()
+	<-ctx.Done()
+	return r.Close()
 }
