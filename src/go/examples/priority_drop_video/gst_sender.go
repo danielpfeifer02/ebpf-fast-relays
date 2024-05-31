@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"log"
 
@@ -110,11 +111,16 @@ func createSendPipeline(flow *moqtransport.SendSubscription) (*gst.Pipeline, err
 	pstr := `
 			filesrc location=../../../video/example.mp4
 			! decodebin
-			! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1
+			! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, 
+			  interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, 
+			  chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1
 			! clocksync 
-			! vp8enc name=encoder target-bitrate=10000000 cpu-used=16 deadline=1 keyframe-max-dist=10
+			! vp8enc name=encoder target-bitrate=10000000 cpu-used=16 deadline=1 
+			  keyframe-max-dist=2
+			
 			! appsink name=appsink
 	`
+
 	pipeline, err := gst.NewPipelineFromString(pstr)
 	if err != nil {
 		return nil, err
@@ -139,6 +145,15 @@ func createSendPipeline(flow *moqtransport.SendSubscription) (*gst.Pipeline, err
 			if err != nil {
 				return gst.FlowError
 			}
+
+			// Here we add the presentation timestamp to the beginning of the buffer.
+			// This is a little hacky but needed at the sink side to be able to
+			// reconstruct the video stream correctly (even if packets are dropped).
+			pres_ts := buffer.PresentationTimestamp()
+			ts_arr := make([]byte, 8)
+			binary.BigEndian.PutUint64(ts_arr, uint64(pres_ts))
+			samples = append(ts_arr, samples...)
+
 			n, err := stream.Write(samples)
 			if err != nil {
 				return gst.FlowError

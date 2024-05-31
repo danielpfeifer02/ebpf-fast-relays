@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"fmt"
 	"log"
 
@@ -119,16 +120,28 @@ func createReceivePipeline(flow *moqtransport.ReceiveSubscription) (*gst.Pipelin
 
 }
 
+// TODO: remove
+// var _ = `
+// gst-launch-1.0 appsrc name=src ! rtpjitterbuffer ! application/x-rtp,media=\(string\)video,clockrate=\(int\)90000,encoding-name=\(string\)VP8,payload=\(int\)96 ! rtpvp8depay ! video/x-vp8 ! vp8dec ! video/x-raw,format=\(string\)I420,width=\(int\)1280,height=\(int\)720,interlace-mode=\(string\)progressive,pixel-aspect-ratio=\(fraction\)1/1,chroma-site=\(string\)mpeg2,colorimetry=\(string\)bt709,framerate=\(fraction\)25/1 ! videoconvert ! clocksync ! autovideosink
+// gst-launch-1.0 filesrc location=../../../video/example.mp4 ! decodebin ! video/x-raw,format=\(string\)I420,width=\(int\)1280,height=\(int\)720,interlace-mode=\(string\)progressive,pixel-aspect-ratio=\(fraction\)1/1,chroma-site=\(string\)mpeg2,colorimetry=\(string\)bt709,framerate=\(fraction\)25/1 ! clocksync ! vp8enc name=encoder target-bitrate=10000000 cpu-used=16 deadline=1 keyframe-max-dist=10 ! rtpvp8pay mtu=64000 ! appsink name=appsink
+//
+// `
+
 func createReceivePipelineFromChannel(recv_chan chan []byte) (*gst.Pipeline, error) {
 	// gst.Init(nil)
 
+	// TODO: appsrc name=src is-live=true or not?
 	pstr := `
 		appsrc name=src
 		! video/x-vp8 
 		! vp8dec 
-		! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1 
+		! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, 
+		  interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, 
+		  chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1
+
 		! autovideosink
 	`
+
 	pipeline, err := gst.NewPipelineFromString(pstr)
 	if err != nil {
 		return nil, err
@@ -139,9 +152,20 @@ func createReceivePipelineFromChannel(recv_chan chan []byte) (*gst.Pipeline, err
 	src.SetCallbacks(&app.SourceCallbacks{
 		NeedDataFunc: func(self *app.Source, length uint) {
 			buf := <-recv_chan
+
+			// Here we retrieve the presentation timestamp from the beginning of the buffer.
+			ts_bytes := buf[:8]
+			buf = buf[8:]
+			ts_i64 := uint64(binary.BigEndian.Uint64(ts_bytes))
+
 			n := len(buf)
 			log.Printf("read %v bytes\n", n)
 			buffer := gst.NewBufferWithSize(int64(n))
+
+			// Here we set the presentation timestamp of the buffer again.
+			ts_i64_gst_ct := gst.ClockTime(ts_i64)
+			buffer.SetPresentationTimestamp(ts_i64_gst_ct)
+
 			buffer.Map(gst.MapWrite).WriteData(buf[:n])
 			buffer.Unmap()
 
