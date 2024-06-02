@@ -3,9 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 func client() error {
@@ -14,9 +11,7 @@ func client() error {
 
 	defer cancel()
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM)
-	done := make(chan struct{}, 1)
+	done := startSignalHandler()
 
 	go func() {
 		receiver, err := newReceiver(ctx, relay_server_address)

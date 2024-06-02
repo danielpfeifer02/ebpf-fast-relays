@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/go-gst/go-gst/gst"
@@ -67,4 +70,18 @@ func getElementByName(pipeline *gst.Pipeline, name string) *gst.Element {
 		}
 	}
 	return nil
+}
+
+func startSignalHandler() chan struct{} {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+	done := make(chan struct{}, 1)
+
+	go func(sigs chan os.Signal, done chan struct{}) {
+		<-sigs
+		fmt.Println("Got interrupt signal")
+		done <- struct{}{}
+	}(sigs, done)
+
+	return done
 }

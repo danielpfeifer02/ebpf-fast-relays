@@ -45,7 +45,7 @@ const cache_packet_size = 1024
 // connections it manages.
 // This will be the data on which the relay will base its decision to
 // drop packets / adapt streaming rates to the client(s).
-const relay_printing_rtt = false
+const relay_printing_rtt = true
 
 // Specify wether the default test video should be played by the server
 // or if an actual video file should be played.
@@ -53,6 +53,36 @@ const test_video = false
 
 // Specify if any prints related to debugging should be printed.
 const DEBUG_PRINT = false
+
+// Specify if the relay should create a video config managing window
+// which allows for easier debugging / changing of the video settings.
+const video_config_window = true
+
+// Sepcifications for a sender of video data.
+var sender_specs = sender_spec_struct{
+	// The filepath of the video file that should be sent.
+	FilePath: "../../../video/example.mp4",
+	// The maximum interval between key-frames (i-frames) in the video.
+	KeyFrameMaxDist: 2,
+	// The minimum interval between key-frames (i-frames) in the video.
+	KeyFrameMinDist: 0,
+}
+
+// Specifying if the server application should allow the user to change the
+// sender spcifications.
+const server_changing_sender_specs = true
+
+// Specifying if the relay application should allow the user to change the
+// sender spcifications.
+const relay_changing_sender_specs = false
+
+// Specifying the minimum choosable value for the packet priority.
+// This is just for the debugging manager.
+const min_priority_slider = 0
+
+// Specifying the maximum choosable value for the packet priority.
+// This is just for the debugging manager.
+const max_priority_slider = 3
 
 // This config is used for all three roles (server, relay, client)
 func mainConfig() {

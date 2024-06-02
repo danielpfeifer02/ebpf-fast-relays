@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"log"
 
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
@@ -86,6 +87,7 @@ func (s *sender) start() error {
 	go func() {
 		<-s.ctx.Done()
 		s.pipeline.SendEvent(gst.NewEOSEvent())
+		// s.pipeline.SetState(gst.StateNull)
 	}()
 	s.pipeline.SetState(gst.StatePlaying)
 	for {
@@ -108,15 +110,17 @@ func (s *sender) Close() error {
 func createSendPipeline(flow *moqtransport.SendSubscription) (*gst.Pipeline, error) {
 	// gst.Init(nil)
 
+	fmt.Println("Getting sender specifications")
+
 	pstr := `
-			filesrc location=../../../video/example.mp4
+			filesrc location=` + sender_specs.FilePath + `
 			! decodebin
 			! video/x-raw, format=(string)I420, width=(int)1280, height=(int)720, 
 			  interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, 
 			  chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1
 			! clocksync 
 			! vp8enc name=encoder target-bitrate=10000000 cpu-used=16 deadline=1 
-			  keyframe-max-dist=2
+			  keyframe-max-dist=` + fmt.Sprint(sender_specs.KeyFrameMaxDist) + `
 			
 			! appsink name=appsink
 	`

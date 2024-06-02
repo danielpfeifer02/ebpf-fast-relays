@@ -46,3 +46,9 @@ type packet_register_struct struct {
 type index_key_struct struct {
 	Index uint32
 }
+
+type sender_spec_struct struct {
+	FilePath        string
+	KeyFrameMaxDist uint32
+	KeyFrameMinDist uint32
+}

@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 // TODO: error as return value not needed?
@@ -15,22 +13,21 @@ func server() error {
 
 	defer cancel()
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM)
-	done := make(chan struct{}, 1)
+	done := startSignalHandler()
 
-	go func() {
+	go func(ctx context.Context) {
 		sender, err := newSender(ctx, video_server_address)
 		if err != nil {
 			log.Fatal(err)
 		}
+		fmt.Println("Starting sender")
 		sender.start()
 		<-ctx.Done()
 		err = sender.Close()
 		if err != nil {
 			log.Fatal(err)
 		}
-	}()
+	}(ctx)
 
 	<-done
 	return nil

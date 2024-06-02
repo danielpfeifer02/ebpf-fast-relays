@@ -130,6 +130,7 @@ func updateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 	setBPFMapConnectionID(qconn, id)
 }
 
+// TODO: mabye split up into a "get client data" function
 func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	ipaddr, port := getIPAndPort(qconn)
 	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
@@ -384,4 +385,65 @@ func setConnectionEstablished(ip net.IP, port uint16) error {
 
 	fmt.Println("Connection established for", ip, ":", port)
 	return nil
+}
+
+func getClientID(ipaddr net.IP, port uint16) (uint32, error) {
+
+	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+
+	key := client_key_struct{
+		Ipaddr:  ipaddr_key,
+		Port:    port_key,
+		Padding: [2]uint8{0, 0},
+	}
+
+	id := &id_struct{}
+
+	client_id, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_id", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading client_id")
+		return 0, err
+	}
+	err = client_id.Lookup(key, id)
+	if err != nil {
+		fmt.Println("Error looking up client_id")
+		return 0, err
+	}
+
+	return id.Id, nil
+}
+
+func changePriorityDropLimit(c_id uint32, limit uint8) error {
+
+	id := &id_struct{
+		Id: c_id,
+	}
+
+	// TODO: maybe not load maps each time but only once in the beginning
+
+	client_data, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/client_data", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading client_data")
+		return err
+	}
+	client_info := &client_data_struct{}
+	err = client_data.Lookup(id, client_info)
+	if err != nil {
+		fmt.Println("Error looking up client_data")
+		return err
+	}
+
+	client_info.PriorityDropLimit = limit
+
+	err = client_data.Update(id, client_info, ebpf.UpdateAny)
+	debugPrint("Update at point nr.", 11)
+	if err != nil {
+		fmt.Println("Error updating client_data")
+		return err
+	}
+
+	debugPrint("Successfully updated client_data for retired connection id")
+	return nil
+
 }

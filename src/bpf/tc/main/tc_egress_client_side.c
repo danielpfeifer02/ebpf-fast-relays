@@ -272,7 +272,7 @@ int tc_egress(struct __sk_buff *skb)
                 uint8_t packet_prio; 
                 SAVE_BPF_PROBE_READ_KERNEL(&packet_prio, sizeof(packet_prio), payload + 1 /* Short header flags */);
 
-                if (PRIO_DROP && packet_prio == 1) { // < client_prio_drop_limit) {
+                if (PRIO_DROP && packet_prio < client_prio_drop_limit) { //  == 1) { //
                         bpf_printk("Packet priority lower than client priority threshold!\n");
                         return TC_ACT_SHOT;
                 }
