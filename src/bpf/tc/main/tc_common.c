@@ -59,6 +59,9 @@
 #define MAX_FRAMES_PER_PACKET 16
 // The maximum number of packets in the queue that have to be registered
 #define MAX_REGISTER_QUEUE_SIZE 1<<11 // 2048 // TODO: what size is sufficient?
+// The maximum number of pairs of packet number and timestamp that can be stored
+// for RTT calculations.
+#define MAX_PN_TS_PAIRS 1<<11 // 2048 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
 // which is also used in the userspace program (i.e. should be changed with care).
@@ -169,6 +172,13 @@ struct register_packet_t { // TODO: what fields are necessary?
         uint8_t valid;
         uint8_t padding[7];
 };
+
+// This struct represents an entry in the ring buffer storing
+// packet-number / timestamp pairs.
+struct ps_ts_pair_t {
+        uint32_t packet_number;
+        uint64_t timestamp;
+}; 
 
 // ++++++++++++++++++ BPF MAP DEFINITIONS ++++++++++++++++++ //
 
@@ -297,8 +307,54 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } index_packets_to_register SEC(".maps");
 
+// This map can be used to get RTT info.
+// It can store a packet-number and a timestamp.
+// The packet-number is used to identify the packet
+// and the timestamp tells when it was sent/received.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, uint32_t);
+    __type(value, struct ps_ts_pair_t);
+    __uint(max_entries, MAX_PN_TS_PAIRS);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} pn_ts_storage SEC(".maps");
+
+// This map stores an index to the next free slot in the
+// "pn_ts_storage" map.
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, uint32_t);
+    __type(value, uint32_t);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} index_pn_ts_storage SEC(".maps");
+
 
 // ++++++++++++++++++ FUNCTION DEFINITIONS ++++++++++++++++++ //
+
+// Store packet-number and timestamp for potential RTT calculation.f
+__attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, uint64_t timestamp) {
+
+        uint32_t zero = 0;
+        uint32_t *index = bpf_map_lookup_elem(&index_pn_ts_storage, &zero);
+        if (index == NULL) {
+                bpf_printk("Failed to get index for pn-ts storage\n");
+                return 1;
+        }
+        struct ps_ts_pair_t pair = {
+                .packet_number = packet_number,
+                .timestamp = timestamp
+        };
+        bpf_map_update_elem(&pn_ts_storage, index, &pair, BPF_ANY);
+
+        *index = *index + 1;
+        if (*index == MAX_PN_TS_PAIRS) { // TODO: why modulo not working?
+                *index = 0;
+        }
+        bpf_map_update_elem(&index_pn_ts_storage, &zero, index, BPF_ANY);
+
+        return 0;
+}
 
 // This function is used to store a packet that has to be registered
 // by the userspace program.

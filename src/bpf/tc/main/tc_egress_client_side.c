@@ -217,17 +217,21 @@ int tc_egress(struct __sk_buff *skb)
                         *new_pn = *new_pn + 1;
                         bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
+                        uint64_t time_ns = bpf_ktime_get_tai_ns();
+
                         // Userspace packets do not need to be registered (in theory).
                         // However somehow the userspace needs to know the translation of the
                         // packet number so an easy way is to also register the packet.
                         // TODO: other way to tell userspace the translation?
                         struct register_packet_t pack_to_reg = {
                                 .packet_number = pn_key.packet_number,
-                                .timestamp = bpf_ktime_get_tai_ns(),
+                                .timestamp = time_ns,
                                 .length = payload_size,
                                 .valid = 1,
                         };
                         store_packet_to_register(pack_to_reg);
+
+                        store_pn_and_ts(pn_key.packet_number, time_ns);
 
                         return TC_ACT_OK;
                 }
@@ -731,6 +735,8 @@ int tc_egress(struct __sk_buff *skb)
                         .valid = 1,
                 };
                 store_packet_to_register(pack_to_reg);
+
+                store_pn_and_ts(*new_pn - 1, time_ns);
         
         } else {
 
@@ -790,17 +796,21 @@ int tc_egress(struct __sk_buff *skb)
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
+                uint64_t time_ns = bpf_ktime_get_tai_ns();
+
                 // Userspace packets do not need to be registered (in theory).
                 // However somehow the userspace needs to know the translation of the
                 // packet number so an easy way is to also register the packet.
                 // TODO: other way to tell userspace the translation?
                 struct register_packet_t pack_to_reg = {
                         .packet_number = pn_key.packet_number,
-                        .timestamp = bpf_ktime_get_tai_ns(),
+                        .timestamp = time_ns,
                         .length = payload_size,
                         .valid = 1,
                 };
                 store_packet_to_register(pack_to_reg);
+
+                store_pn_and_ts(pn_key.packet_number, time_ns);
 
         }
 

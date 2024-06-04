@@ -447,3 +447,8 @@ func changePriorityDropLimit(c_id uint32, limit uint8) error {
 	return nil
 
 }
+
+func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection) {
+	fmt.Println("Received packet", pn, "at timestamp", ts)
+	oob_conn.SendDatagram([]byte(fmt.Sprintf("%d %d", pn, ts)))
+}
