@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os/exec"
@@ -449,6 +450,13 @@ func changePriorityDropLimit(c_id uint32, limit uint8) error {
 }
 
 func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection) {
+	if oob_conn == nil {
+		fmt.Println("Out of band connection not initialized")
+		return
+	}
 	fmt.Println("Received packet", pn, "at timestamp", ts)
-	oob_conn.SendDatagram([]byte(fmt.Sprintf("%d %d", pn, ts)))
+	buf := make([]byte, 16)
+	binary.LittleEndian.PutUint64(buf, uint64(pn))
+	binary.LittleEndian.PutUint64(buf[8:], uint64(ts))
+	oob_conn.SendDatagram(buf)
 }

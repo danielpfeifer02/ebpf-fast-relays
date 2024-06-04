@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/binary"
 	"encoding/pem"
 	"fmt"
 	"log"
@@ -170,11 +171,15 @@ func relayConfig() {
 	fmt.Println("Accepted out of band connection")
 	oob_conn = conn
 	go func() {
-		buf, err := oob_conn.ReceiveDatagram(context.Background())
-		if err != nil {
-			panic(err)
+		for {
+			buf, err := oob_conn.ReceiveDatagram(context.Background())
+			if err != nil {
+				panic(err)
+			}
+			pn := binary.LittleEndian.Uint64(buf[:8])
+			ts := binary.LittleEndian.Uint64(buf[8:])
+			fmt.Println("Received pn:", pn, ", ts:", ts)
 		}
-		fmt.Println("Received", buf)
 	}()
 }
 
