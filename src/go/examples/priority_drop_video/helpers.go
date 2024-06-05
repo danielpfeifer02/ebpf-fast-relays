@@ -14,7 +14,7 @@ import (
 )
 
 func getConnectionIDsKey(qconn quic.Connection) [6]byte {
-	ipaddr, port := getIPAndPort(qconn)
+	ipaddr, port := getIPAndPort(qconn, true)
 	ipv4 := ipaddr.To4()
 	if ipv4 == nil {
 		panic("Invalid IP address")
@@ -22,8 +22,14 @@ func getConnectionIDsKey(qconn quic.Connection) [6]byte {
 	return [6]byte{ipv4[0], ipv4[1], ipv4[2], ipv4[3], byte(port >> 8), byte(port & 0xFF)}
 }
 
-func getIPAndPort(conn quic.Connection) (net.IP, uint16) {
-	tup := strings.Split(conn.RemoteAddr().String(), ":")
+func getIPAndPort(conn quic.Connection, remote bool) (net.IP, uint16) {
+	var ipstr string
+	if remote {
+		ipstr = conn.RemoteAddr().String()
+	} else {
+		ipstr = conn.LocalAddr().String()
+	}
+	tup := strings.Split(ipstr, ":")
 	ipaddr := net.ParseIP(tup[0])
 	if ipaddr == nil {
 		panic("Invalid IP address")

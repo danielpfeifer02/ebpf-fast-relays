@@ -146,7 +146,7 @@ func relay() error {
 	go registerBPFPacket(conn)
 
 	// Now we set the connection to be established
-	ip, port := getIPAndPort(conn)
+	ip, port := getIPAndPort(conn, true)
 	err = setConnectionEstablished(ip, port)
 	if err != nil {
 		return err

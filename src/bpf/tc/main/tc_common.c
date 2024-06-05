@@ -177,7 +177,11 @@ struct register_packet_t { // TODO: what fields are necessary?
 // packet-number / timestamp pairs.
 struct ps_ts_pair_t {
         uint32_t packet_number;
+        uint32_t ip_addr;
         uint64_t timestamp;
+        uint16_t port;
+        uint8_t valid;
+        uint8_t padding[5];
 }; 
 
 // ++++++++++++++++++ BPF MAP DEFINITIONS ++++++++++++++++++ //
@@ -312,7 +316,7 @@ struct {
 // The packet-number is used to identify the packet
 // and the timestamp tells when it was sent/received.
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, uint32_t);
     __type(value, struct ps_ts_pair_t);
     __uint(max_entries, MAX_PN_TS_PAIRS);
@@ -333,7 +337,7 @@ struct {
 // ++++++++++++++++++ FUNCTION DEFINITIONS ++++++++++++++++++ //
 
 // Store packet-number and timestamp for potential RTT calculation.f
-__attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, uint64_t timestamp) {
+__attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, uint64_t timestamp, uint32_t ip_addr, uint16_t port) {
 
         uint32_t zero = 0;
         uint32_t *index = bpf_map_lookup_elem(&index_pn_ts_storage, &zero);
@@ -343,7 +347,10 @@ __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, u
         }
         struct ps_ts_pair_t pair = {
                 .packet_number = packet_number,
-                .timestamp = timestamp
+                .ip_addr = ip_addr,
+                .timestamp = timestamp,
+                .port = port,
+                .valid = 1
         };
         bpf_map_update_elem(&pn_ts_storage, index, &pair, BPF_ANY);
 
@@ -358,7 +365,7 @@ __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, u
 
 // This function is used to store a packet that has to be registered
 // by the userspace program.
-__attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) {
+__attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) { // TODO: need to consider ip and port to support multiple clients
 
         uint32_t zero = 0;
         uint32_t *index = bpf_map_lookup_elem(&index_packets_to_register, &zero);

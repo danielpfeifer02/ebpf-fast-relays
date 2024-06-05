@@ -52,3 +52,12 @@ type sender_spec_struct struct {
 	KeyFrameMaxDist uint32
 	KeyFrameMinDist uint32
 }
+
+type pn_ts_struct struct {
+	PacketNumber uint32
+	IpAddr       uint32
+	Timestamp    uint64
+	Port         uint16
+	Valid        uint8
+	Padding      [5]uint8
+}

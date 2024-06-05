@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/binary"
 	"encoding/pem"
 	"fmt"
 	"log"
@@ -86,6 +84,10 @@ const min_priority_slider = 0
 // This is just for the debugging manager.
 const max_priority_slider = 3
 
+// Specifying the address and the port the relay is using to listen for
+// the out of band communication.
+const oob_addr_server = "192.168.11.2:12345"
+
 // This is the connection at the relay that will receive the packet number and
 // timestamp data from the client.
 var oob_conn quic.Connection
@@ -156,31 +158,8 @@ func relayConfig() {
 	// TODO: is this still used?
 	packet_setting.IS_CLIENT = false
 
-	// Listen for out of band connection
-	addr := "192.168.11.2:12345"
-	ctx := context.Background()
-	tlsConfig := generateTLSConfig(false)
-	listener, err := quic.ListenAddr(addr, tlsConfig, generateQUICConfig())
-	if err != nil {
-		panic(err)
-	}
-	conn, err := listener.Accept(ctx)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Accepted out of band connection")
-	oob_conn = conn
-	go func() {
-		for {
-			buf, err := oob_conn.ReceiveDatagram(context.Background())
-			if err != nil {
-				panic(err)
-			}
-			pn := binary.LittleEndian.Uint64(buf[:8])
-			ts := binary.LittleEndian.Uint64(buf[8:])
-			fmt.Println("Received pn:", pn, ", ts:", ts)
-		}
-	}()
+	// Setup an out of band connection for the relay
+	setupOOBConnectionRelaySide()
 }
 
 func clientConfig() {
@@ -203,17 +182,7 @@ func clientConfig() {
 	// stored in the bpf map (for RTT analysis).
 	packet_setting.ReceivedPacketAtTimestampHandler = receivedPacketAtTimestamp
 
-	// Connect to relay out of band connection
-	addr := "192.168.11.2:12345"
-	ctx := context.Background()
-	tlsConfig := generateTLSConfig(false)
-	conn, err := quic.DialAddr(ctx, addr, tlsConfig, generateQUICConfig())
-	if err != nil {
-		panic(err)
-	}
-	oob_conn = conn
-	fmt.Println("Connected to out of band connection")
-	// packet_setting.Oob_conn = oob_conn
+	setupOOBConnectionClientSide()
 }
 
 // Setup basic QUIC config for server/relay/client

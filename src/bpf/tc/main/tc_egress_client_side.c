@@ -231,7 +231,7 @@ int tc_egress(struct __sk_buff *skb)
                         };
                         store_packet_to_register(pack_to_reg);
 
-                        store_pn_and_ts(pn_key.packet_number, time_ns);
+                        store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 
                         return TC_ACT_OK;
                 }
@@ -736,7 +736,7 @@ int tc_egress(struct __sk_buff *skb)
                 };
                 store_packet_to_register(pack_to_reg);
 
-                store_pn_and_ts(*new_pn - 1, time_ns);
+                store_pn_and_ts(*new_pn - 1, time_ns, value->dst_ip_addr, value->dst_port);
         
         } else {
 
@@ -810,7 +810,7 @@ int tc_egress(struct __sk_buff *skb)
                 };
                 store_packet_to_register(pack_to_reg);
 
-                store_pn_and_ts(pn_key.packet_number, time_ns);
+                store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 
         }
 

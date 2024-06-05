@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
 	"os/exec"
@@ -133,7 +132,7 @@ func updateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 
 // TODO: mabye split up into a "get client data" function
 func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
-	ipaddr, port := getIPAndPort(qconn)
+	ipaddr, port := getIPAndPort(qconn, true)
 	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
 	port_key := swapEndianness16(port)
 
@@ -201,7 +200,7 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 	debugPrint("TRANSLATE", pn)
 	debugPrint("Translated packet number", qconn.RemoteAddr().String())
 
-	ipaddr, port := getIPAndPort(qconn)
+	ipaddr, port := getIPAndPort(qconn, true)
 	client_key := client_key_struct{
 		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
 		Port:    swapEndianness16(uint16(port)),
@@ -250,7 +249,7 @@ func deleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnecti
 	debugPrint("DELETE", pn)
 	debugPrint("Deleted translation for packet from", qconn.RemoteAddr().String())
 
-	ipaddr, port := getIPAndPort(qconn)
+	ipaddr, port := getIPAndPort(qconn, true)
 	client_key := client_key_struct{
 		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
 		Port:    swapEndianness16(uint16(port)),
@@ -449,14 +448,38 @@ func changePriorityDropLimit(c_id uint32, limit uint8) error {
 
 }
 
-func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection) {
-	if oob_conn == nil {
-		fmt.Println("Out of band connection not initialized")
-		return
+func readPnTsSent() {
+
+	pn_ts_storage, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/pn_ts_storage", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading pn_ts_storage")
+		panic(err)
 	}
-	fmt.Println("Received packet", pn, "at timestamp", ts)
-	buf := make([]byte, 16)
-	binary.LittleEndian.PutUint64(buf, uint64(pn))
-	binary.LittleEndian.PutUint64(buf[8:], uint64(ts))
-	oob_conn.SendDatagram(buf)
+	index_pn_ts_storage := 0
+
+	for {
+
+		pn_ts := &pn_ts_struct{}
+		err = pn_ts_storage.Lookup(uint32(index_pn_ts_storage), pn_ts)
+		if err == nil && pn_ts.Valid == 1 {
+			netIP := net.IPv4(byte(pn_ts.IpAddr), byte(pn_ts.IpAddr>>8), byte(pn_ts.IpAddr>>16), byte(pn_ts.IpAddr>>24))
+			netPort := ((pn_ts.Port & 0xff) << 8) | ((pn_ts.Port & 0xff00) >> 8)
+			storePnTsSent(uint64(pn_ts.PacketNumber), pn_ts.Timestamp, netIP, netPort)
+
+			pn_ts.Valid = 0
+			err = pn_ts_storage.Update(uint32(index_pn_ts_storage), pn_ts, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating pn_ts_storage")
+				panic(err)
+			}
+
+			index_pn_ts_storage++
+			if index_pn_ts_storage == 2048 { // TODO: save as const once final size is known
+				index_pn_ts_storage = 0
+			}
+		} else {
+			// fmt.Println(err)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 }

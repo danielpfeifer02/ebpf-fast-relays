@@ -76,3 +76,7 @@
   This causes issues since actual pns are assumed to be bigger-or-equal to the one from user space!
 
 - multiple stream frames per short header packet?? -> avoid
+
+- sometimes pn is 32 and sometimes 64 bit in the code
+
+- fix problem with unknown (any) local ip address at client side when informing relay of receit of packet
