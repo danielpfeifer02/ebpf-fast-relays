@@ -45,7 +45,10 @@ const cache_packet_size = 1024
 // connections it manages.
 // This will be the data on which the relay will base its decision to
 // drop packets / adapt streaming rates to the client(s).
-const relay_printing_rtt = true
+const relay_printing_rtt = false
+
+// Specify if the relay should print the congestion analysis information.
+const relay_printing_congestion_analysis = true
 
 // Specify wether the default test video should be played by the server
 // or if an actual video file should be played.
@@ -91,6 +94,12 @@ const oob_addr_server = "192.168.11.2:12345"
 // This is the connection at the relay that will receive the packet number and
 // timestamp data from the client.
 var oob_conn quic.Connection
+
+// Defaut alpha value for exponential weighted moving average.
+const default_ewma_alpha = 0.125
+
+// Default maximum size of the history for the delay values.
+const default_max_hist_size = 1 << 15 // 32768
 
 // This config is used for all three roles (server, relay, client)
 func mainConfig() {

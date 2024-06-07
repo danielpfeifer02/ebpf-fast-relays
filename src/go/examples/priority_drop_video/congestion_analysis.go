@@ -1,5 +1,12 @@
 package main
 
+import (
+	"fmt"
+	"math"
+	"sync"
+	"time"
+)
+
 /*
 
  * This file provides some metrics based on which the relay can decide to higher or
@@ -16,6 +23,8 @@ package main
  * 		- Moving variance of the delay
 
  TODO: 	- add a way to incorporate packet loss (i.e. there was no oob message for a packet)
+
+ TODO:	- maybe visualize the metrics in a graph (e.g. using grafana)
 
 */
 
@@ -40,20 +49,62 @@ var ewma_storage map[uint64]ewma_entry
 // Index for the ewma storage.
 var ewma_storage_index = uint64(0)
 
+// Lock for ewma storage.
+var ewma_lock = sync.Mutex{}
+
 // Storage for the hist values.
 var hist_storage map[uint64]hist_entry
 
 // Index for the hist storage.
 var hist_storage_index = uint64(0)
 
+// Lock for hist storage.
+var hist_lock = sync.Mutex{}
+
 func register_client(alpha float64, max_hist_size uint64) client_indices {
-	return client_indices{ewma_index: register_ewma(alpha), hist_index: register_hist(max_hist_size)}
+	ewma_idx := register_ewma(alpha)
+	max_hist_idx := register_hist(max_hist_size)
+
+	if relay_printing_congestion_analysis {
+		go func() {
+
+			for {
+				ewma_lock.Lock()
+				ewma := ewma_storage[ewma_idx].ewma
+				ewma_lock.Unlock()
+				fmt.Println("EWMA:", ewma)
+
+				hist_lock.Lock()
+				hist := hist_storage[max_hist_idx].hist
+				hist_lock.Unlock()
+				if len(hist) >= 2 {
+					last_delay := hist[len(hist)-1]
+					second_last_delay := hist[len(hist)-2]
+					last_jitter := max(last_delay, second_last_delay) - min(last_delay, second_last_delay)
+
+					avg_jitter := calc_avg_jitter(10, client_indices{ewma_index: ewma_idx, hist_index: max_hist_idx})
+					fmt.Println("Average jitter:", avg_jitter)
+					fmt.Println("Last jitter:", last_jitter)
+
+					std_dev := calc_std_dev(10, client_indices{ewma_index: ewma_idx, hist_index: max_hist_idx})
+					fmt.Println("Standard deviation:", std_dev)
+				}
+
+				time.Sleep(2 * time.Second)
+			}
+
+		}()
+	}
+
+	return client_indices{ewma_index: ewma_idx, hist_index: max_hist_idx}
 }
 
 func register_ewma(alpha float64) uint64 {
 	if ewma_storage == nil {
 		ewma_storage = make(map[uint64]ewma_entry)
 	}
+	ewma_lock.Lock()
+	defer ewma_lock.Unlock()
 	if _, ok := ewma_storage[ewma_storage_index]; ok {
 		panic("Index already exists")
 	}
@@ -66,6 +117,8 @@ func register_hist(max_hist_size uint64) uint64 {
 	if hist_storage == nil {
 		hist_storage = make(map[uint64]hist_entry)
 	}
+	hist_lock.Lock()
+	defer hist_lock.Unlock()
 	if _, ok := hist_storage[hist_storage_index]; ok {
 		panic("Index already exists")
 	}
@@ -74,8 +127,17 @@ func register_hist(max_hist_size uint64) uint64 {
 	return hist_storage_index - 1
 }
 
+func ca_ts_handler(sent_ts, recv_ts uint64, packet_info pn_ts_struct, indices client_indices) {
+	delay := recv_ts - sent_ts
+
+	// fmt.Println("Client received packet with pn", packet_info.PacketNumber, "after", delay, "ns")
+	add_delay(delay, indices)
+}
+
 // Adds a delay to the history
 func add_delay(delay uint64, indices client_indices) {
+	hist_lock.Lock()
+	defer hist_lock.Unlock()
 	entry := hist_storage[indices.hist_index]
 	hist_delay := entry.hist
 	hist_max_size := entry.max_size
@@ -90,6 +152,8 @@ func add_delay(delay uint64, indices client_indices) {
 
 // Update the exponential weighted moving average of the delay.
 func update_ewma(delay uint64, indices client_indices) {
+	ewma_lock.Lock()
+	defer ewma_lock.Unlock()
 	entry := ewma_storage[indices.ewma_index]
 	ewma := entry.ewma
 	alpha := entry.alpha
@@ -99,13 +163,63 @@ func update_ewma(delay uint64, indices client_indices) {
 }
 
 // Calculates the jitter of the delay for the last window_size packets.
-func calc_jitter(window_size int, indices client_indices) uint64 {
-	return 0
+func calc_avg_jitter(window_size int, indices client_indices) uint64 {
+	var subset []uint64
+	hist_lock.Lock()
+	if hist, ok := hist_storage[indices.hist_index]; ok {
+		size := min(window_size, len(hist.hist))
+		subset = hist.hist[len(hist.hist)-size:]
+	} else {
+		panic("Invalid index")
+	}
+	hist_lock.Unlock()
+
+	// Get differences between the delays
+	var diffs []uint64
+	for i := 1; i < len(subset); i++ {
+		diffs = append(diffs, max(subset[i], subset[i-1])-(min(subset[i], subset[i-1])))
+	}
+
+	// Calculate the average of the differences
+	var sum uint64
+	for _, diff := range diffs {
+		sum += diff
+	}
+	avg := sum / uint64(len(diffs))
+
+	return avg
+
 }
 
 // Calculates the standard deviation of the delay for the last window_size packets.
 func calc_std_dev(window_size int, indices client_indices) uint64 {
-	return 0
+	var subset []uint64
+	hist_lock.Lock()
+	if hist, ok := hist_storage[indices.hist_index]; ok {
+		size := min(window_size, len(hist.hist))
+		subset = hist.hist[len(hist.hist)-size:]
+	} else {
+		panic("Invalid index")
+	}
+	hist_lock.Unlock()
+
+	// Calculate the mean.
+	var sum uint64
+	for _, delay := range subset {
+		sum += delay
+	}
+	mean := sum / uint64(len(subset))
+
+	// Calculate the variance.
+	var variance uint64
+	for _, delay := range subset {
+		variance += (delay - mean) * (delay - mean)
+	}
+	variance /= uint64(len(subset))
+
+	// Calculate the standard deviation.
+	std_dev := uint64(math.Sqrt(float64(variance)))
+	return std_dev
 }
 
 // Calculates the moving average of the delay for the last window_size packets.

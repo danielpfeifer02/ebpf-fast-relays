@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
@@ -14,6 +15,8 @@ import (
 
 // map [6 bytes] -> [map[uint64] -> uint64]
 var sent_storage map[[6]byte]map[uint64]uint64
+
+var sent_storage_lock = sync.Mutex{}
 
 func setupOOBConnectionRelaySide() {
 	ctx := context.Background()
@@ -53,6 +56,8 @@ func startOOBHandler() {
 	if oob_conn == nil {
 		panic("oob_conn is nil but handler was started")
 	}
+
+	indices := register_client(default_ewma_alpha, default_max_hist_size)
 	go func() {
 		for {
 			buf, err := oob_conn.ReceiveDatagram(context.Background())
@@ -64,7 +69,7 @@ func startOOBHandler() {
 			ip := binary.LittleEndian.Uint32(buf[16:])
 			port := binary.LittleEndian.Uint16(buf[20:])
 			netip := net.IPv4(byte(ip>>24), byte(ip>>16), byte(ip>>8), byte(ip))
-			handlePnTsRecv(pn, ts, netip, port)
+			handlePnTsRecv(pn, ts, netip, port, indices)
 		}
 	}()
 }
@@ -105,16 +110,27 @@ func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection)
 	oob_conn.SendDatagram(buf)
 }
 
-func handlePnTsRecv(pn, ts uint64, ip net.IP, port uint16) {
+func handlePnTsRecv(pn, ts uint64, ip net.IP, port uint16, indices client_indices) {
 
 	// fmt.Println("Receive pn:", pn, ", ts:", ts, ", ip:", ip, ", port:", port)
 
 	key := [6]byte{ip[0], ip[1], ip[2], ip[3], byte(port >> 8), byte(port & 0xFF)}
+	sent_storage_lock.Lock()
+	defer sent_storage_lock.Unlock()
 	if conn_storage, ok := sent_storage[key]; ok {
-		if sent_ts, ok := conn_storage[pn]; ok {
-			fmt.Println("Client received packet", ts-sent_ts, "ns after server sent it")
+		// sent_storage_lock.Unlock()
+		if sent_ts, ok := conn_storage[pn]; ok { // TODO: delete the entry from the map
+			packet_info := pn_ts_struct{
+				PacketNumber: uint32(pn),
+				IpAddr:       ipToInt32(ip),
+				Timestamp:    ts,
+				Port:         port,
+				Valid:        1,
+			}
+			ca_ts_handler(sent_ts, ts, packet_info, indices)
 		}
 	}
+	// sent_storage_lock.Unlock()
 
 }
 
@@ -123,8 +139,12 @@ func storePnTsSent(pn, ts uint64, ip net.IP, port uint16) {
 	// fmt.Println("Store pn:", pn, ", ts:", ts, ", ip:", ip, ", port:", port)
 
 	key := [6]byte{ip[0], ip[1], ip[2], ip[3], byte(port >> 8), byte(port & 0xFF)}
+
+	sent_storage_lock.Lock()
+	defer sent_storage_lock.Unlock()
 	if sent_storage[key] == nil {
 		sent_storage[key] = make(map[uint64]uint64)
 	}
 	sent_storage[key][pn] = ts
+	// sent_storage_lock.Unlock()
 }
