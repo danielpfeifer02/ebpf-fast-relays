@@ -100,7 +100,7 @@ const oob_addr_server = "192.168.11.2:12345"
 var oob_conn quic.Connection
 
 // Defaut alpha value for exponential weighted moving average.
-const default_ewma_alpha = 0.125
+const default_ewma_alpha = 0.05
 
 // Default maximum size of the history for the delay values.
 const default_max_hist_size = 1 << 15 // 32768

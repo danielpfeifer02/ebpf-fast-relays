@@ -22,9 +22,36 @@ type table_channels struct {
 	std_dev_chan         chan basic_table_entry
 }
 
+/*
+Make sure the local ip for the ethernet interface (for me 172.16.254.134) is set up in the mysql server:
+
+ 0. to find out the ip you can use "ip addr"
+    the correct interface should contain a local ip and look something like this:
+
+    3: enx00133bfbc2db: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:13:3b:fb:c2:db brd ff:ff:ff:ff:ff:ff
+    inet 172.16.254.134/24 brd 172.16.254.255 scope global dynamic noprefixroute enx00133bfbc2db
+    valid_lft 83941sec preferred_lft 83941sec
+    inet6 fe80::b27e:3c82:c636:1e0f/64 scope link noprefixroute
+    valid_lft forever preferred_lft forever
+
+ 1. change the bind-address in /etc/mysql/mysql.conf.d/mysqld.cnf and add ",172.16.254.134" after "127.0.0.1"
+
+ 2. restart the mysql server: sudo systemctl restart mysql
+
+ 3. make sure the user has the right permissions for all ip addresses. Execute within mysql:
+
+    CREATE USER 'username'@'localhost' IDENTIFIED BY 'password';
+    GRANT ALL PRIVILEGES ON *.* TO 'username'@'localhost' WITH GRANT OPTION;
+    CREATE USER 'username'@'%' IDENTIFIED BY 'password';
+    GRANT ALL PRIVILEGES ON *.* TO 'username'@'%' WITH GRANT OPTION;
+    FLUSH PRIVILEGES;
+
+ 4. also make sure to update the gradana data source with the correct ip address.
+*/
 func get_db() *sql.DB {
 	// Open a connection to the MySQL database
-	db, err := sql.Open("mysql", "username:password@tcp(192.168.12.1:3306)/grafana")
+	db, err := sql.Open("mysql", "username:password@tcp(172.16.254.134:3306)/grafana")
 	if err != nil {
 		log.Fatal("Error opening the database: ", err)
 	}

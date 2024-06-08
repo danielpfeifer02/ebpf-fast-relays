@@ -111,7 +111,7 @@ func register_client(alpha float64, max_hist_size uint64) client_indices {
 
 				ewma_lock.Lock()
 				ewma := ewma_storage[ewma_idx].ewma
-				ts := time.Now().Format("2006-01-02 15:04:05.000000")
+				ts := time.Now().UTC().Format("2006-01-02 15:04:05.000000000")
 				ewma_lock.Unlock()
 
 				ewma_entry := basic_table_entry{Timestamp: ts, Value: ewma}
