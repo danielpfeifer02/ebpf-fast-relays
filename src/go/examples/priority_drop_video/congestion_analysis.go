@@ -96,6 +96,35 @@ func register_client(alpha float64, max_hist_size uint64) client_indices {
 		}()
 	}
 
+	if grafana_usage {
+
+		go func() {
+
+			db := get_db()
+			if db == nil {
+				return
+			}
+			tables := create_tables(db)
+			defer db.Close()
+
+			for {
+
+				ewma_lock.Lock()
+				ewma := ewma_storage[ewma_idx].ewma
+				ts := time.Now().Format("2006-01-02 15:04:05.000000")
+				ewma_lock.Unlock()
+
+				ewma_entry := basic_table_entry{Timestamp: ts, Value: ewma}
+				tables.ewma_chan <- ewma_entry
+
+				time.Sleep(99 * time.Millisecond)
+
+			}
+
+		}()
+
+	}
+
 	return client_indices{ewma_index: ewma_idx, hist_index: max_hist_idx}
 }
 

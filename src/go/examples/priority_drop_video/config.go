@@ -50,6 +50,10 @@ const relay_printing_rtt = false
 // Specify if the relay should print the congestion analysis information.
 const relay_printing_congestion_analysis = true
 
+// Specify whether metrics should be saved to a mysql database
+// for visualization in grafana.
+const grafana_usage = true
+
 // Specify wether the default test video should be played by the server
 // or if an actual video file should be played.
 const test_video = false

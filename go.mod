@@ -8,6 +8,7 @@ require (
 	github.com/danielpfeifer02/priority-moqtransport v0.1.1-6
 	github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28
 	github.com/go-gst/go-gst v1.0.0
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/mengelbart/gst-go v0.0.4
 )
 
@@ -16,6 +17,7 @@ replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio
 replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28 => ../quic-go-prio-packs
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	fyne.io/systray v1.10.1-0.20231115130155-104f5ef7839e // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect

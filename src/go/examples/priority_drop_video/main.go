@@ -20,11 +20,6 @@ func clearScreen() {
 // TODO: fix timeout issues when there is nothing happening
 func main() {
 
-	for i := 0; i < 20; i++ {
-		fmt.Println("Don't forget also sending on low priority streams! (func (s *objectStream) Write(payload []byte) (int, error))")
-		fmt.Print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
-	}
-
 	mainConfig()
 	os.Remove("tls.keylog")
 
