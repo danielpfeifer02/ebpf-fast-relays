@@ -117,6 +117,20 @@ func register_client(alpha float64, max_hist_size uint64) client_indices {
 				ewma_entry := basic_table_entry{Timestamp: ts, Value: ewma}
 				tables.ewma_chan <- ewma_entry
 
+				hist_lock.Lock()
+				hist := hist_storage[max_hist_idx].hist
+				hist_lock.Unlock()
+				if len(hist) >= 2 {
+
+					window_size := 10
+
+					avg_jitter := calc_avg_jitter(window_size, client_indices{ewma_index: ewma_idx, hist_index: max_hist_idx})
+					tables.jitter_hist_chan <- basic_table_entry{Timestamp: ts, Value: avg_jitter}
+
+					std_dev := calc_std_dev(window_size, client_indices{ewma_index: ewma_idx, hist_index: max_hist_idx})
+					tables.std_dev_chan <- basic_table_entry{Timestamp: ts, Value: std_dev}
+				}
+
 				time.Sleep(99 * time.Millisecond)
 
 			}
@@ -137,7 +151,7 @@ func register_ewma(alpha float64) uint64 {
 	if _, ok := ewma_storage[ewma_storage_index]; ok {
 		panic("Index already exists")
 	}
-	ewma_storage[ewma_storage_index] = ewma_entry{alpha: alpha, ewma: 0}
+	ewma_storage[ewma_storage_index] = ewma_entry{alpha: alpha, ewma: ewma_start_value}
 	ewma_storage_index++
 	return ewma_storage_index - 1
 }

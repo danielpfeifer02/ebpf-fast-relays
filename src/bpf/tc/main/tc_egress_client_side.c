@@ -170,6 +170,7 @@ int tc_egress(struct __sk_buff *skb)
                         // connection so we create a new entry of zero in the map.
                         if (new_pn == NULL) {
                                 bpf_map_update_elem(&connection_current_pn, &key, &zero, BPF_ANY);
+                                bpf_printk("No packet number found\n");
                                 new_pn = &zero;
                         }
                         

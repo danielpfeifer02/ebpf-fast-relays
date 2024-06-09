@@ -109,4 +109,4 @@ ip netns exec ${CLIENT_NS} echo "nameserver 8.8.8.8" > /etc/netns/${CLIENT_NS}/r
 ip netns exec ${CLIENT_NS} echo "nameserver 8.8.4.4" >> /etc/netns/${CLIENT_NS}/resolv.conf
 
 # Add a delay to the bridge connecting relay and client
-tc qdisc add dev ${BRIDGE_VETH_TO_CLI} root netem delay 100ms
+tc qdisc add dev ${BRIDGE_VETH_TO_CLI} root netem delay 5ms

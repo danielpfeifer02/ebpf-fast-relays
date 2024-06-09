@@ -111,4 +111,4 @@ ip netns exec ${RELAY_NS} echo "nameserver 8.8.4.4" >> /etc/netns/${RELAY_NS}/re
 iptables -P FORWARD ACCEPT
 
 # Add a delay to the bridge connecting relay and client
-tc qdisc add dev ${BRIDGE_VETH_TO_REL} root netem delay 100ms
+tc qdisc add dev ${BRIDGE_VETH_TO_REL} root netem delay 5ms

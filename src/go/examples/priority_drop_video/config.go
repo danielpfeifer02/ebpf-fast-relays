@@ -100,7 +100,12 @@ const oob_addr_server = "192.168.11.2:12345"
 var oob_conn quic.Connection
 
 // Defaut alpha value for exponential weighted moving average.
-const default_ewma_alpha = 0.05
+const default_ewma_alpha = 0.01
+
+// Start value for the exponential weighted moving average.
+// This is just to allow for easier reading in grafana since
+// there is less of a initial spike.
+const ewma_start_value = 5_000_000
 
 // Default maximum size of the history for the delay values.
 const default_max_hist_size = 1 << 15 // 32768
@@ -157,6 +162,9 @@ func relayConfig() {
 		// This is for the packet number translation
 		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
 		packet_setting.AckTranslationDeletionBPFHandler = deleteAckPacketNumberTranslation
+
+		// This is to get the highest packet number of a connection that was sent
+		packet_setting.ConnectionGetLargestSentPacketNumber = getLargestSentPacketNumber
 
 		// TODO: fix in prio_packs repo?
 		packet_setting.SET_ONLY_APP_DATA = true

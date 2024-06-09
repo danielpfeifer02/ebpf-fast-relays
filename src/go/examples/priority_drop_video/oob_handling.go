@@ -83,6 +83,10 @@ func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection)
 	binary.LittleEndian.PutUint64(buf, uint64(pn))
 	binary.LittleEndian.PutUint64(buf[8:], uint64(ts))
 
+	// if conn.RemoteAddr().String() == relay_server_address {
+	// 	fmt.Println("Received packet with pn", pn, "at timestamp", ts)
+	// }
+
 	qconn := conn.(quic.Connection)
 	ipaddr, port := getIPAndPort(qconn, true)
 	ipv4 := ipaddr.To4()

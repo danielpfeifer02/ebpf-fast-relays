@@ -312,6 +312,33 @@ func registerBPFPacket(conn quic.Connection) {
 	// 	panic(err)
 	// }
 
+	go func() {
+
+		connection_current_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_current_pn", &ebpf.LoadPinOptions{})
+		if err != nil {
+			debugPrint("Error loading connection_current_pn")
+			panic(err)
+		}
+
+		ipaddr, port := getIPAndPort(conn, true)
+		key := client_key_struct{
+			Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+			Port:    swapEndianness16(port),
+			Padding: [2]uint8{0, 0},
+		}
+
+		current_pn := &connnection_pn_stuct{}
+		for {
+
+			err = connection_current_pn.Lookup(key, current_pn)
+			if err == nil {
+				break
+			}
+			conn.SetHighestSent(int64(current_pn.Pn) - 1)
+
+		}
+	}()
+
 	buffer_map, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packets_to_register", &ebpf.LoadPinOptions{})
 	if err != nil {
 		debugPrint("Error loading buffer map")
@@ -332,7 +359,7 @@ func registerBPFPacket(conn quic.Connection) {
 		err = buffer_map.Lookup(current_index, val)
 		if err == nil && val.Valid == 1 { // TODO: why not valid?
 
-			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index)
+			fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
 
 			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
 				packet := packet_setting.PacketRegisterContainerBPF{
@@ -482,4 +509,34 @@ func readPnTsSent() {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+}
+
+func getLargestSentPacketNumber(conn packet_setting.QuicConnection) int64 {
+
+	qconn := conn.(quic.Connection)
+
+	ipaddr, port := getIPAndPort(qconn, true)
+	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+
+	key := client_key_struct{
+		Ipaddr:  ipaddr_key,
+		Port:    port_key,
+		Padding: [2]uint8{0, 0},
+	}
+
+	connection_current_pn, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/connection_current_pn", &ebpf.LoadPinOptions{})
+	if err != nil {
+		fmt.Println("Error loading connection_current_pn")
+		panic(err)
+	}
+
+	current_pn := &connnection_pn_stuct{}
+	err = connection_current_pn.Lookup(key, current_pn)
+	if err != nil {
+		fmt.Println("Error looking up connection_current_pn")
+		panic(err)
+	}
+
+	return int64(current_pn.Pn - 1)
 }
