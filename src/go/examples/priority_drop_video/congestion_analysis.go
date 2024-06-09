@@ -90,6 +90,7 @@ func register_client(alpha float64, max_hist_size uint64) client_indices {
 					fmt.Println("Standard deviation:", std_dev)
 				}
 
+				fmt.Println("------------------------------------")
 				time.Sleep(2 * time.Second)
 			}
 

@@ -57,6 +57,11 @@ func initConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 // The connection id is removed from the global list.
 func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 
+	if len(id) == 0 {
+		fmt.Println("Empty connection id???")
+		return
+	}
+
 	qconn := conn.(quic.Connection)
 
 	if qconn.RemoteAddr().String() == video_server_address {
@@ -359,7 +364,7 @@ func registerBPFPacket(conn quic.Connection) {
 		err = buffer_map.Lookup(current_index, val)
 		if err == nil && val.Valid == 1 { // TODO: why not valid?
 
-			fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
+			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
 
 			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
 				packet := packet_setting.PacketRegisterContainerBPF{
