@@ -154,6 +154,9 @@ func relayConfig() {
 
 	if bpf_enabled {
 
+		// Load the BPF maps
+		loadBPFMaps()
+
 		// TODO: check if those three functions are correctly implemented
 		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
 		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
@@ -171,6 +174,7 @@ func relayConfig() {
 
 		// Set the registration of BPF packets to on
 		packet_setting.BPF_PACKET_REGISTRATION = true
+
 	}
 
 	// Specify if the calling program is the client to be able to access

@@ -8,31 +8,23 @@ import (
 	"log"
 	"time"
 
-	"github.com/cilium/ebpf"
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
 
 func relay() error {
-	var number_of_clients *ebpf.Map
 	var err error
 	if bpf_enabled {
+
 		clearBPFMaps()
-		number_of_clients, err = ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/number_of_clients", &ebpf.LoadPinOptions{})
-		if err != nil {
-			panic(err)
-		}
+
 		client_ctr := uint32(0)
 		err = number_of_clients.Update(uint32(0), client_ctr, 0)
 		if err != nil {
 			panic(err)
 		}
 
-		id_counter, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/id_counter", &ebpf.LoadPinOptions{})
-		if err != nil {
-			panic(err)
-		}
 		err = id_counter.Update(uint32(0), uint32(0), 0)
 		if err != nil {
 			panic(err)
