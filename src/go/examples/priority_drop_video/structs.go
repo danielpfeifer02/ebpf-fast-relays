@@ -39,8 +39,11 @@ type packet_register_struct struct {
 	PacketNumber uint64
 	SentTime     uint64
 	Length       uint64
-	Valid        uint8
-	Padding      [7]uint8
+
+	ServerPN uint32
+
+	Valid   uint8
+	Padding [3]uint8
 }
 
 type index_key_struct struct {

@@ -157,6 +157,10 @@ func relayConfig() {
 		// Load the BPF maps
 		loadBPFMaps()
 
+		InitializeCacheSetup()
+
+		packet_setting.StoreServerPacket = StoreServerPacket
+
 		// TODO: check if those three functions are correctly implemented
 		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
 		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId

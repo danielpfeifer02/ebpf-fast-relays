@@ -135,6 +135,7 @@ int tc_egress(struct __sk_buff *skb)
 
                         // For some reason the bpf verifier does not like this
                         // whole thing being put into a loop.
+                        // TODO: put into separate function
                         if (pn_len >= 1) {
                                 SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic);
                                 old_pn = byte;
@@ -228,6 +229,7 @@ int tc_egress(struct __sk_buff *skb)
                                 .packet_number = pn_key.packet_number,
                                 .timestamp = time_ns,
                                 .length = payload_size,
+                                .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
                                 .valid = 1,
                         };
                         store_packet_to_register(pack_to_reg);
@@ -707,6 +709,40 @@ int tc_egress(struct __sk_buff *skb)
                 // TODO: We cannot just write the packet number into the packet
                 // TODO: without knowing the length of the packet number!
 
+
+
+                // Read old packet number to store it in the translation map.
+                uint32_t old_pn = 0;
+                uint8_t byte;
+                uint32_t pn_off_from_quic = 1 /* Short header bits */ + CONN_ID_LEN;
+
+                // For some reason the bpf verifier does not like this
+                // whole thing being put into a loop.
+                // TODO: put into separate function
+                if (pn_len >= 1) {
+                        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic);
+                        old_pn = byte;
+                }
+                if (pn_len >= 2) {
+                        old_pn = old_pn << 8;
+                        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 1);
+                        old_pn = old_pn | byte;
+                }
+                if (pn_len >= 3) {
+                        old_pn = old_pn << 8;
+                        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 2);
+                        old_pn = old_pn | byte;
+                }
+                if (pn_len == 4) {
+                        old_pn = old_pn << 8;
+                        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 3);
+                        old_pn = old_pn | byte;
+                }
+                // bpf_printk("Old packet number: %d\n", old_pn);
+
+
+
+
                 uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
                 uint32_t zero = 0;
                 // If there is no packet number found it is the first request for that
@@ -729,10 +765,12 @@ int tc_egress(struct __sk_buff *skb)
                 uint64_t time_ns = bpf_ktime_get_tai_ns();
                 bpf_printk("Current nanoseconds: %llu\n", time_ns);
 
+
                 struct register_packet_t pack_to_reg = {
                         .packet_number = (uint64_t)(*new_pn - 1),
                         .timestamp = time_ns,
                         .length = payload_size,
+                        .server_pn = old_pn,
                         .valid = 1,
                 };
                 store_packet_to_register(pack_to_reg);
@@ -807,6 +845,7 @@ int tc_egress(struct __sk_buff *skb)
                         .packet_number = pn_key.packet_number,
                         .timestamp = time_ns,
                         .length = payload_size,
+                        .server_pn = -1, // -1 -> we don't care right now // TODO: what to do with long headers?
                         .valid = 1,
                 };
                 store_packet_to_register(pack_to_reg);

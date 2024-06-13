@@ -169,8 +169,11 @@ struct register_packet_t { // TODO: what fields are necessary?
         uint64_t packet_number;
         uint64_t timestamp;
         uint64_t length;
+
+        uint32_t server_pn;
+
         uint8_t valid;
-        uint8_t padding[7];
+        uint8_t padding[3];
 };
 
 // This struct represents an entry in the ring buffer storing

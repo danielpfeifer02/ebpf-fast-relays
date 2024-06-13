@@ -328,10 +328,34 @@ func registerBPFPacket(conn quic.Connection) {
 			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
 
 			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
+
+				var server_pack packet_setting.RetransmissionPacketContainer
+				for {
+					server_pack = RetreiveServerPacket(int64(val.ServerPN))
+					if server_pack.Valid {
+						break
+					}
+					time.Sleep(1 * time.Millisecond) // TODO: optimal?
+				}
+				if len(server_pack.RawData) == 0 {
+					panic("No server packet found")
+				}
+
+				// if server_pack.Length != int64(val.Length) { // TODO: useful check?
+				// 	fmt.Println(server_pack.Length, val.Length)
+				// 	panic("Lengths do not match")
+				// }
+
 				packet := packet_setting.PacketRegisterContainerBPF{
 					PacketNumber: int64(val.PacketNumber),
 					SentTime:     int64(val.SentTime),
-					Length:       int64(val.Length),
+					Length:       int64(val.Length), // TODO: length needed if its in server_pack?
+
+					RawData: server_pack.RawData,
+
+					// These two will be set in the wrapper of the quic connection.
+					Frames:       nil,
+					StreamFrames: nil,
 				}
 
 				conn.RegisterBPFPacket(packet)

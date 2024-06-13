@@ -1,0 +1,695 @@
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x8 pc=0x72a479]
+
+goroutine 99 [running]:
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).queueFramesForRetransmission(0xc000262300?, 0xc00022f110)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:988 +0x99
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).QueueProbePacket(0xc00022d1d0, 0x4?)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:967 +0x71
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).sendProbePacket(0xc000138408, 0x4, {0x4?, 0x1fa64c0?, 0x1fa64c0?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:2096 +0x5f
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).triggerSending(0xc000138408, {0x4?, 0x0?, 0x1fa64c0?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:1898 +0x1d2
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).triggerSending(0xc000138408, {0x120c240a8?, 0x1fa64c0?, 0x1fa64c0?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:1905 +0x228
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).run(0xc000138408)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:679 +0x9fa
+created by github.com/danielpfeifer02/quic-go-prio-packs.(*baseServer).handleInitialImpl in goroutine 114
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/server.go:707 +0xdcb
+exit status 2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0xb57 pc=0x727aba]
+
+goroutine 100 [running]:
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).detectAndRemoveAckedPackets.func1(0xc002a046a8?)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:523 +0x1a
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHistory).Iterate(0x61a129?, 0xc0005b3548)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_history.go:126 +0x4d
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).detectAndRemoveAckedPackets(0xc0005c01e0, 0xc000324808?, 0x4)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:521 +0x107
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).ReceivedAck(0xc0005c01e0, 0xc0002c84c0, 0x4, {0xc000324928?, 0xc000324928?, 0x1fa64c0?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:445 +0x3b0
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).handleAckFrame(0xc000324808, 0xc0002c84c0, 0x90?)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:1591 +0x48
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).handleFrame(0xc000324808, {0x1137e90, 0xc0002c84c0}, 0x4, {{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, ...}, ...})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:1358 +0x4ae
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).handleFrames(0xc000324808, {0xc000446013?, 0x1fa64c0?, 0xc000446000?}, {{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, ...}, ...}, ...)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:1320 +0x37d
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).handleUnpackedShortHeaderPacket(0xc000324808, {{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, ...}, ...}, ...)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:1279 +0xd3
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).handleShortHeaderPacket(0xc000324808, {0xc000140200, {0x1137988, 0xc002b813e0}, {0xc1921e7b66bb3bac, 0x272e5c8e4, 0x1fa64c0}, {0xc000446000, 0x1e, 0x5ac}, ...}, ...)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:974 +0x5e9
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).handlePacketImpl(0xc000324808, {0xc000140200, {0x1137988, 0xc002b813e0}, {0xc1921e7b66bb3bac, 0x272e5c8e4, 0x1fa64c0}, {0xc000446000, 0x1e, 0x5ac}, ...})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:915 +0x8da
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).run(0xc000324808)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:609 +0x545
+created by github.com/danielpfeifer02/quic-go-prio-packs.(*baseServer).handleInitialImpl in goroutine 117
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/server.go:707 +0xdcb
+exit status 2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/transport.go:294 +0x465
+
+goroutine 32 gp=0xc000103340 m=nil [select]:
+runtime.gopark(0xc0002b1f90?, 0x2?, 0x0?, 0x0?, 0xc0002b1e9c?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000147cf8 sp=0xc000147cd8 pc=0x4681ae
+runtime.selectgo(0xc000147f90, 0xc0002b1e98, 0xc000278f00?, 0x0, 0x79402a3c?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc000147e18 sp=0xc000147cf8 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*baseServer).run(0xc00051e5a0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/server.go:290 +0x129 fp=0xc000147fc8 sp=0xc000147e18 pc=0x784109
+github.com/danielpfeifer02/quic-go-prio-packs.newServer.gowrap1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/server.go:276 +0x25 fp=0xc000147fe0 sp=0xc000147fc8 pc=0x783fa5
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000147fe8 sp=0xc000147fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/quic-go-prio-packs.newServer in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/server.go:276 +0x4d6
+
+goroutine 31 gp=0xc000103500 m=nil [select]:
+runtime.gopark(0xc0002abed0?, 0x3?, 0x2?, 0x0?, 0xc0002abe72?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc00061dcd0 sp=0xc00061dcb0 pc=0x4681ae
+runtime.selectgo(0xc00061ded0, 0xc0002abe6c, 0x200000002?, 0x0, 0x200000002?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc00061ddf0 sp=0xc00061dcd0 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*Transport).runSendQueue(0xc00012a000)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/transport.go:319 +0x107 fp=0xc00061dfc8 sp=0xc00061ddf0 pc=0x791067
+github.com/danielpfeifer02/quic-go-prio-packs.(*Transport).init.func1.gowrap2()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/transport.go:295 +0x25 fp=0xc00061dfe0 sp=0xc00061dfc8 pc=0x790ec5
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00061dfe8 sp=0xc00061dfe0 pc=0x49ade1
+created by github.com/danielpfeifer02/quic-go-prio-packs.(*Transport).init.func1 in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/transport.go:295 +0x4a5
+
+goroutine 83 gp=0xc000103880 m=nil [chan receive]:
+runtime.gopark(0x7c45c8?, 0x1c?, 0x88?, 0x2e?, 0x1138688?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000822e50 sp=0xc000822e30 pc=0x4681ae
+runtime.chanrecv(0xc00051cba0, 0xc000822fb8, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc000822ec8 sp=0xc000822e50 pc=0x43353f
+runtime.chanrecv1(0xc0000446a0?, 0x113c100?)
+	/usr/local/go/src/runtime/chan.go:442 +0x12 fp=0xc000822ef0 sp=0xc000822ec8 pc=0x433152
+main.create_basic_table.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:102 +0x69 fp=0xc000822fe0 sp=0xc000822ef0 pc=0xd638e9
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000822fe8 sp=0xc000822fe0 pc=0x49ade1
+created by main.create_basic_table in goroutine 40
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:100 +0x1e8
+
+goroutine 48 gp=0xc000103a40 m=nil [select]:
+runtime.gopark(0xc0002afd88?, 0x5?, 0xc0?, 0x64?, 0xc0002afc9e?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc0002afaf0 sp=0xc0002afad0 pc=0x4681ae
+runtime.selectgo(0xc0002afd88, 0xc0002afc94, 0x1fa64c0?, 0x0, 0xaf40747db?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc0002afc10 sp=0xc0002afaf0 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).run(0xc0004a6408)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:597 +0x447 fp=0xc0002aff70 sp=0xc0002afc10 pc=0x75ff27
+github.com/danielpfeifer02/quic-go-prio-packs.(*client).dial.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/client.go:216 +0x44 fp=0xc0002affe0 sp=0xc0002aff70 pc=0x75ca64
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc0002affe8 sp=0xc0002affe0 pc=0x49ade1
+created by github.com/danielpfeifer02/quic-go-prio-packs.(*client).dial in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/client.go:215 +0x539
+
+goroutine 46 gp=0xc000592540 m=nil [IO wait]:
+runtime.gopark(0xc00038a000?, 0xc00028b9c8?, 0x98?, 0x92?, 0x748cc5?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc00028b978 sp=0xc00028b958 pc=0x4681ae
+runtime.netpollblock(0xc0004561a4?, 0x1134460?, 0x0?)
+	/usr/local/go/src/runtime/netpoll.go:573 +0xf7 fp=0xc00028b9b0 sp=0xc00028b978 pc=0x460e77
+internal/poll.runtime_pollWait(0x749002f3d098, 0x72)
+	/usr/local/go/src/runtime/netpoll.go:345 +0x85 fp=0xc00028b9d0 sp=0xc00028b9b0 pc=0x495725
+internal/poll.(*pollDesc).wait(0xc000136180?, 0x0?, 0x0)
+	/usr/local/go/src/internal/poll/fd_poll_runtime.go:84 +0x27 fp=0xc00028b9f8 sp=0xc00028b9d0 pc=0x5084a7
+internal/poll.(*pollDesc).waitRead(...)
+	/usr/local/go/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).RawRead(0xc000136180, 0xc00004a150)
+	/usr/local/go/src/internal/poll/fd_unix.go:708 +0x12a fp=0xc00028ba58 sp=0xc00028b9f8 pc=0x50e4ca
+net.(*rawConn).Read(0xc00013c058, 0xc00038a000?)
+	/usr/local/go/src/net/rawconn.go:44 +0x36 fp=0xc00028ba90 sp=0xc00028ba58 pc=0x562196
+golang.org/x/net/internal/socket.(*syscaller).recvmmsg(0xc0004b81f8, {0x113a9e0?, 0xc00013c058?}, {0xc00038a000?, 0x10170b8?, 0x0?}, 0x10170b8?)
+	/root/go/pkg/mod/golang.org/x/net@v0.25.0/internal/socket/mmsghdr_unix.go:120 +0x70 fp=0xc00028bac0 sp=0xc00028ba90 pc=0x7490f0
+golang.org/x/net/internal/socket.(*Conn).recvMsgs(0xc0000360a0, {0xc0001b6c08, 0x8, 0x8}, 0x0)
+	/root/go/pkg/mod/golang.org/x/net@v0.25.0/internal/socket/rawconn_mmsg.go:24 +0x176 fp=0xc00028bb80 sp=0xc00028bac0 pc=0x74a2d6
+golang.org/x/net/internal/socket.(*Conn).RecvMsgs(...)
+	/root/go/pkg/mod/golang.org/x/net@v0.25.0/internal/socket/socket.go:267
+golang.org/x/net/ipv4.(*payloadHandler).ReadBatch(0xc0005221f0, {0xc0001b6c08?, 0xf12460?, 0x433a5a?}, 0xc000b60300?)
+	/root/go/pkg/mod/golang.org/x/net@v0.25.0/ipv4/batch.go:80 +0x57 fp=0xc00028bbf0 sp=0xc00028bb80 pc=0x751a17
+golang.org/x/net/ipv4.(*PacketConn).ReadBatch(0x1fa5be0?, {0xc0001b6c08?, 0x765f05?, 0x43c022?}, 0xc00015a000?)
+	<autogenerated>:1 +0x27 fp=0xc00028bc28 sp=0xc00028bbf0 pc=0x757547
+github.com/danielpfeifer02/quic-go-prio-packs.(*oobConn).ReadPacket(0xc000182240)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/sys_conn_oob.go:174 +0x722 fp=0xc00028bdd0 sp=0xc00028bc28 pc=0x78f5c2
+github.com/danielpfeifer02/quic-go-prio-packs.(*Transport).listen(0xc00012a100, {0x113f220, 0xc000182240})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/transport.go:393 +0x149 fp=0xc00028bfb8 sp=0xc00028bdd0 pc=0x7918a9
+github.com/danielpfeifer02/quic-go-prio-packs.(*Transport).init.func1.gowrap1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/transport.go:294 +0x28 fp=0xc00028bfe0 sp=0xc00028bfb8 pc=0x790f28
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00028bfe8 sp=0xc00028bfe0 pc=0x49ade1
+created by github.com/danielpfeifer02/quic-go-prio-packs.(*Transport).init.func1 in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/transport.go:294 +0x465
+
+goroutine 82 gp=0xc0005028c0 m=nil [select]:
+runtime.gopark(0xc000286f58?, 0x2?, 0xdd?, 0xa?, 0xc000286f2c?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000286dd0 sp=0xc000286db0 pc=0x4681ae
+runtime.selectgo(0xc000286f58, 0xc000286f28, 0x1d?, 0x0, 0x3059f?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc000286ef0 sp=0xc000286dd0 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*sendQueue).Run(0xc0004229c0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/send_queue.go:75 +0x105 fp=0xc000286fb0 sp=0xc000286ef0 pc=0x780f05
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).run.func2()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:557 +0x25 fp=0xc000286fe0 sp=0xc000286fb0 pc=0x760aa5
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000286fe8 sp=0xc000286fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/quic-go-prio-packs.(*connection).run in goroutine 48
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:556 +0x1f1
+
+goroutine 60 gp=0xc000103c00 m=nil [select]:
+runtime.gopark(0xc000129e28?, 0x3?, 0x60?, 0x0?, 0xc000129df2?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000095c98 sp=0xc000095c78 pc=0x4681ae
+runtime.selectgo(0xc000095e28, 0xc000129dec, 0x43a1af?, 0x0, 0xc000129e01?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc000095db8 sp=0xc000095c98 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*datagramQueue).Receive(0xc00016e000, {0x113c218, 0xc00024e1e0})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/datagram_queue.go:123 +0x14e fp=0xc000095e68 sp=0xc000095db8 pc=0x76efce
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).ReceiveDatagram(0xc000278db0?, {0x113c218?, 0xc00024e1e0?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:2556 +0x31 fp=0xc000095e90 sp=0xc000095e68 pc=0x76d251
+github.com/danielpfeifer02/priority-moqtransport/quicmoq.(*connection).ReceiveDatagram(0x113c100?, {0x113c218?, 0xc00024e1e0?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/quicmoq/connection.go:64 +0x28 fp=0xc000095eb8 sp=0xc000095e90 pc=0x860068
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptDatagram(0xc0002dc000)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:329 +0xed fp=0xc000095f30 sp=0xc000095eb8 pc=0x85ae6d
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptDatagrams(0xc0002dc000)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:334 +0x49 fp=0xc000095fc8 sp=0xc000095f30 pc=0x85afe9
+github.com/danielpfeifer02/priority-moqtransport.(*Session).run.gowrap2()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:244 +0x25 fp=0xc000095fe0 sp=0xc000095fc8 pc=0x85a265
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000095fe8 sp=0xc000095fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).run in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:244 +0x9f
+
+goroutine 61 gp=0xc000103dc0 m=nil [chan receive]:
+runtime.gopark(0x84a044?, 0xc1921d807a18950a?, 0xbf?, 0xdd?, 0x1fa64c0?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc0002adae0 sp=0xc0002adac0 pc=0x4681ae
+runtime.chanrecv(0xc00033c240, 0x0, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc0002adb58 sp=0xc0002adae0 pc=0x43353f
+runtime.chanrecv1(0xc0004523c0?, 0x0?)
+	/usr/local/go/src/runtime/chan.go:442 +0x12 fp=0xc0002adb80 sp=0xc0002adb58 pc=0x433152
+github.com/danielpfeifer02/quic-go-prio-packs.(*receiveStream).readImpl(0xc0004523c0, {0xc00022cb07, 0x1, 0x1})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/receive_stream.go:155 +0x677 fp=0xc0002adc70 sp=0xc0002adb80 pc=0x77e797
+github.com/danielpfeifer02/quic-go-prio-packs.(*receiveStream).Read(0xc0004523c0, {0xc00022cb07, 0x1, 0x1})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/receive_stream.go:92 +0xd6 fp=0xc0002adcf0 sp=0xc0002adc70 pc=0x77dfd6
+github.com/danielpfeifer02/quic-go-prio-packs.(*stream).Read(0x0?, {0xc00022cb07?, 0x0?, 0x0?})
+	<autogenerated>:1 +0x25 fp=0xc0002add20 sp=0xc0002adcf0 pc=0x79b685
+github.com/danielpfeifer02/quic-go-prio-packs/quicvarint.(*byteReader).ReadByte(0xc000262230)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/quicvarint/io.go:34 +0x4a fp=0xc0002add68 sp=0xc0002add20 pc=0x710c8a
+github.com/danielpfeifer02/quic-go-prio-packs/quicvarint.Read({0x749000582c60, 0xc000262230})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/quicvarint/varint.go:26 +0x25 fp=0xc0002add90 sp=0xc0002add68 pc=0x710d25
+github.com/danielpfeifer02/priority-moqtransport.(*loggingParser).parse(0xc00030c2b8)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/message.go:132 +0x4d fp=0xc0002ade80 sp=0xc0002add90 pc=0x851e2d
+github.com/danielpfeifer02/priority-moqtransport.(*defaultCtrlStreamHandler).readNext(0xc0000c5ce0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:36 +0x33 fp=0xc0002adf18 sp=0xc0002ade80 pc=0x858993
+github.com/danielpfeifer02/priority-moqtransport.(*defaultCtrlStreamHandler).readMessages(0xc0000c5ce0, 0xc0002902f0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:43 +0x39 fp=0xc0002adfc0 sp=0xc0002adf18 pc=0x858a99
+github.com/danielpfeifer02/priority-moqtransport.(*Session).run.gowrap3()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:246 +0x29 fp=0xc0002adfe0 sp=0xc0002adfc0 pc=0x85a209
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc0002adfe8 sp=0xc0002adfe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).run in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:246 +0x154
+
+goroutine 73 gp=0xc000592700 m=nil [select]:
+runtime.gopark(0xc0004ebfa8?, 0x2?, 0x0?, 0x0?, 0xc0004ebf9c?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc0004ebe48 sp=0xc0004ebe28 pc=0x4681ae
+runtime.selectgo(0xc0004ebfa8, 0xc0004ebf98, 0x0?, 0x0, 0x0?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc0004ebf68 sp=0xc0004ebe48 pc=0x479605
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptDatagram.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:323 +0x6b fp=0xc0004ebfe0 sp=0xc0004ebf68 pc=0x85af6b
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc0004ebfe8 sp=0xc0004ebfe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptDatagram in goroutine 60
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:322 +0xcd
+
+goroutine 62 gp=0xc0002fc000 m=nil [select]:
+runtime.gopark(0xc0005504e8?, 0x2?, 0x90?, 0x3?, 0xc0005504bc?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000550368 sp=0xc000550348 pc=0x4681ae
+runtime.selectgo(0xc0005504e8, 0xc0005504b8, 0x0?, 0x0, 0x0?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc000550488 sp=0xc000550368 pc=0x479605
+io.(*pipe).read(0xc0002baba0, {0xc000550568, 0xfa00, 0x0?})
+	/usr/local/go/src/io/pipe.go:57 +0xa5 fp=0xc000550518 sp=0xc000550488 pc=0x4e4165
+io.(*PipeReader).Read(...)
+	/usr/local/go/src/io/pipe.go:134
+github.com/danielpfeifer02/priority-moqtransport.(*ReceiveSubscription).Read(0x0?, {0xc000550568?, 0x0?, 0x0?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/receive_subscription.go:40 +0x1e fp=0xc000550548 sp=0xc000550518 pc=0x85819e
+main.relay.func1(0xc0000c5ce0?, 0xc0002902f0?)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/relay.go:78 +0x5f fp=0xc00055ffc0 sp=0xc000550548 pc=0xd688bf
+main.relay.gowrap1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/relay.go:122 +0x28 fp=0xc00055ffe0 sp=0xc00055ffc0 pc=0xd68828
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00055ffe8 sp=0xc00055ffe0 pc=0x49ade1
+created by main.relay in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/relay.go:75 +0x5b2
+
+goroutine 84 gp=0xc000502a80 m=nil [chan receive]:
+runtime.gopark(0x1134780?, 0xc0000c5b30?, 0x12?, 0x8e?, 0xc0001286b0?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000128650 sp=0xc000128630 pc=0x4681ae
+runtime.chanrecv(0xc00051cc00, 0xc0001287b8, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc0001286c8 sp=0xc000128650 pc=0x43353f
+runtime.chanrecv1(0xc000128750?, 0x581bb4?)
+	/usr/local/go/src/runtime/chan.go:442 +0x12 fp=0xc0001286f0 sp=0xc0001286c8 pc=0x433152
+main.create_basic_table.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:102 +0x69 fp=0xc0001287e0 sp=0xc0001286f0 pc=0xd638e9
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc0001287e8 sp=0xc0001287e0 pc=0x49ade1
+created by main.create_basic_table in goroutine 40
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:100 +0x1e8
+
+goroutine 85 gp=0xc000502c40 m=nil [runnable]:
+runtime.gopark(0x3a?, 0x20?, 0x0?, 0x0?, 0xb?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc0002b1578 sp=0xc0002b1558 pc=0x4681ae
+runtime.netpollblock(0x4ed338?, 0x430646?, 0x0?)
+	/usr/local/go/src/runtime/netpoll.go:573 +0xf7 fp=0xc0002b15b0 sp=0xc0002b1578 pc=0x460e77
+internal/poll.runtime_pollWait(0x749002f3cea8, 0x72)
+	/usr/local/go/src/runtime/netpoll.go:345 +0x85 fp=0xc0002b15d0 sp=0xc0002b15b0 pc=0x495725
+internal/poll.(*pollDesc).wait(0xc000386400?, 0xc002658000?, 0x0)
+	/usr/local/go/src/internal/poll/fd_poll_runtime.go:84 +0x27 fp=0xc0002b15f8 sp=0xc0002b15d0 pc=0x5084a7
+internal/poll.(*pollDesc).waitRead(...)
+	/usr/local/go/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000386400, {0xc002658000, 0x1000, 0x1000})
+	/usr/local/go/src/internal/poll/fd_unix.go:164 +0x27a fp=0xc0002b1690 sp=0xc0002b15f8 pc=0x50979a
+net.(*netFD).Read(0xc000386400, {0xc002658000?, 0x1000?, 0x3a?})
+	/usr/local/go/src/net/fd_posix.go:55 +0x25 fp=0xc0002b16d8 sp=0xc0002b1690 pc=0x54f765
+net.(*conn).Read(0xc000088110, {0xc002658000?, 0xc000236640?, 0xc002658000?})
+	/usr/local/go/src/net/net.go:179 +0x45 fp=0xc0002b1720 sp=0xc0002b16d8 pc=0x55e225
+net.(*TCPConn).Read(0x20?, {0xc002658000?, 0x55e225?, 0xc000386400?})
+	<autogenerated>:1 +0x25 fp=0xc0002b1750 sp=0xc0002b1720 pc=0x56ec05
+github.com/go-sql-driver/mysql.(*buffer).fill(0xc000236640, 0x4)
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/buffer.go:90 +0x23b fp=0xc0002b17c0 sp=0xc0002b1750 pc=0x82ad7b
+github.com/go-sql-driver/mysql.(*buffer).readNext(0xc000236640, 0x4)
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/buffer.go:119 +0x27 fp=0xc0002b17e0 sp=0xc0002b17c0 pc=0x82aea7
+github.com/go-sql-driver/mysql.(*mysqlConn).readPacket(0xc000236640)
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/packets.go:32 +0x8b fp=0xc0002b18a0 sp=0xc0002b17e0 pc=0x83556b
+github.com/go-sql-driver/mysql.(*okHandler).readResultSetHeaderPacket(0xc000236640)
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/packets.go:530 +0x111 fp=0xc0002b18f0 sp=0xc0002b18a0 pc=0x837f51
+github.com/go-sql-driver/mysql.(*mysqlStmt).Exec(0xc000b7c150, {0xc00011ecc0?, 0x20292e0?, 0x43719a?})
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/statement.go:67 +0x176 fp=0xc0002b1950 sp=0xc0002b18f0 pc=0x83da96
+github.com/go-sql-driver/mysql.(*mysqlStmt).ExecContext(0xc000b7c150, {0x113c100, 0x20292e0}, {0xc001ac8410, 0x2, 0xc001ac83c0?})
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/connection.go:592 +0x1d9 fp=0xc0002b19f8 sp=0xc0002b1950 pc=0x82ef79
+database/sql.ctxDriverStmtExec({0x113c100, 0x20292e0}, {0x113c8e0, 0xc000b7c150}, {0xc001ac8410, 0x2, 0x2?})
+	/usr/local/go/src/database/sql/ctxutil.go:65 +0xa3 fp=0xc0002b1a70 sp=0xc0002b19f8 pc=0x7bdda3
+database/sql.resultFromStatement({0x113c100, 0x20292e0}, {0x113ae60, 0xc000236640}, 0xc0002b1be8, {0xc0002b1f78, 0x2, 0x2})
+	/usr/local/go/src/database/sql/sql.go:2670 +0x13a fp=0xc0002b1b20 sp=0xc0002b1a70 pc=0x7c98ba
+database/sql.(*DB).execDC(0x2001?, {0x113c100, 0x20292e0}, 0xc000366d80, 0x74904b9ba5b8?, {0xc000bcca40, 0x33}, {0xc0002b1f78, 0x2, 0x2})
+	/usr/local/go/src/database/sql/sql.go:1722 +0x42c fp=0xc0002b1d38 sp=0xc0002b1b20 pc=0x7c4d4c
+database/sql.(*DB).exec(0xc000296000, {0x113c100, 0x20292e0}, {0xc000bcca40, 0x33}, {0xc0002b1f78, 0x2, 0x2}, 0x28?)
+	/usr/local/go/src/database/sql/sql.go:1683 +0xd5 fp=0xc0002b1da8 sp=0xc0002b1d38 pc=0x7c4895
+database/sql.(*DB).ExecContext.func1(0x80?)
+	/usr/local/go/src/database/sql/sql.go:1662 +0x4f fp=0xc0002b1e10 sp=0xc0002b1da8 pc=0x7c46af
+database/sql.(*DB).retry(0x1c?, 0xc0002b1e88)
+	/usr/local/go/src/database/sql/sql.go:1566 +0x42 fp=0xc0002b1e58 sp=0xc0002b1e10 pc=0x7c3cc2
+database/sql.(*DB).ExecContext(0xc0000446a0?, {0x113c100?, 0x20292e0?}, {0xc000bcca40?, 0x0?}, {0xc0002b1f78?, 0x0?, 0x0?})
+	/usr/local/go/src/database/sql/sql.go:1661 +0xc8 fp=0xc0002b1ef0 sp=0xc0002b1e58 pc=0x7c45c8
+database/sql.(*DB).Exec(...)
+	/usr/local/go/src/database/sql/sql.go:1675
+main.create_basic_table.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:103 +0x158 fp=0xc0002b1fe0 sp=0xc0002b1ef0 pc=0xd639d8
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc0002b1fe8 sp=0xc0002b1fe0 pc=0x49ade1
+created by main.create_basic_table in goroutine 40
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:100 +0x1e8
+
+goroutine 86 gp=0xc000502e00 m=nil [chan receive]:
+runtime.gopark(0x1134780?, 0xc000524330?, 0x0?, 0x0?, 0x0?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000127e50 sp=0xc000127e30 pc=0x4681ae
+runtime.chanrecv(0xc00060a240, 0xc000127fb8, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc000127ec8 sp=0xc000127e50 pc=0x43353f
+runtime.chanrecv1(0xc000127f50?, 0x581bb4?)
+	/usr/local/go/src/runtime/chan.go:442 +0x12 fp=0xc000127ef0 sp=0xc000127ec8 pc=0x433152
+main.create_basic_table.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:102 +0x69 fp=0xc000127fe0 sp=0xc000127ef0 pc=0xd638e9
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000127fe8 sp=0xc000127fe0 pc=0x49ade1
+created by main.create_basic_table in goroutine 40
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:100 +0x1e8
+
+goroutine 98 gp=0xc000435a40 m=nil [chan receive]:
+runtime.gopark(0x438e85?, 0xc0004f0e90?, 0xc0?, 0xa3?, 0x749002f3cfd0?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc0004f0e50 sp=0xc0004f0e30 pc=0x4681ae
+runtime.chanrecv(0xc00046e120, 0xc0004f0fb8, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc0004f0ec8 sp=0xc0004f0e50 pc=0x43353f
+runtime.chanrecv1(0x0?, 0xc000292108?)
+	/usr/local/go/src/runtime/chan.go:442 +0x12 fp=0xc0004f0ef0 sp=0xc0004f0ec8 pc=0x433152
+main.create_basic_table.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:102 +0x69 fp=0xc0004f0fe0 sp=0xc0004f0ef0 pc=0xd638e9
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc0004f0fe8 sp=0xc0004f0fe0 pc=0x49ade1
+created by main.create_basic_table in goroutine 40
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:100 +0x1e8
+
+goroutine 74 gp=0xc0005928c0 m=nil [chan receive]:
+runtime.gopark(0x7c45c8?, 0x1c?, 0x88?, 0x8e?, 0x1138688?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000468e50 sp=0xc000468e30 pc=0x4681ae
+runtime.chanrecv(0xc000510000, 0xc000468fb8, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc000468ec8 sp=0xc000468e50 pc=0x43353f
+runtime.chanrecv1(0xc0000446a0?, 0x113c100?)
+	/usr/local/go/src/runtime/chan.go:442 +0x12 fp=0xc000468ef0 sp=0xc000468ec8 pc=0x433152
+main.create_basic_table.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:102 +0x69 fp=0xc000468fe0 sp=0xc000468ef0 pc=0xd638e9
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000468fe8 sp=0xc000468fe0 pc=0x49ade1
+created by main.create_basic_table in goroutine 40
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/grafana_db_handling.go:100 +0x1e8
+
+goroutine 93 gp=0xc000435c00 m=nil [select]:
+runtime.gopark(0xc00069dde0?, 0x5?, 0xc0?, 0x64?, 0xc00069dcf6?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000616b48 sp=0xc000616b28 pc=0x4681ae
+runtime.selectgo(0xc000616de0, 0xc00069dcec, 0x1fa64c0?, 0x0, 0xaf1fd3b41?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc000616c68 sp=0xc000616b48 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).run(0xc0004a6c08)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:597 +0x447 fp=0xc000616fc8 sp=0xc000616c68 pc=0x75ff27
+github.com/danielpfeifer02/quic-go-prio-packs.(*baseServer).handleInitialImpl.gowrap1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/server.go:707 +0x28 fp=0xc000616fe0 sp=0xc000616fc8 pc=0x7872c8
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000616fe8 sp=0xc000616fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/quic-go-prio-packs.(*baseServer).handleInitialImpl in goroutine 32
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/server.go:707 +0xdcb
+
+goroutine 77 gp=0xc000600380 m=nil [select]:
+runtime.gopark(0xc000485dc0?, 0x2?, 0x60?, 0x0?, 0xc000485d84?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000485c30 sp=0xc000485c10 pc=0x4681ae
+runtime.selectgo(0xc000485dc0, 0xc000485d80, 0x1?, 0x0, 0x10?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc000485d50 sp=0xc000485c30 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*incomingStreamsMap[...]).AcceptStream(0x1144fe0, {0x113c218, 0xc000380000})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/streams_map_incoming.go:82 +0x111 fp=0xc000485df0 sp=0xc000485d50 pc=0x7980b1
+github.com/danielpfeifer02/quic-go-prio-packs.(*streamsMap).AcceptUniStream(0xc000116d20, {0x113c218, 0xc000380000})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/streams_map.go:234 +0xce fp=0xc000485e58 sp=0xc000485df0 pc=0x78b44e
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).AcceptUniStream(0x47186b?, {0x113c218?, 0xc000380000?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:2386 +0x2d fp=0xc000485e90 sp=0xc000485e58 pc=0x76c26d
+github.com/danielpfeifer02/priority-moqtransport/quicmoq.(*connection).AcceptUniStream(0x113c100?, {0x113c218?, 0xc000380000?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/quicmoq/connection.go:56 +0x29 fp=0xc000485ed0 sp=0xc000485e90 pc=0x85ff29
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptUnidirectionalStream(0xc0002dc0c0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:259 +0xe7 fp=0xc000485f40 sp=0xc000485ed0 pc=0x85a3e7
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptUnidirectionalStreams(0xc0002dc0c0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:264 +0x3f fp=0xc000485fc8 sp=0xc000485f40 pc=0x85a53f
+github.com/danielpfeifer02/priority-moqtransport.(*Session).run.gowrap1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:242 +0x25 fp=0xc000485fe0 sp=0xc000485fc8 pc=0x85a2c5
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000485fe8 sp=0xc000485fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).run in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:242 +0x56
+
+goroutine 79 gp=0xc000600540 m=nil [chan receive]:
+runtime.gopark(0x84a044?, 0xc1921d8089b597b0?, 0x65?, 0xaa?, 0x1fa64c0?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000699ae0 sp=0xc000699ac0 pc=0x4681ae
+runtime.chanrecv(0xc00060a6c0, 0x0, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc000699b58 sp=0xc000699ae0 pc=0x43353f
+runtime.chanrecv1(0xc000452960?, 0x0?)
+	/usr/local/go/src/runtime/chan.go:442 +0x12 fp=0xc000699b80 sp=0xc000699b58 pc=0x433152
+github.com/danielpfeifer02/quic-go-prio-packs.(*receiveStream).readImpl(0xc000452960, {0xc000118808, 0x1, 0x1})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/receive_stream.go:155 +0x677 fp=0xc000699c70 sp=0xc000699b80 pc=0x77e797
+github.com/danielpfeifer02/quic-go-prio-packs.(*receiveStream).Read(0xc000452960, {0xc000118808, 0x1, 0x1})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/receive_stream.go:92 +0xd6 fp=0xc000699cf0 sp=0xc000699c70 pc=0x77dfd6
+github.com/danielpfeifer02/quic-go-prio-packs.(*stream).Read(0x0?, {0xc000118808?, 0x0?, 0x440c85?})
+	<autogenerated>:1 +0x25 fp=0xc000699d20 sp=0xc000699cf0 pc=0x79b685
+github.com/danielpfeifer02/quic-go-prio-packs/quicvarint.(*byteReader).ReadByte(0xc0002900f0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/quicvarint/io.go:34 +0x4a fp=0xc000699d68 sp=0xc000699d20 pc=0x710c8a
+github.com/danielpfeifer02/quic-go-prio-packs/quicvarint.Read({0x749000582c60, 0xc0002900f0})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/quicvarint/varint.go:26 +0x25 fp=0xc000699d90 sp=0xc000699d68 pc=0x710d25
+github.com/danielpfeifer02/priority-moqtransport.(*loggingParser).parse(0xc000292048)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/message.go:132 +0x4d fp=0xc000699e80 sp=0xc000699d90 pc=0x851e2d
+github.com/danielpfeifer02/priority-moqtransport.(*defaultCtrlStreamHandler).readNext(0xc0000c45d0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:36 +0x33 fp=0xc000699f18 sp=0xc000699e80 pc=0x858993
+github.com/danielpfeifer02/priority-moqtransport.(*defaultCtrlStreamHandler).readMessages(0xc0000c45d0, 0xc000290200)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:43 +0x39 fp=0xc000699fc0 sp=0xc000699f18 pc=0x858a99
+github.com/danielpfeifer02/priority-moqtransport.(*Session).run.gowrap3()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:246 +0x29 fp=0xc000699fe0 sp=0xc000699fc0 pc=0x85a209
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000699fe8 sp=0xc000699fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).run in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:246 +0x154
+
+goroutine 178 gp=0xc000600700 m=nil [select]:
+runtime.gopark(0xc000288fa8?, 0x2?, 0x40?, 0xe1?, 0xc000288f9c?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000288e48 sp=0xc000288e28 pc=0x4681ae
+runtime.selectgo(0xc000288fa8, 0xc000288f98, 0x0?, 0x0, 0x0?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc000288f68 sp=0xc000288e48 pc=0x479605
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptUnidirectionalStream.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:253 +0x6b fp=0xc000288fe0 sp=0xc000288f68 pc=0x85a4cb
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000288fe8 sp=0xc000288fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptUnidirectionalStream in goroutine 77
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:252 +0xc7
+
+goroutine 75 gp=0xc0002fce00 m=nil [runnable]:
+runtime.gcTrigger.test({0x0?, 0x0?, 0x0?})
+	/usr/local/go/src/runtime/mgc.go:568 +0xdc fp=0xc000692c20 sp=0xc000692c18 pc=0x44837c
+runtime.mallocgc(0x28, 0xef6e20, 0x1)
+	/usr/local/go/src/runtime/malloc.go:1307 +0x805 fp=0xc000692ca8 sp=0xc000692c20 pc=0x43ab65
+runtime.newobject(0x10?)
+	/usr/local/go/src/runtime/malloc.go:1390 +0x25 fp=0xc000692cd0 sp=0xc000692ca8 pc=0x43ada5
+github.com/cilium/ebpf/internal.init.func1()
+	/root/go/pkg/mod/github.com/cilium/ebpf@v0.13.2/internal/buffer.go:10 +0x1a fp=0xc000692cf0 sp=0xc000692cd0 pc=0x5ca6da
+sync.(*Pool).Get(0x185c960)
+	/usr/local/go/src/sync/pool.go:152 +0xb1 fp=0xc000692d28 sp=0xc000692cf0 pc=0x4b8f11
+github.com/cilium/ebpf/internal.NewBuffer(...)
+	/root/go/pkg/mod/github.com/cilium/ebpf@v0.13.2/internal/buffer.go:18
+github.com/cilium/ebpf/internal/sysenc.Marshal({0xeb0b20, 0xc002990000}, 0x4)
+	/root/go/pkg/mod/github.com/cilium/ebpf@v0.13.2/internal/sysenc/marshal.go:56 +0x3db fp=0xc000692df0 sp=0xc000692d28 pc=0x5f035b
+github.com/cilium/ebpf.marshalMapSyscallInput({0xeb0b20?, 0xc002990000?}, 0xc000692e60?)
+	/root/go/pkg/mod/github.com/cilium/ebpf@v0.13.2/marshalers.go:26 +0x37 fp=0xc000692e18 sp=0xc000692df0 pc=0x61e057
+github.com/cilium/ebpf.(*Map).marshalKey(0xc000120140?, {0xeb0b20?, 0xc002990000?})
+	/root/go/pkg/mod/github.com/cilium/ebpf@v0.13.2/map.go:1368 +0x70 fp=0xc000692e40 sp=0xc000692e18 pc=0x61d250
+github.com/cilium/ebpf.(*Map).lookup(0xc0000b89b0, {0xeb0b20?, 0xc002990000?}, {0xc000692f10?}, 0x0)
+	/root/go/pkg/mod/github.com/cilium/ebpf@v0.13.2/map.go:658 +0x45 fp=0xc000692ed0 sp=0xc000692e40 pc=0x61a5a5
+github.com/cilium/ebpf.(*Map).LookupWithFlags(0xc0000b89b0, {0xeb0b20, 0xc002990000}, {0xe0a7c0, 0xc000120140}, 0x0)
+	/root/go/pkg/mod/github.com/cilium/ebpf@v0.13.2/map.go:597 +0x9e fp=0xc000692f20 sp=0xc000692ed0 pc=0x61a0fe
+github.com/cilium/ebpf.(*Map).Lookup(...)
+	/root/go/pkg/mod/github.com/cilium/ebpf@v0.13.2/map.go:578
+main.registerBPFPacket({0x11472e8, 0xc0004a6c08})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:325 +0x125 fp=0xc000692fc0 sp=0xc000692f20 pc=0xd5ff65
+main.relay.gowrap2()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/relay.go:138 +0x25 fp=0xc000692fe0 sp=0xc000692fc0 pc=0xd687c5
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000692fe8 sp=0xc000692fe0 pc=0x49ade1
+created by main.relay in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/relay.go:138 +0x70b
+
+goroutine 78 gp=0xc000502fc0 m=nil [select]:
+runtime.gopark(0xc000285e28?, 0x3?, 0x60?, 0x0?, 0xc000285df2?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc000285c98 sp=0xc000285c78 pc=0x4681ae
+runtime.selectgo(0xc000285e28, 0xc000285dec, 0x74904b9bb878?, 0x0, 0xc000290000?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc000285db8 sp=0xc000285c98 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*datagramQueue).Receive(0xc00016e0a0, {0x113c218, 0xc00028e050})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/datagram_queue.go:123 +0x14e fp=0xc000285e68 sp=0xc000285db8 pc=0x76efce
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).ReceiveDatagram(0xc00028c060?, {0x113c218?, 0xc00028e050?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:2556 +0x31 fp=0xc000285e90 sp=0xc000285e68 pc=0x76d251
+github.com/danielpfeifer02/priority-moqtransport/quicmoq.(*connection).ReceiveDatagram(0x113c100?, {0x113c218?, 0xc00028e050?})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/quicmoq/connection.go:64 +0x28 fp=0xc000285eb8 sp=0xc000285e90 pc=0x860068
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptDatagram(0xc0002dc0c0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:329 +0xed fp=0xc000285f30 sp=0xc000285eb8 pc=0x85ae6d
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptDatagrams(0xc0002dc0c0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:334 +0x49 fp=0xc000285fc8 sp=0xc000285f30 pc=0x85afe9
+github.com/danielpfeifer02/priority-moqtransport.(*Session).run.gowrap2()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:244 +0x25 fp=0xc000285fe0 sp=0xc000285fc8 pc=0x85a265
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000285fe8 sp=0xc000285fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).run in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:244 +0x9f
+
+goroutine 96 gp=0xc0002fd340 m=nil [select]:
+runtime.gopark(0xc00061ff58?, 0x2?, 0xdd?, 0xa?, 0xc00061ff2c?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc00061fdd0 sp=0xc00061fdb0 pc=0x4681ae
+runtime.selectgo(0xc00061ff58, 0xc00061ff28, 0x27?, 0x0, 0x1059f?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc00061fef0 sp=0xc00061fdd0 pc=0x479605
+github.com/danielpfeifer02/quic-go-prio-packs.(*sendQueue).Run(0xc0002790e0)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/send_queue.go:75 +0x105 fp=0xc00061ffb0 sp=0xc00061fef0 pc=0x780f05
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).run.func2()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:557 +0x25 fp=0xc00061ffe0 sp=0xc00061ffb0 pc=0x760aa5
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00061ffe8 sp=0xc00061ffe0 pc=0x49ade1
+created by github.com/danielpfeifer02/quic-go-prio-packs.(*connection).run in goroutine 93
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:556 +0x1f1
+
+goroutine 65 gp=0xc000592a80 m=nil [select]:
+runtime.gopark(0xc00014afa8?, 0x2?, 0x0?, 0x0?, 0xc00014af9c?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc00014ae48 sp=0xc00014ae28 pc=0x4681ae
+runtime.selectgo(0xc00014afa8, 0xc00014af98, 0x1c918bc729f6a4f1?, 0x0, 0x0?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc00014af68 sp=0xc00014ae48 pc=0x479605
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptDatagram.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:323 +0x6b fp=0xc00014afe0 sp=0xc00014af68 pc=0x85af6b
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00014afe8 sp=0xc00014afe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptDatagram in goroutine 78
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:322 +0xcd
+
+goroutine 80 gp=0xc00033e000 m=nil [select]:
+runtime.gopark(0xc0004f06d0?, 0x3?, 0x8a?, 0xc?, 0xc0004f06c2?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc0004f0568 sp=0xc0004f0548 pc=0x4681ae
+runtime.selectgo(0xc0004f06d0, 0xc0004f06bc, 0xc0001822d0?, 0x0, 0x84970b?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc0004f0688 sp=0xc0004f0568 pc=0x479605
+github.com/danielpfeifer02/priority-moqtransport.(*Session).ReadAnnouncement(0xc0002dc0c0, {0x113c100, 0x20292e0})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:589 +0x95 fp=0xc0004f0710 sp=0xc0004f0688 pc=0x85c5d5
+main.relay.func3()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/relay.go:173 +0x37 fp=0xc0004f07e0 sp=0xc0004f0710 pc=0xd68537
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc0004f07e8 sp=0xc0004f07e0 pc=0x49ade1
+created by main.relay in goroutine 42
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/relay.go:171 +0x916
+
+goroutine 232 gp=0xc000503880 m=nil [select]:
+runtime.gopark(0xc0006e8f70?, 0x2?, 0x0?, 0x0?, 0xc0006e8f38?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc0006e8de0 sp=0xc0006e8dc0 pc=0x4681ae
+runtime.selectgo(0xc0006e8f70, 0xc0006e8f34, 0xc0002792c0?, 0x0, 0x0?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc0006e8f00 sp=0xc0006e8de0 pc=0x479605
+github.com/go-sql-driver/mysql.(*mysqlConn).startWatcher.func1()
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/connection.go:628 +0x9b fp=0xc0006e8fe0 sp=0xc0006e8f00 pc=0x82f3db
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc0006e8fe8 sp=0xc0006e8fe0 pc=0x49ade1
+created by github.com/go-sql-driver/mysql.(*mysqlConn).startWatcher in goroutine 85
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/connection.go:625 +0xf9
+
+goroutine 573 gp=0xc000709a40 m=nil [chan receive]:
+runtime.gopark(0xc0002792c0?, 0xeddf9f582?, 0xc?, 0x48?, 0x1fa64c0?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc00039df10 sp=0xc00039def0 pc=0x4681ae
+runtime.chanrecv(0xc000342180, 0xc00039dfc8, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc00039df88 sp=0xc00039df10 pc=0x43353f
+runtime.chanrecv2(0x4702fd?, 0x77?)
+	/usr/local/go/src/runtime/chan.go:447 +0x12 fp=0xc00039dfb0 sp=0xc00039df88 pc=0x433172
+fyne.io/fyne/v2/internal/driver/common.(*Window).RunEventQueue(...)
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/driver/common/window.go:34
+fyne.io/fyne/v2/internal/driver/glfw.(*gLDriver).createWindow.func1.gowrap1()
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/driver/glfw/window.go:960 +0x54 fp=0xc00039dfe0 sp=0xc00039dfb0 pc=0xd4ead4
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00039dfe8 sp=0xc00039dfe0 pc=0x49ade1
+created by fyne.io/fyne/v2/internal/driver/glfw.(*gLDriver).createWindow.func1 in goroutine 1
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/driver/glfw/window.go:960 +0x12b
+
+goroutine 651 gp=0xc000794c40 m=7 mp=0xc000100808 [syscall]:
+runtime.notetsleepg(0x202a1e0, 0xffffffffffffffff)
+	/usr/local/go/src/runtime/lock_futex.go:246 +0x29 fp=0xc000158fa0 sp=0xc000158f78 pc=0x4393c9
+os/signal.signal_recv()
+	/usr/local/go/src/runtime/sigqueue.go:152 +0x29 fp=0xc000158fc0 sp=0xc000158fa0 pc=0x4978c9
+os/signal.loop()
+	/usr/local/go/src/os/signal/signal_unix.go:23 +0x13 fp=0xc000158fe0 sp=0xc000158fc0 pc=0x994e73
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc000158fe8 sp=0xc000158fe0 pc=0x49ade1
+created by os/signal.Notify.func1.1 in goroutine 649
+	/usr/local/go/src/os/signal/signal.go:151 +0x1f
+
+goroutine 571 gp=0xc000794e00 m=nil [select, locked to thread]:
+runtime.gopark(0xc002084f90?, 0x4?, 0x0?, 0x0?, 0xc002084f30?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc002084dd8 sp=0xc002084db8 pc=0x4681ae
+runtime.selectgo(0xc002084f90, 0xc002084f28, 0x0?, 0x0, 0xeddf9f582?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc002084ef8 sp=0xc002084dd8 pc=0x479605
+fyne.io/fyne/v2/internal/driver/glfw.(*gLDriver).startDrawThread.func1()
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/driver/glfw/loop.go:250 +0xeb fp=0xc002084fe0 sp=0xc002084ef8 pc=0xd45c4b
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc002084fe8 sp=0xc002084fe0 pc=0x49ade1
+created by fyne.io/fyne/v2/internal/driver/glfw.(*gLDriver).startDrawThread in goroutine 1
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/driver/glfw/loop.go:246 +0xbb
+
+goroutine 572 gp=0xc000795a40 m=nil [select]:
+runtime.gopark(0xc00071cf80?, 0x2?, 0xf4?, 0x38?, 0xc00071cf14?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc00071cda0 sp=0xc00071cd80 pc=0x4681ae
+runtime.selectgo(0xc00071cf80, 0xc00071cf10, 0xc00071cfa8?, 0x0, 0xc000524870?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc00071cec0 sp=0xc00071cda0 pc=0x479605
+fyne.io/fyne/v2/internal/async.(*UnboundedFuncChan).processing(0xc0007820f0)
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/async/chan_func.go:45 +0xd5 fp=0xc00071cfc8 sp=0xc00071cec0 pc=0xaafc35
+fyne.io/fyne/v2/internal/async.NewUnboundedFuncChan.gowrap1()
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/async/chan_func.go:22 +0x25 fp=0xc00071cfe0 sp=0xc00071cfc8 pc=0xaafaa5
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00071cfe8 sp=0xc00071cfe0 pc=0x49ade1
+created by fyne.io/fyne/v2/internal/async.NewUnboundedFuncChan in goroutine 1
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/async/chan_func.go:22 +0xe5
+
+goroutine 650 gp=0xc00088b180 m=nil [select, locked to thread]:
+runtime.gopark(0xc00068afa8?, 0x2?, 0xd8?, 0xae?, 0xc00068af94?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc00068ae38 sp=0xc00068ae18 pc=0x4681ae
+runtime.selectgo(0xc00068afa8, 0xc00068af90, 0x0?, 0x0, 0x0?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc00068af58 sp=0xc00068ae38 pc=0x479605
+runtime.ensureSigM.func1()
+	/usr/local/go/src/runtime/signal_unix.go:1034 +0x19f fp=0xc00068afe0 sp=0xc00068af58 pc=0x49243f
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00068afe8 sp=0xc00068afe0 pc=0x49ade1
+created by runtime.ensureSigM in goroutine 649
+	/usr/local/go/src/runtime/signal_unix.go:1017 +0xc8
+
+goroutine 649 gp=0xc00088b6c0 m=nil [chan receive]:
+runtime.gopark(0x994a85?, 0xeb5ba0?, 0x1?, 0x4c?, 0xc00068cf60?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc00068ced0 sp=0xc00068ceb0 pc=0x4681ae
+runtime.chanrecv(0xc0002bb4a0, 0x0, 0x1)
+	/usr/local/go/src/runtime/chan.go:583 +0x3bf fp=0xc00068cf48 sp=0xc00068ced0 pc=0x43353f
+runtime.chanrecv1(0xc0002bb4a0?, 0xc00068cf98?)
+	/usr/local/go/src/runtime/chan.go:442 +0x12 fp=0xc00068cf70 sp=0xc00068cf48 pc=0x433152
+fyne.io/fyne/v2/internal/driver/glfw.(*gLDriver).catchTerm(0xc000136000)
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/driver/glfw/driver_desktop.go:190 +0x85 fp=0xc00068cfc8 sp=0xc00068cf70 pc=0xd44905
+fyne.io/fyne/v2/internal/driver/glfw.(*gLDriver).Run.gowrap1()
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/driver/glfw/driver.go:168 +0x25 fp=0xc00068cfe0 sp=0xc00068cfc8 pc=0xd43d85
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc00068cfe8 sp=0xc00068cfe0 pc=0x49ade1
+created by fyne.io/fyne/v2/internal/driver/glfw.(*gLDriver).Run in goroutine 1
+	/root/go/pkg/mod/fyne.io/fyne/v2@v2.4.5/internal/driver/glfw/driver.go:168 +0x65
+
+goroutine 20032 gp=0xc00202f6c0 m=nil [select]:
+runtime.gopark(0xc001995fa8?, 0x2?, 0x80?, 0x5e?, 0xc001995f9c?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc001995e48 sp=0xc001995e28 pc=0x4681ae
+runtime.selectgo(0xc001995fa8, 0xc001995f98, 0x58f?, 0x0, 0xc0027498a0?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc001995f68 sp=0xc001995e48 pc=0x479605
+github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptUnidirectionalStream.func1()
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:253 +0x6b fp=0xc001995fe0 sp=0xc001995f68 pc=0x85a4cb
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc001995fe8 sp=0xc001995fe0 pc=0x49ade1
+created by github.com/danielpfeifer02/priority-moqtransport.(*Session).acceptUnidirectionalStream in goroutine 59
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:252 +0xc7
+
+goroutine 19942 gp=0xc00137e1c0 m=nil [select]:
+runtime.gopark(0xc001b9af70?, 0x2?, 0x1?, 0x0?, 0xc001b9af38?)
+	/usr/local/go/src/runtime/proc.go:402 +0xce fp=0xc001b9ade0 sp=0xc001b9adc0 pc=0x4681ae
+runtime.selectgo(0xc001b9af70, 0xc001b9af34, 0xc000048120?, 0x0, 0xe382e0?, 0x1)
+	/usr/local/go/src/runtime/select.go:327 +0x725 fp=0xc001b9af00 sp=0xc001b9ade0 pc=0x479605
+github.com/go-sql-driver/mysql.(*mysqlConn).startWatcher.func1()
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/connection.go:628 +0x9b fp=0xc001b9afe0 sp=0xc001b9af00 pc=0x82f3db
+runtime.goexit({})
+	/usr/local/go/src/runtime/asm_amd64.s:1695 +0x1 fp=0xc001b9afe8 sp=0xc001b9afe0 pc=0x49ade1
+created by github.com/go-sql-driver/mysql.(*mysqlConn).startWatcher in goroutine 85
+	/root/go/pkg/mod/github.com/go-sql-driver/mysql@v1.8.1/connection.go:625 +0xf9
+
+rax    0x7490002ad438
+rbx    0xc0002ea808
+rcx    0xc0002ea800
+rdx    0x0
+rdi    0x40
+rsi    0xc0002ea800
+rbp    0x748fdb1fdb78
+rsp    0x748fdb1fdb68
+r8     0xc0004dea80
+r9     0xc000066508
+r10    0xc00290b800
+r11    0x2
+r12    0x748fdb1fdc08
+r13    0x749004fba500
+r14    0xc0002fc380
+r15    0x1
+rip    0x442b57
+rflags 0x10202
+cs     0x33
+fs     0x0
+gs     0x0
+exit status 2
