@@ -48,6 +48,11 @@ Make sure the local ip for the ethernet interface (for me 172.16.254.134) is set
     FLUSH PRIVILEGES;
 
  4. also make sure to update the gradana data source with the correct ip address.
+
+    x. In case the address changes between reboots but everything is set up for a specific one,
+    you can add that one by using:
+
+    sudo ip addr add 172.16.254.134/24 dev enp1s0f0
 */
 func get_db() *sql.DB {
 	// Open a connection to the MySQL database
