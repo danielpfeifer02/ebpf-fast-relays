@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"time"
 
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
@@ -29,6 +30,7 @@ func newReceiver(ctx context.Context, addr string) (*receiver, error) {
 			NextProtos:         []string{"moq-00"},
 		}, &quic.Config{
 			EnableDatagrams:            true,
+			MaxIdleTimeout:             5 * time.Minute,
 			MaxIncomingStreams:         1 << 60,
 			MaxStreamReceiveWindow:     1 << 60,
 			MaxIncomingUniStreams:      1 << 60,

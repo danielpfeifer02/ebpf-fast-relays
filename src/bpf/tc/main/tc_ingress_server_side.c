@@ -150,7 +150,7 @@ int tc_ingress(struct __sk_buff *skb)
                         uint16_t mrk = PORT_MARKER;
                         bpf_skb_store_bytes(skb, dst_port_off, &mrk, sizeof(mrk), 0);
 
-                        bpf_printk("Redirecting to client %d\n", i);
+                        // bpf_printk("Redirecting to client %d\n", i);
                         
                         // We need to use clone_redirect to redirect the packet to the egress program
                         // since otherwise we get errors when changing the packet in here.

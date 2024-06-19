@@ -42,7 +42,7 @@ int tc_egress(struct __sk_buff *skb)
         // listening we can pass it through since the packet is from a 
         // different program.
         if (udp->source != RELAY_PORT) {
-                bpf_printk("Not QUIC\n");
+                bpf_printk("Not QUIC (port: %d)\n", htons(udp->source));
                 return TC_ACT_OK;
         }
 
@@ -63,7 +63,7 @@ int tc_egress(struct __sk_buff *skb)
         // In case the packet was redirected from ingress the destination port is always
         // set to a special port marker.
         if (udp->dest != PORT_MARKER) {
-                bpf_printk("Not the correct port (%d)\n", udp->dest);
+                bpf_printk("Not the correct dest port (%d)\n", htons(udp->dest));
                 user_space = 1;
         }
 
@@ -235,6 +235,10 @@ int tc_egress(struct __sk_buff *skb)
                         store_packet_to_register(pack_to_reg);
 
                         store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
+
+                        uint8_t pl[4] = {0x00, 0x00, 0x00, 0x00};
+                        SAVE_BPF_PROBE_READ_KERNEL(&pl, sizeof(pl), payload+23);
+                        bpf_printk("Userspace packet %02x %02x %02x %02x\n", pl[0], pl[1], pl[2], pl[3]);
 
                         return TC_ACT_OK;
                 }
@@ -763,7 +767,7 @@ int tc_egress(struct __sk_buff *skb)
                 // https://lore.kernel.org/netdev/CAEf4Bzb9KA=mzYo_x42ExRoZjm=dF6up1DxrUL_eqkDYs9+UUg@mail.gmail.com/T/
                 // https://man7.org/linux/man-pages/man7/bpf-helpers.7.html
                 uint64_t time_ns = bpf_ktime_get_tai_ns();
-                bpf_printk("Current nanoseconds: %llu\n", time_ns);
+                // bpf_printk("Current nanoseconds: %llu\n", time_ns);
 
 
                 struct register_packet_t pack_to_reg = {

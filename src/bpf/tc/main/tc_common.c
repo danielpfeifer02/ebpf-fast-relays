@@ -378,7 +378,7 @@ __attribute__((always_inline)) int32_t store_packet_to_register(struct register_
         }
         bpf_map_update_elem(&packets_to_register, index, &packet, BPF_ANY);
 
-        bpf_printk("Storing packet to register with pn %d at index %d\n", packet.packet_number, *index);
+        // bpf_printk("Storing packet to register with pn %d at index %d\n", packet.packet_number, *index);
 
         *index = *index + 1;
         if (*index == MAX_REGISTER_QUEUE_SIZE) { // TODO: why modulo not working?

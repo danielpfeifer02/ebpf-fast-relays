@@ -158,6 +158,7 @@ func createSendPipeline(flow *moqtransport.SendSubscription) (*gst.Pipeline, err
 			binary.BigEndian.PutUint64(ts_arr, uint64(pres_ts))
 			samples = append(ts_arr, samples...)
 
+			//if true {
 			n, err := stream.Write(samples)
 			if err != nil {
 				return gst.FlowError
@@ -168,6 +169,12 @@ func createSendPipeline(flow *moqtransport.SendSubscription) (*gst.Pipeline, err
 			if err != nil {
 				return gst.FlowError
 			}
+			/*} else {
+				err := flow.NewObjectPreferDatagram(0, 0, 0, samples)
+				if err != nil {
+					return gst.FlowError
+				}
+			}*/
 			return gst.FlowOK
 		},
 	})

@@ -37,6 +37,7 @@ func relay() error {
 			NextProtos:         []string{"moq-00"},
 		}, &quic.Config{
 			EnableDatagrams:            true,
+			MaxIdleTimeout:             5 * time.Minute,
 			MaxIncomingStreams:         1 << 60,
 			MaxStreamReceiveWindow:     1 << 60,
 			MaxIncomingUniStreams:      1 << 60,
@@ -133,6 +134,25 @@ func relay() error {
 	if err != nil {
 		return err
 	}
+
+	// go func() {
+	// 	for i := 0; i < 1000; i++ {
+	// 		str, err := conn.OpenUniStreamWithPriority(priority_setting.HighPriority)
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		_, err = str.Write([]byte{0x42, 0x42, 0x42, 0x42})
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		err = str.Close()
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		fmt.Println("BBBBB test")
+	// 		time.Sleep(10 * time.Millisecond)
+	// 	}
+	// }()
 
 	// Run goroutine that will register the packets sent by the BPF program
 	go registerBPFPacket(conn)

@@ -218,8 +218,8 @@ func clientConfig() {
 func generateQUICConfig() *quic.Config {
 	return &quic.Config{
 		Tracer:                     qlog.DefaultTracer,
-		MaxIdleTimeout:             5 * time.Minute,
 		EnableDatagrams:            true,
+		MaxIdleTimeout:             5 * time.Minute,
 		MaxIncomingStreams:         1 << 60,
 		MaxStreamReceiveWindow:     1 << 60,
 		MaxIncomingUniStreams:      1 << 60,
