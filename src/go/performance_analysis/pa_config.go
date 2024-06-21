@@ -16,6 +16,7 @@ var (
 	client_addr   = "localhost:4243"
 	relay_addr    = "localhost:4244"
 	use_datagrams = false
+	bpf_enabled   = true
 )
 
 func generalConfig() {

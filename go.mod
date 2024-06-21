@@ -3,8 +3,9 @@ module github.com/danielpfeifer02/adaptive_moq
 go 1.22.0
 
 require (
+	common.com/common v0.0.0
 	fyne.io/fyne/v2 v2.4.5
-	github.com/cilium/ebpf v0.13.2
+	github.com/cilium/ebpf v0.15.0
 	github.com/danielpfeifer02/priority-moqtransport v0.1.1-6
 	github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28
 	github.com/go-gst/go-gst v1.0.0
@@ -15,6 +16,8 @@ require (
 replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio-moq-app/priority-moqtransport
 
 replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28 => ../quic-go-prio-packs
+
+replace common.com/common v0.0.0 => ./src/go/common
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect

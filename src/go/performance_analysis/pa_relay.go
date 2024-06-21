@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"common.com/common"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
 
@@ -28,6 +29,41 @@ func relay() {
 	server_conn, err := quic.DialAddr(ctx, server_addr, tlsConf, quicConf)
 	if err != nil {
 		panic(err)
+	}
+
+	if bpf_enabled {
+		// TODO: what else needs to be done to make sure the bpf program works with this setup?
+
+		// 0. Load all the maps
+		common.LoadBPFMaps()
+
+		// 1. Clearing the BPF maps
+		common.ClearBPFMaps()
+
+		// 2. Set number_of_clients and id_counter to 0
+		client_ctr := uint32(0)
+		err = common.Number_of_clients.Update(uint32(0), client_ctr, 0)
+		if err != nil {
+			panic(err)
+		}
+
+		// 3. Set id counter to 0
+		err = common.Id_counter.Update(uint32(0), uint32(0), 0)
+		if err != nil {
+			panic(err)
+		}
+
+		// 4. Start the routing to register BPF packets
+		go common.RegisterBPFPacket(client_conn)
+
+		// 5. Set connection as established
+		ip, port := common.GetIPAndPort(client_conn, true)
+		err = common.SetConnectionEstablished(ip, port)
+		if err != nil {
+			panic(err)
+		}
+
+		// (x. Increment number_of_client counter for new clients - not needed since we only have one client)
 	}
 
 	if use_datagrams {
