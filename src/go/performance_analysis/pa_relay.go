@@ -12,6 +12,18 @@ import (
 
 func relay() {
 
+	if bpf_enabled {
+
+		common.InitializeCacheSetup()
+
+		// 0. Load all the maps
+		common.LoadBPFMaps()
+
+		// 1. Clearing the BPF maps
+		common.ClearBPFMaps()
+
+	}
+
 	tlsConf := generatePATLSConfig()
 	quicConf := generatePAQuicConfig()
 	ctx := context.Background()
@@ -34,14 +46,8 @@ func relay() {
 	if bpf_enabled {
 		// TODO: what else needs to be done to make sure the bpf program works with this setup?
 
-		// 0. Load all the maps
-		common.LoadBPFMaps()
-
-		// 1. Clearing the BPF maps
-		common.ClearBPFMaps()
-
 		// 2. Set number_of_clients and id_counter to 0
-		client_ctr := uint32(0)
+		client_ctr := uint32(1)
 		err = common.Number_of_clients.Update(uint32(0), client_ctr, 0)
 		if err != nil {
 			panic(err)
@@ -63,6 +69,9 @@ func relay() {
 			panic(err)
 		}
 
+		// 6. Set bpf handlers
+		setBPFHandlers()
+
 		// (x. Increment number_of_client counter for new clients - not needed since we only have one client)
 	}
 
@@ -79,17 +88,18 @@ func relay() {
 			}
 			fmt.Println("Received END datagram from server")
 			client_conn.SendDatagram(dtg)
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(1 * time.Second)
 			os.Exit(0)
 			time.Sleep(100 * time.Millisecond)
 			end_chan <- struct{}{}
 		}()
+
 		relay_stream_handling(server_conn, client_conn, ctx, end_chan)
 	}
 }
 
 func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context.Context, end_chan chan struct{}) {
-	ts_buffer := make([]byte, 8)
+	ts_buffer := make([]byte, 12)
 
 	for {
 		select {
@@ -109,18 +119,20 @@ func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context
 				panic(err)
 			}
 
-			// Send to client
-			client_str, err := client_conn.OpenUniStreamSync(ctx) //WithPriority(priority_setting.HighPriority)
-			if err != nil {
-				fmt.Println("Error opening stream to client")
-				panic(err)
-			}
-			// defer client_str.Close()
+			if forwarding_enabled {
+				// Send to client
+				client_str, err := client_conn.OpenUniStream() //WithPriority(priority_setting.HighPriority)
+				if err != nil {
+					fmt.Println("Error opening stream to client")
+					panic(err)
+				}
+				// defer client_str.Close()
 
-			_, err = client_str.Write(ts_buffer[:n])
-			if err != nil {
-				fmt.Println("Error writing to client")
-				panic(err)
+				_, err = client_str.Write(ts_buffer[:n])
+				if err != nil {
+					fmt.Println("Error writing to client")
+					panic(err)
+				}
 			}
 		}
 	}

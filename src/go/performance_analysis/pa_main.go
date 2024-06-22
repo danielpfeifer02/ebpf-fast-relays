@@ -25,6 +25,7 @@ func main() {
 
 	} else if args[1] == "relay" {
 
+		relayConfig()
 		relay()
 
 	} else {
