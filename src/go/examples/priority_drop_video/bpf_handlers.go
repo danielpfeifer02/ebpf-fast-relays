@@ -264,6 +264,8 @@ func deleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnecti
 // TODO: not the most elegant way to clear the BPF maps
 func clearBPFMaps() {
 
+	// TODO: do with ebpf library
+
 	paths := []string{
 		"client_data",
 		"client_id",
@@ -272,6 +274,7 @@ func clearBPFMaps() {
 		"client_pn",
 		"connection_current_pn",
 		"connection_pn_translation",
+		"connection_unistream_id_translation",
 		"client_stream_offset"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 

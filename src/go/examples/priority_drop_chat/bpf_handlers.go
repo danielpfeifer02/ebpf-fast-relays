@@ -422,6 +422,7 @@ func clearBPFMaps() {
 		"client_pn",
 		"connection_current_pn",
 		"connection_pn_translation",
+		"connection_unistream_id_translation",
 		"client_stream_offset",
 		"packets_to_register",
 		"index_packets_to_register"}

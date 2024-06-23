@@ -126,6 +126,7 @@ func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context
 					fmt.Println("Error opening stream to client")
 					panic(err)
 				}
+				fmt.Println("Stream id to client:", client_str.StreamID())
 				// defer client_str.Close()
 
 				_, err = client_str.Write(ts_buffer[:n])

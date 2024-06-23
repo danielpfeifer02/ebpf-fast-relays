@@ -20,6 +20,7 @@ const (
 	use_datagrams      = false
 	bpf_enabled        = true //!local_usage
 	forwarding_enabled = true //!bpf_enabled
+	count_errors       = true
 )
 
 var (
@@ -33,13 +34,15 @@ func generalConfig() {
 	packet_setting.ALLOW_SETTING_PN = true
 }
 
-func relayConfig() {}
+func relayConfig() {
+	packet_setting.IS_RELAY = true
+}
 
 func generatePAQuicConfig() *quic.Config {
 	return &quic.Config{
 		EnableDatagrams:       true,
-		MaxIncomingStreams:    100,
-		MaxIncomingUniStreams: 100,
+		MaxIncomingStreams:    1 << 15,
+		MaxIncomingUniStreams: 1 << 15,
 	}
 }
 

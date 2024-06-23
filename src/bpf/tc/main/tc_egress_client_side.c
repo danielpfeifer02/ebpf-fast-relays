@@ -236,9 +236,36 @@ int tc_egress(struct __sk_buff *skb)
 
                         store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 
-                        uint8_t pl[4] = {0x00, 0x00, 0x00, 0x00};
-                        SAVE_BPF_PROBE_READ_KERNEL(&pl, sizeof(pl), payload+23);
-                        bpf_printk("Userspace packet %02x %02x %02x %02x\n", pl[0], pl[1], pl[2], pl[3]);
+                        // uint8_t pl[4] = {0x00, 0x00, 0x00, 0x00};
+                        // SAVE_BPF_PROBE_READ_KERNEL(&pl, sizeof(pl), payload+23);
+                        // bpf_printk("Userspace packet %02x %02x %02x %02x\n", pl[0], pl[1], pl[2], pl[3]);
+
+
+                        // Change stream id if unistream is used
+                        uint8_t frame_type;
+                        uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
+                        SAVE_BPF_PROBE_READ_KERNEL(&frame_type, sizeof(frame_type), payload + frame_off);
+                        if (IS_STREAM_FRAME(frame_type)) {
+                                // Check if the stream is a unidirectional stream
+                                // Unidirectional streams are identified by the second
+                                // least significant bit of the stream id being set to 1.
+                                uint8_t mask = 0x02;
+                                uint32_t stream_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 
+                                                        1 /* Header flags */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
+                                uint32_t stream_id_off_from_quic = 1 /* Header byte */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
+                                struct var_int stream_id = {0};
+                                // TODO: userspace should make sure that the size of the stream id is always 8 byte to ensure that bpf counter always has space
+                                read_var_int(payload + stream_id_off_from_quic, &stream_id, VALUE_NEEDED); 
+                                uint8_t is_unidirectional = stream_id.value & mask;
+
+                                // bpf_printk("stream id to be updated: %d\n", stream_id.value);
+
+                                // If the stream is unidirectional we need to update the stream id
+                                if (is_unidirectional) {
+                                        update_stream_id(stream_id, skb, stream_id_off, &key);
+                                }
+                        }
+
 
                         return TC_ACT_OK;
                 }
@@ -653,6 +680,30 @@ int tc_egress(struct __sk_buff *skb)
                         // ^ TODO: clean up ^^^^^^
 
                 } else if (IS_STREAM_FRAME(frame_type) && !SINGLE_STREAM_USAGE) {
+
+
+                        // Change stream id if unistream is used
+                        
+                        // Check if the stream is a unidirectional stream
+                        // Unidirectional streams are identified by the second
+                        // least significant bit of the stream id being set to 1.
+                        uint8_t mask = 0x02;
+                        uint32_t stream_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 
+                                                1 /* Header flags */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
+                        uint32_t stream_id_off_from_quic = 1 /* Header byte */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
+                        struct var_int stream_id = {0};
+                        // TODO: userspace should make sure that the size of the stream id is always 8 byte to ensure that bpf counter always has space
+                        read_var_int(payload + stream_id_off_from_quic, &stream_id, VALUE_NEEDED); 
+                        uint8_t is_unidirectional = stream_id.value & mask;
+
+                        // bpf_printk("stream id to be updated: %d\n", stream_id.value);
+
+                        // If the stream is unidirectional we need to update the stream id
+                        if (is_unidirectional) {
+                                update_stream_id(stream_id, skb, stream_id_off, &key);
+                        }
+
+
                         // TODO: anything to do for stream frames with individual
                         // TODO: stream per packet?
                 } else if (IS_DATAGRAM_FRAME(frame_type)) {

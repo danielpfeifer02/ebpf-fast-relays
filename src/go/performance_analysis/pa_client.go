@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
@@ -19,6 +20,8 @@ var (
 	times map[uint32][]sent_recv
 )
 
+var lock = &sync.Mutex{}
+
 func client() {
 
 	tlsConf := generatePATLSConfig()
@@ -31,6 +34,7 @@ func client() {
 	}
 
 	times = make(map[uint32][]sent_recv)
+	ctr := 0
 
 	if use_datagrams {
 		client_datagram_handling(conn, ctx)
@@ -46,9 +50,13 @@ func client() {
 
 			for i, sent_recv_list := range times {
 				if len(sent_recv_list) != 2 {
-					fmt.Println("expected 2 timestamps, got", len(sent_recv_list), "for index", i)
-					continue
-					// panic(fmt.Errorf("expected 2 timestamps, got %d for index %d", len(sent_recv_list), i))
+					if count_errors {
+						fmt.Println("expected 2 timestamps, got", len(sent_recv_list), "for index", i, "-", ctr, "th time this is happening")
+						ctr++
+						continue
+					}
+					// TODO: why does this happen? Why are some packets lost even with loss 0%?
+					panic(fmt.Errorf("expected 2 timestamps, got %d for index %d", len(sent_recv_list), i))
 				}
 				sent_ts_1 := sent_recv_list[0].sent_ts
 				recv_ts_1 := sent_recv_list[0].recv_ts
@@ -58,8 +66,9 @@ func client() {
 				recv_ts_2 := sent_recv_list[1].recv_ts
 				latency_2 := recv_ts_2 - sent_ts_2
 
-				fmt.Println("Latency 1:", latency_1)
-				fmt.Println("Latency 2:", latency_2)
+				fmt.Println("Latency 1:", time.Unix(0, int64(latency_1)).Sub(time.Unix(0, 0)))
+				fmt.Println("Latency 2:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, 0)))
+				fmt.Println("Latency Difference:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, int64(latency_1))))
 				fmt.Println()
 
 			}
@@ -80,13 +89,13 @@ func client_stream_handling(relay_conn quic.Connection, ctx context.Context, end
 		case <-end_chan:
 			return // TODO: not working
 		default:
-			// fmt.Println("Waiting for Stream...")
+			fmt.Println("Waiting for Stream...")
 			str, err := relay_conn.AcceptUniStream(ctx)
 			if err != nil {
 				panic(err)
 			}
 
-			// fmt.Println("Waiting for Timestamp...")
+			fmt.Printf("Waiting for Timestamp on stream with id %d...\n", str.StreamID())
 			n, err := str.Read(ts_buffer)
 			if err != nil {
 				panic(err)
@@ -102,13 +111,15 @@ func client_stream_handling(relay_conn quic.Connection, ctx context.Context, end
 			sent_index := binary.LittleEndian.Uint32(data[0:4])
 			sent_ts := binary.LittleEndian.Uint64(data[4:12])
 
-			// fmt.Println("Received Timestamp for index", sent_index, "from server")
+			fmt.Println("Received Timestamp for index", sent_index, "from server")
 
+			lock.Lock()
 			if _, ok := times[sent_index]; !ok {
 				times[sent_index] = make([]sent_recv, 0)
 			}
 			srv := sent_recv{sent_ts, uint64(now)}
 			times[sent_index] = append(times[sent_index], srv)
+			lock.Unlock()
 
 			// latency := now - int64(sent_ts)
 			// fmt.Println("Latency:", latency)

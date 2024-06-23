@@ -23,6 +23,8 @@ import (
 // TODO: not the most elegant way to clear the BPF maps
 func ClearBPFMaps() {
 
+	// TODO: do with ebpf library
+
 	paths := []string{
 		"client_data",
 		"client_id",
@@ -31,6 +33,7 @@ func ClearBPFMaps() {
 		"client_pn",
 		"connection_current_pn",
 		"connection_pn_translation",
+		"connection_unistream_id_translation",
 		"client_stream_offset"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
