@@ -84,6 +84,14 @@
 // since otherwise the client would discard the packet.
 #define IP_CSUM_OFF (ETH_HLEN + offsetof(struct iphdr, check))
 
+// These define the offsets of the timestamps inside a performance analysis
+// payload used to measure the impact of direct forwarding at the relay.
+// This offset is relative TO THE START OF THE STREAM DATA!
+// Something else is not possible since there are variable length integers
+// ahead of the timestamp.
+#define TS_OFF_EGRESS 5
+#define TS_OFF_INGRESS 13
+
 // When reading variable length integers we can provide info if the value 
 // is needed or not. This can provide a small performance improvement.
 #define NO_VALUE_NEEDED 0

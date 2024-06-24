@@ -82,7 +82,7 @@ func client() {
 }
 
 func client_stream_handling(relay_conn quic.Connection, ctx context.Context, end_chan chan struct{}) {
-	ts_buffer := make([]byte, 12)
+	ts_buffer := make([]byte, 13)
 
 	for {
 		select {
@@ -101,17 +101,18 @@ func client_stream_handling(relay_conn quic.Connection, ctx context.Context, end
 				panic(err)
 			}
 
-			if n != 12 {
-				panic(fmt.Errorf("got %d bytes, expected %d", n, 12))
+			if n != len(ts_buffer) {
+				panic(fmt.Errorf("got %d bytes, expected %d", n, len(ts_buffer)))
 			}
 
 			now := time.Now().UnixNano()
 
 			data := ts_buffer[:n]
-			sent_index := binary.LittleEndian.Uint32(data[0:4])
-			sent_ts := binary.LittleEndian.Uint64(data[4:12])
+			flag := data[0]
+			sent_index := binary.LittleEndian.Uint32(data[1:5])
+			sent_ts := binary.LittleEndian.Uint64(data[5:13])
 
-			fmt.Println("Received Timestamp for index", sent_index, "from server")
+			fmt.Printf("Received Timestamp for index %d from server (%x)\n", sent_index, flag)
 
 			lock.Lock()
 			if _, ok := times[sent_index]; !ok {
@@ -138,7 +139,9 @@ func client_datagram_handling(relay_conn quic.Connection, ctx context.Context) {
 			return
 		}
 
-		sent_ts := binary.LittleEndian.Uint64(datagram)
+		_ = datagram[0]
+		_ = binary.LittleEndian.Uint32(datagram[1:5])
+		sent_ts := binary.LittleEndian.Uint64(datagram[5:13])
 		now := time.Now().UnixNano()
 		latency := now - int64(sent_ts)
 		fmt.Println("Latency:", latency)

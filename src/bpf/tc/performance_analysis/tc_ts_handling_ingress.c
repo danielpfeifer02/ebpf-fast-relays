@@ -59,7 +59,7 @@ int tc_ts_ingress(struct __sk_buff *skb)
                 // We need to use bpf_skb_pull_data() to get the rest of the packet.
                 // If the pull fails we can pass the packet through.
                 if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
-                        bpf_printk("[ingress startup tc] failed to pull data");
+                        bpf_printk("[tc_ts_handling_ingress] Failed to pull data");
                         return TC_ACT_OK;
                 }
 

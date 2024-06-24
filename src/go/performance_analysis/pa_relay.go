@@ -99,7 +99,7 @@ func relay() {
 }
 
 func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context.Context, end_chan chan struct{}) {
-	ts_buffer := make([]byte, 12)
+	ts_buffer := make([]byte, 13)
 
 	for {
 		select {

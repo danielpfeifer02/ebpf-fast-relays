@@ -34,7 +34,7 @@ func server() {
 
 func server_stream_handling(conn quic.Connection, ctx context.Context) {
 	// This one will be replaced by the actual timestamp in the bpf program
-	ts_buffer := make([]byte, 12)
+	ts_buffer := make([]byte, 13)
 
 	for i := 0; i < 100; i++ {
 		str, err := conn.OpenUniStream() //WithPriority(priority_setting.HighPriority)
@@ -43,10 +43,12 @@ func server_stream_handling(conn quic.Connection, ctx context.Context) {
 		}
 		defer str.Close()
 
+		flags := uint8(0)
+		binary.LittleEndian.PutUint32(ts_buffer, uint32(flags))
 		index := uint32(i)
-		binary.LittleEndian.PutUint32(ts_buffer, index)
-		now := time.Now() // TODO: Use BPF instead of here for timestamp
-		binary.LittleEndian.PutUint64(ts_buffer[4:12], uint64(now.UnixNano()))
+		binary.LittleEndian.PutUint32(ts_buffer[1:], index)
+		// now := time.Now() // TODO: Use BPF instead of here for timestamp
+		// binary.LittleEndian.PutUint64(ts_buffer[5:13], uint64(now.UnixNano()))
 
 		// fmt.Println(hex.Dump(ts_buffer))
 
@@ -70,19 +72,21 @@ func server_stream_handling(conn quic.Connection, ctx context.Context) {
 
 func server_datagram_handling(conn quic.Connection) {
 	// This one will be replaced by the actual timestamp in the bpf program
-	ts_buffer := make([]byte, 12)
+	ts_buffer := make([]byte, 13)
 	for i := 0; i < 50; i++ {
 
+		flags := uint8(0)
+		binary.LittleEndian.PutUint32(ts_buffer, uint32(flags))
 		index := uint32(i)
-		binary.LittleEndian.PutUint32(ts_buffer, index)
+		binary.LittleEndian.PutUint32(ts_buffer[1:], index)
 		now := time.Now() // TODO: Use BPF instead of here for timestamp
-		binary.LittleEndian.PutUint64(ts_buffer, uint64(now.UnixNano()))
+		binary.LittleEndian.PutUint64(ts_buffer[5:13], uint64(now.UnixNano()))
 
 		err := conn.SendDatagram(ts_buffer)
 		if err != nil {
 			panic(err)
 		}
 
-		fmt.Println("Sent timestamp to client -", 8, "bytes")
+		fmt.Println("Sent timestamp to client")
 	}
 }
