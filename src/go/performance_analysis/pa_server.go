@@ -59,6 +59,7 @@ func server_stream_handling(conn quic.Connection, ctx context.Context) {
 		}
 
 		// fmt.Println("Sent timestamp to client")
+		time.Sleep(1 * time.Millisecond)
 	}
 
 	time.Sleep(1 * time.Second)

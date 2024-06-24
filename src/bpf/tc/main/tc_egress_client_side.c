@@ -56,7 +56,7 @@ int tc_egress(struct __sk_buff *skb)
         // In case the packet was redirected from ingress the packet number is always
         // set to zero.
         if (udp->check != 0) {
-                bpf_printk("Checksum not 0 (%d)\n", udp->check);
+                bpf_printk("Checksum not 0 (%d)\n", udp->check);             
                 user_space = 1;
         }
 
@@ -112,6 +112,15 @@ int tc_egress(struct __sk_buff *skb)
                 // When a short header packet arrives at the egress interface
                 // which is sent from user space we only update the packet number
                 if (user_space) {
+
+                        // { // TODO: necessary? UDP checksum seems to be wrong generally
+                        //         // Set udp->check to 0.
+                        //         uint16_t old_checksum;
+                        //         SAVE_BPF_PROBE_READ_KERNEL(&old_checksum, sizeof(old_checksum), &udp->check);
+                        //         uint16_t zero = 0;
+                        //         uint32_t checksum_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + 6 /* Everything before checksum */;
+                        //         bpf_skb_store_bytes(skb, checksum_off, &zero, sizeof(zero), 0);
+                        // }
 
                         // Read dst ip and port.
                         uint32_t dst_ip_addr;
