@@ -13,7 +13,7 @@ echo "Current namespace: $CURRENT_NAMESPACE"
 if [ "$CURRENT_NAMESPACE" == "relay_ns" ]; then
     cd ../../bpf/ && make clean && cd ../go/performance_analysis/
 elif [ "$CURRENT_NAMESPACE" == "server_ns" ]; then
-    echo "Nothing to do here."
+    cd ../../bpf/ && make clean && cd ../go/performance_analysis/
 elif [ "$CURRENT_NAMESPACE" == "client_ns" ]; then
     echo "Nothing to do here."
 else
