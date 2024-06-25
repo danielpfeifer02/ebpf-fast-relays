@@ -211,8 +211,8 @@ clean:
 			rm -f $(BPF_TC_OBJ_TS_EG); \
 			rm -f ${BPF_TC_OBJ_TS_EG:.o=.ll}; \
 			tc filter del dev ${TS_DEV_EG} egress; \
+			tc qdisc del dev ${TS_DEV_EG} clsact; \
 		fi; \
-		tc qdisc del dev ${TS_DEV_EG} clsact; \
 	fi
 
 
