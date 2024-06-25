@@ -71,7 +71,9 @@ poc: $(BPF_TC_IN_TO_EG_OBJ) tc_poc
 
 tc_main:
 	tc qdisc add dev ${DEV_IN} clsact
-	tc qdisc add dev ${DEV_EG} clsact
+	@if [ "$(DEV_IN)" != "$(DEV_EG)" ]; then \
+		tc qdisc add dev ${DEV_EG} clsact; \
+	fi
 	tc filter add dev ${DEV_IN} ingress bpf da obj ${BPF_TC_OBJ_ING_SERVER} sec ingress
 	tc filter add dev ${DEV_EG} egress bpf da obj ${BPF_TC_OBJ_EG_CLIENT} sec egress
 	tc filter add dev ${DEV_EG} ingress bpf da obj ${BPF_TC_OBJ_ING_CLIENT} sec ingress_from_client
@@ -156,7 +158,7 @@ clean:
 
 	@echo $(CUR_NS)
 
-	@if [ "$(CUR_NS)" = "relay_ns" ]; then \
+	@if [ "$(CUR_NS)" = "net-07" ]; then \
 		sudo rm -f $(BPF_TC_PINNED_PATH); \
 		if [ -e "$(BPF_TC_OBJ_ING_SERVER)" ]; then \
 			echo "Deleting TC filters and maps"; \

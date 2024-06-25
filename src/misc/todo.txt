@@ -80,3 +80,8 @@
 - sometimes pn is 32 and sometimes 64 bit in the code
 
 - fix problem with unknown (any) local ip address at client side when informing relay of receit of packet
+
+
+
+
+- BIG TODO: bpf_ktime_get_tai_ns() is not supported on the server -> how can i make use of the ns since boot (bpf_ktime_get_ns)?

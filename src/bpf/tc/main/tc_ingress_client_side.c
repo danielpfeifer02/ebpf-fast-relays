@@ -117,6 +117,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 struct client_info_key_t key = {
                         .ip_addr = src_ip_addr, 
                         .port = src_port,
+                        .padding = {0},
                 };
 
                 // If the connection established map has no entry for the client

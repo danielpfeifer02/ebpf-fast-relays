@@ -132,6 +132,7 @@ int tc_egress(struct __sk_buff *skb)
                         struct client_info_key_t key = {
                                 .ip_addr = dst_ip_addr,
                                 .port = dst_port,
+                                .padding = {0},
                         };
 
                         // Here we translate the packet number of the outgoing packet to 
@@ -194,7 +195,7 @@ int tc_egress(struct __sk_buff *skb)
                         // TODO: four) bytes to store the packet number that is acutally used. This could
                         // TODO: e.g. be circumvented by always using four bytes, or by telling userspace 
                         // TODO: the needed size.
-                        uint8_t new_pn_bytes[4];
+                        uint8_t new_pn_bytes[4] = {0};
                         if (pn_len == 1) {
                                 new_pn_bytes[0] = *new_pn;
                         }
@@ -228,7 +229,11 @@ int tc_egress(struct __sk_buff *skb)
                         *new_pn = *new_pn + 1;
                         bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
-                        uint64_t time_ns = bpf_ktime_get_tai_ns();
+                        // TODO
+                        // uint64_t time_ns = bpf_ktime_get_tai_ns();
+                        // ! Apparently the kernel of the server is too old for bpf_ktime_get_tai_ns()
+                        // ! For now use bpf_ktime_get_ns() until there is a solution
+                        uint64_t time_ns = bpf_ktime_get_ns();
 
                         // Userspace packets do not need to be registered (in theory).
                         // However somehow the userspace needs to know the translation of the
@@ -240,6 +245,7 @@ int tc_egress(struct __sk_buff *skb)
                                 .length = payload_size,
                                 .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
                                 .valid = 1,
+                                .padding = {0},
                         };
                         store_packet_to_register(pack_to_reg);
 
@@ -303,6 +309,7 @@ int tc_egress(struct __sk_buff *skb)
                 struct client_info_key_t key = {
                         .ip_addr = value->dst_ip_addr,
                         .port = value->dst_port,
+                        .padding = {0},
                 };
 
                 // Drop if the connection is not yet fully established.
@@ -826,7 +833,11 @@ int tc_egress(struct __sk_buff *skb)
                 // Do not use bpf_ktime_get_ns() since that's only time since boot.
                 // https://lore.kernel.org/netdev/CAEf4Bzb9KA=mzYo_x42ExRoZjm=dF6up1DxrUL_eqkDYs9+UUg@mail.gmail.com/T/
                 // https://man7.org/linux/man-pages/man7/bpf-helpers.7.html
-                uint64_t time_ns = bpf_ktime_get_tai_ns();
+                // TODO
+                // uint64_t time_ns = bpf_ktime_get_tai_ns();
+                // ! Apparently the kernel of the server is too old for bpf_ktime_get_tai_ns()
+                // ! For now use bpf_ktime_get_ns() until there is a solution
+                uint64_t time_ns = bpf_ktime_get_ns();
                 // bpf_printk("Current nanoseconds: %llu\n", time_ns);
 
 
@@ -836,6 +847,7 @@ int tc_egress(struct __sk_buff *skb)
                         .length = payload_size,
                         .server_pn = old_pn,
                         .valid = 1,
+                        .padding = {0},
                 };
                 store_packet_to_register(pack_to_reg);
 
@@ -871,6 +883,7 @@ int tc_egress(struct __sk_buff *skb)
                 struct client_info_key_t key = {
                         .ip_addr = dst_ip_addr,
                         .port = dst_port,
+                        .padding = {0},
                 };
                 uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key); 
                 uint32_t zero = 0;
@@ -899,7 +912,11 @@ int tc_egress(struct __sk_buff *skb)
                 *new_pn = *new_pn + 1;
                 bpf_map_update_elem(&connection_current_pn, &key, new_pn, BPF_ANY);
 
-                uint64_t time_ns = bpf_ktime_get_tai_ns();
+                // TODO
+                // uint64_t time_ns = bpf_ktime_get_tai_ns();
+                // ! Apparently the kernel of the server is too old for bpf_ktime_get_tai_ns()
+                // ! For now use bpf_ktime_get_ns() until there is a solution
+                uint64_t time_ns = bpf_ktime_get_ns();
 
                 // Userspace packets do not need to be registered (in theory).
                 // However somehow the userspace needs to know the translation of the
@@ -911,6 +928,7 @@ int tc_egress(struct __sk_buff *skb)
                         .length = payload_size,
                         .server_pn = -1, // -1 -> we don't care right now // TODO: what to do with long headers?
                         .valid = 1,
+                        .padding = {0},
                 };
                 store_packet_to_register(pack_to_reg);
 
