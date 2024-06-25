@@ -38,4 +38,4 @@ ip netns exec ${SERVER_NS} ping -c 1 ${PUBLIC_IP}
 ip netns exec ${RELAY_NS} ping -c 1 ${PUBLIC_IP}
 ip netns exec ${CLIENT_NS} ping -c 1 ${PUBLIC_IP}
 
-echo "\n\n\t\tAll tests passed\n\n"
+echo "\n\n\t\tAll tests passed.\n\t\tSetup complete!\n\n"
