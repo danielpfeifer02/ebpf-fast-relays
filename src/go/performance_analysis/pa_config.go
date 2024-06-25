@@ -16,11 +16,14 @@ import (
 )
 
 const (
-	local_usage        = false
-	use_datagrams      = false
-	bpf_enabled        = true //!local_usage
-	forwarding_enabled = true //!bpf_enabled
-	count_errors       = true
+	local_usage                = false
+	use_datagrams              = false
+	bpf_enabled                = true //!local_usage
+	forwarding_enabled         = true //!bpf_enabled
+	count_errors               = true
+	payload_length             = 21
+	USERSPACE_FLAG             = 0b10000000
+	number_of_analysis_packets = 250
 )
 
 var (

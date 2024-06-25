@@ -34,9 +34,9 @@ func server() {
 
 func server_stream_handling(conn quic.Connection, ctx context.Context) {
 	// This one will be replaced by the actual timestamp in the bpf program
-	ts_buffer := make([]byte, 13)
+	ts_buffer := make([]byte, payload_length)
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < number_of_analysis_packets; i++ {
 		str, err := conn.OpenUniStream() //WithPriority(priority_setting.HighPriority)
 		if err != nil {
 			panic(err)
@@ -72,8 +72,8 @@ func server_stream_handling(conn quic.Connection, ctx context.Context) {
 
 func server_datagram_handling(conn quic.Connection) {
 	// This one will be replaced by the actual timestamp in the bpf program
-	ts_buffer := make([]byte, 13)
-	for i := 0; i < 50; i++ {
+	ts_buffer := make([]byte, payload_length)
+	for i := 0; i < number_of_analysis_packets; i++ {
 
 		flags := uint8(0)
 		binary.LittleEndian.PutUint32(ts_buffer, uint32(flags))

@@ -99,7 +99,7 @@ func relay() {
 }
 
 func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context.Context, end_chan chan struct{}) {
-	ts_buffer := make([]byte, 13)
+	ts_buffer := make([]byte, payload_length)
 
 	for {
 		select {
@@ -129,6 +129,7 @@ func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context
 				fmt.Println("Stream id to client:", client_str.StreamID())
 				// defer client_str.Close()
 
+				ts_buffer[0] = ts_buffer[0] | USERSPACE_FLAG
 				_, err = client_str.Write(ts_buffer[:n])
 				if err != nil {
 					fmt.Println("Error writing to client")

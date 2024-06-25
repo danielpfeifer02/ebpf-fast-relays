@@ -14,9 +14,6 @@ __section("ts_ingress")
 int tc_ts_ingress(struct __sk_buff *skb)
 {
 
-    bpf_printk("Hello from tc_ts_ingress\n");
-    return TC_ACT_OK;
-
         // Get data pointers from the buffer.
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
@@ -45,7 +42,7 @@ int tc_ts_ingress(struct __sk_buff *skb)
         // If the packet is not addressed to the port where our relay is
         // listening we can pass it through since the packet is from a 
         // different program.
-        if (udp->dest != RELAY_PORT) {
+        if (udp->source != RELAY_PORT) {
                 return TC_ACT_OK;
         }
 
@@ -77,10 +74,49 @@ int tc_ts_ingress(struct __sk_buff *skb)
         SAVE_BPF_PROBE_READ_KERNEL(&quic_flags, sizeof(quic_flags), payload);
         uint8_t header_form = (quic_flags & 0x80) >> 7;
 
-        // We only consider long headers here.
-        if (header_form == 1) {
+        // We only consider short headers here.
+        if (header_form == 0) {
 
                 // Only thing to change is the timetamp.
+                uint8_t pn_len = (quic_flags & 0x03) + 1;
+
+                uint32_t quic_payload_offset = 1 /* Header */+ CONN_ID_LEN + pn_len;
+
+                uint8_t frame_type;
+                SAVE_BPF_PROBE_READ_KERNEL(&frame_type, sizeof(frame_type), payload + quic_payload_offset);
+
+                if (!IS_STREAM_FRAME(frame_type)) {
+                        bpf_printk("[tc_ts_handling_ingress] Not a stream frame");
+                        return TC_ACT_OK;
+                }
+                
+                uint8_t offset_present = frame_type & 0x04;
+                uint8_t length_present = frame_type & 0x02;
+
+                uint32_t stream_data_offset = 0;
+                struct var_int stream_id;
+                read_var_int(payload + quic_payload_offset + 1, &stream_id, NO_VALUE_NEEDED);
+                stream_data_offset += bounded_var_int_len(stream_id.len);
+
+                if (offset_present) {
+                        struct var_int offset;
+                        read_var_int(payload + quic_payload_offset + 1 + stream_data_offset, &offset, NO_VALUE_NEEDED);
+                        stream_data_offset += bounded_var_int_len(offset.len);
+                }
+                if (length_present) {
+                        struct var_int length;
+                        read_var_int(payload + quic_payload_offset + 1 + stream_data_offset, &length, NO_VALUE_NEEDED);
+                        stream_data_offset += bounded_var_int_len(length.len);
+                }
+
+                stream_data_offset += TS_OFF_INGRESS;
+
+                uint64_t timestamp = bpf_ktime_get_tai_ns();
+                uint32_t overall_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr)+ quic_payload_offset + 1 /* Frame type */ + stream_data_offset;
+                bpf_skb_store_bytes(skb, overall_off, &timestamp, sizeof(timestamp), 0);
+
+                bpf_printk("[tc_ts_handling_ingress] Timestamp added to packet");
+
 
         }
 

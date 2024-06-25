@@ -12,8 +12,9 @@ import (
 )
 
 type sent_recv struct {
-	sent_ts uint64
-	recv_ts uint64
+	sent_ts           uint64
+	recv_ts           uint64
+	through_userspace bool
 }
 
 var (
@@ -35,6 +36,13 @@ func client() {
 
 	times = make(map[uint32][]sent_recv)
 	ctr := 0
+
+	// Open output/results.txt file
+	f, err := os.Create("output/results.txt")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
 
 	if use_datagrams {
 		client_datagram_handling(conn, ctx)
@@ -61,15 +69,29 @@ func client() {
 				sent_ts_1 := sent_recv_list[0].sent_ts
 				recv_ts_1 := sent_recv_list[0].recv_ts
 				latency_1 := recv_ts_1 - sent_ts_1
+				l1_type := "Userspace"
+				if !sent_recv_list[0].through_userspace {
+					l1_type = "Kernel"
+				}
 
 				sent_ts_2 := sent_recv_list[1].sent_ts
 				recv_ts_2 := sent_recv_list[1].recv_ts
 				latency_2 := recv_ts_2 - sent_ts_2
+				l2_type := "Userspace"
+				if !sent_recv_list[1].through_userspace {
+					l2_type = "Kernel"
+				}
 
-				fmt.Println("Latency 1:", time.Unix(0, int64(latency_1)).Sub(time.Unix(0, 0)))
-				fmt.Println("Latency 2:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, 0)))
+				fmt.Println(l1_type, "Latency 1:", time.Unix(0, int64(latency_1)).Sub(time.Unix(0, 0)))
+				fmt.Println(l2_type, "Latency 2:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, 0)))
 				fmt.Println("Latency Difference:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, int64(latency_1))))
+				fmt.Println("Raw Nanosecond Difference:", latency_2-latency_1)
 				fmt.Println()
+
+				_, err := f.WriteString(fmt.Sprintf("%d %d %d %s %d %d %s %d\n", i, sent_ts_1, recv_ts_1, l1_type, sent_ts_2, recv_ts_2, l2_type, latency_2-latency_1))
+				if err != nil {
+					panic(err)
+				}
 
 			}
 
@@ -82,7 +104,7 @@ func client() {
 }
 
 func client_stream_handling(relay_conn quic.Connection, ctx context.Context, end_chan chan struct{}) {
-	ts_buffer := make([]byte, 13)
+	ts_buffer := make([]byte, payload_length)
 
 	for {
 		select {
@@ -105,12 +127,13 @@ func client_stream_handling(relay_conn quic.Connection, ctx context.Context, end
 				panic(fmt.Errorf("got %d bytes, expected %d", n, len(ts_buffer)))
 			}
 
-			now := time.Now().UnixNano()
+			// now := time.Now().UnixNano()
 
 			data := ts_buffer[:n]
 			flag := data[0]
 			sent_index := binary.LittleEndian.Uint32(data[1:5])
 			sent_ts := binary.LittleEndian.Uint64(data[5:13])
+			recv_ts := binary.LittleEndian.Uint64(data[13:21])
 
 			fmt.Printf("Received Timestamp for index %d from server (%x)\n", sent_index, flag)
 
@@ -118,7 +141,9 @@ func client_stream_handling(relay_conn quic.Connection, ctx context.Context, end
 			if _, ok := times[sent_index]; !ok {
 				times[sent_index] = make([]sent_recv, 0)
 			}
-			srv := sent_recv{sent_ts, uint64(now)}
+			through_userspace := flag&USERSPACE_FLAG != 0
+			// srv := sent_recv{sent_ts, uint64(now), through_userspace}
+			srv := sent_recv{sent_ts, recv_ts, through_userspace}
 			times[sent_index] = append(times[sent_index], srv)
 			lock.Unlock()
 

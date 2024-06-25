@@ -13,9 +13,9 @@ echo "Current namespace: $CURRENT_NAMESPACE"
 if [ "$CURRENT_NAMESPACE" == "relay_ns" ]; then
     cd ../../bpf/ && make clean && make && cd ../go/performance_analysis/ && go run *.go relay
 elif [ "$CURRENT_NAMESPACE" == "server_ns" ]; then
-    cd ../../bpf/ && make clean && make tc_ts && cd ../go/performance_analysis/ && go run *.go server
+    cd ../../bpf/ && make clean && make tc_ts_eg && cd ../go/performance_analysis/ && go run *.go server
 elif [ "$CURRENT_NAMESPACE" == "client_ns" ]; then
-    go run *.go client
+    cd ../../bpf/ && make clean && make tc_ts_in && cd ../go/performance_analysis/ && go run *.go client
 else
     echo "Unknown namespace."
     exit 1

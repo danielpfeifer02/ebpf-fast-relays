@@ -15,7 +15,7 @@ if [ "$CURRENT_NAMESPACE" == "relay_ns" ]; then
 elif [ "$CURRENT_NAMESPACE" == "server_ns" ]; then
     cd ../../bpf/ && make clean && cd ../go/performance_analysis/
 elif [ "$CURRENT_NAMESPACE" == "client_ns" ]; then
-    echo "Nothing to do here."
+    cd ../../bpf/ && make clean && cd ../go/performance_analysis/
 else
     echo "Unknown namespace."
     exit 1
