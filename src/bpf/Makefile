@@ -22,8 +22,8 @@ BPF_TC_IN_TO_EG_OBJ = ${BPF_TC_IN_TO_EG_C:.c=.o}
 
 BPF_TC_IN_TO_EG_PINNED_PATH := /sys/fs/bpf/$(TC_IN_TO_EG)
 
-DEV_IN := veth1
-DEV_EG := veth2
+DEV_IN := eno12399
+DEV_EG := eno12399
 
 DEV_EG_INDEX := $(shell ip link show $(DEV_EG) | awk '/^[0-9]/ {print $$1}' | sed 's/://')
 
@@ -32,8 +32,8 @@ ifeq ($(strip $(DEV_EG_INDEX)),)
 endif
 
 # This is for the timestamp programs for the performance evaluation.
-TS_DEV_IN := veth3
-TS_DEV_EG := veth0
+TS_DEV_IN := eno12399
+TS_DEV_EG := eno12399
 
 TC_TS = tc_ts
 BPF_TC_TS_PINNED_PATH := /sys/fs/bpf/$(TC_TS)
@@ -43,7 +43,7 @@ BPF_TC_OBJ_TS_ING = ${TC_TS_PATH}/tc_ts_handling_ingress.o
 BPF_TC_OBJ_TS_EG = ${TC_TS_PATH}/tc_ts_handling_egress.o
 
 
-CUR_NS := $(shell ip netns identify)
+CUR_NS := $(shell hostname)
 
 # TODO: other way to export PATH
 export PATH := $(PATH):/usr/local/go/bin
@@ -52,7 +52,7 @@ PRIO_DROP_PATH_VIDEO := ../go/examples/priority_drop_video
 PRIO_DROP_PATH_CHAT := ../go/examples/priority_drop_chat
 INGRESS_TO_EGRESS_PATH := ../go/examples/ingress_to_egress
 
-.PHONY: clean all tc_main tc_poc tc_ts_in tc_ts_eg chat
+.PHONY: clean all tc_main tc_poc tc_ts_in tc_ts_eg tc_ts chat
 
 all: $(BPF_TC_OBJ) tc_main
 	@echo "ifindex for $(DEV_EG): $(DEV_EG_INDEX)"
@@ -95,6 +95,15 @@ tc_ts_eg: $(BPF_TC_OBJ_TS_EG)
 	tc qdisc add dev ${TS_DEV_EG} clsact
 	tc filter add dev ${TS_DEV_EG} egress bpf da obj ${BPF_TC_OBJ_TS_EG} sec ts_egress
 	tc filter show dev ${TS_DEV_EG} egress
+
+tc_ts: $(BPF_TC_OBJ_TS_ING) $(BPF_TC_OBJ_TS_EG)
+	tc qdisc add dev ${TS_DEV_IN} clsact
+	tc filter add dev ${TS_DEV_IN} ingress bpf da obj ${BPF_TC_OBJ_TS_ING} sec ts_ingress
+	tc filter show dev ${TS_DEV_IN} ingress
+# 	tc qdisc add dev ${TS_DEV_EG} clsact // not needed since TS_DEV_EG == TS_DEV_ING
+	tc filter add dev ${TS_DEV_EG} egress bpf da obj ${BPF_TC_OBJ_TS_EG} sec ts_egress
+	tc filter show dev ${TS_DEV_EG} egress
+
 
 # Main tc program compilation
 # TODO add -Werror flag 
@@ -175,7 +184,7 @@ clean:
 		sudo rm -f $(BPF_TC_IN_TO_EG_PINNED_PATH); \
 	fi
 
-	@if [ "$(CUR_NS)" = "relay_ns" ]; then \
+	@if [ "$(CUR_NS)" = "net-07" ]; then \
 		if [ -e "$(BPF_TC_IN_TO_EG_OBJ)" ]; then \
 			echo "Deleting TC filters for redirection proof of concept"; \
 			rm -f $(BPF_TC_IN_TO_EG_OBJ); \
@@ -188,32 +197,21 @@ clean:
 		sudo rm -f $(BPF_TC_TS_PINNED_PATH); \
 	fi
 
-	@if [ "$(CUR_NS)" = "client_ns" ]; then \
+	@if [ "$(CUR_NS)" = "net-06" ]; then \
 		if [ -e "$(BPF_TC_OBJ_TS_ING)" ]; then \
 			echo "Deleting TC filters for timestamping (ingress)"; \
 			rm -f $(BPF_TC_OBJ_TS_ING); \
 			rm -f ${BPF_TC_OBJ_TS_ING:.o=.ll}; \
 			tc filter del dev ${TS_DEV_IN} ingress; \
-			tc qdisc del dev ${TS_DEV_IN} clsact; \
 		fi; \
-	fi
-#	TODO: make a more general way of deleting them independently of the namespace
-	@if [ "$(CUR_NS)" = "server_ns" ]; then \
 		if [ -e "$(BPF_TC_OBJ_TS_EG)" ]; then \
 			echo "Deleting TC filters for timestamping (egress)"; \
 			rm -f $(BPF_TC_OBJ_TS_EG); \
 			rm -f ${BPF_TC_OBJ_TS_EG:.o=.ll}; \
 			tc filter del dev ${TS_DEV_EG} egress; \
-			tc qdisc del dev ${TS_DEV_EG} clsact; \
 		fi; \
+		tc qdisc del dev ${TS_DEV_EG} clsact; \
 	fi
-
-
-#	Potentially add to avoid problems with using same interfaces for different purposes
-# 	if [ "$(TS_DEV_IN)" != "$(TS_DEV_EG)" ]; then \
-# 		tc filter del dev ${TS_DEV_EG} egress; \
-# 		tc qdisc del dev ${TS_DEV_EG} clsact; \
-# 	fi; \
 
 
 	rm -f ${PRIO_DROP_PATH_VIDEO}/build/main

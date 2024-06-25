@@ -114,7 +114,12 @@ int tc_ts_egress(struct __sk_buff *skb)
 
                 stream_data_offset += TS_OFF_EGRESS;
 
-                uint64_t timestamp = bpf_ktime_get_tai_ns();
+                // Turns out the kernel (5.15.0-67-generic) is too old for bpf_ktime_get_tai_ns().
+                // Just use bpf_ktime_get_ns() for the delay analysis. This will just use the
+                // timestmap from startup but that does not matter since we are just interessted
+                // in the differences between the timestmaps and not in the actual values.
+                uint64_t timestamp = bpf_ktime_get_ns(); 
+                
                 uint32_t overall_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr)+ quic_payload_offset + 1 /* Frame type */ + stream_data_offset;
                 bpf_skb_store_bytes(skb, overall_off, &timestamp, sizeof(timestamp), 0);
 
