@@ -274,6 +274,7 @@ func clearBPFMaps() {
 		"client_pn",
 		"connection_current_pn",
 		"connection_pn_translation",
+		"connection_unistream_id_counter",
 		"connection_unistream_id_translation",
 		"client_stream_offset"}
 	map_location := "/sys/fs/bpf/tc/globals/"

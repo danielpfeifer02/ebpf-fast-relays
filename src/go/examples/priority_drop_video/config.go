@@ -121,7 +121,7 @@ func mainConfig() {
 	// set from outside the underlying QUIC implementation.
 	// This is not needed if the packet number translation from
 	// within the bpf program is used.
-	packet_setting.ALLOW_SETTING_PN = false
+	packet_setting.ALLOW_SETTING_PN = true
 
 	// Specify if two end points should exchange the priority of a
 	// created stream (i.e. if the server should send it to the client).

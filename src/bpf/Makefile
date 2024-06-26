@@ -161,6 +161,7 @@ clean:
 			rm -f /sys/fs/bpf/tc/globals/client_pn; \
 			rm -f /sys/fs/bpf/tc/globals/connection_current_pn; \
 			rm -f /sys/fs/bpf/tc/globals/connection_pn_translation; \
+			rm -f /sys/fs/bpf/tc/globals/connection_unistream_id_counter; \
 			rm -f /sys/fs/bpf/tc/globals/connection_unistream_id_translation; \
 			rm -f /sys/fs/bpf/tc/globals/client_stream_offset; \
 			rm -f /sys/fs/bpf/tc/globals/packets_to_register; \

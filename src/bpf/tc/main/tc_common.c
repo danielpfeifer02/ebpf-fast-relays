@@ -171,7 +171,7 @@ struct client_pn_map_key_t {
 
 // Struct that represents the key for the map
 // containing the unistream id translations.
-struct client_unistream_id_map_key_t {
+struct client_unistream_id_key_t {
         struct client_info_key_t key;
         uint64_t unistream_id;
 };
@@ -304,9 +304,23 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_pn_translation SEC(".maps");
 
+// This map acts as the counter for the next unidirectional stream id.
+// This is needed since the Media Server and the Relay both might open
+// uni-directional streams and the stream ids have to be unique.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);
+    __type(value, uint64_t);
+    __uint(max_entries, MAX_UNISTREAM_ID_TRANSLATIONS); // TODO: separate size?
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} connection_unistream_id_counter SEC(".maps");
+
+// This map is used to be able to lookup if a unidirectional stream id
+// already has been translated.
+// This is needed to avoid translating the same stream id multiple times.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_unistream_id_key_t);
     __type(value, uint64_t);
     __uint(max_entries, MAX_UNISTREAM_ID_TRANSLATIONS);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
@@ -369,37 +383,64 @@ struct {
 
 // Update the stream id of a packet.
 __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key) {
+        
         bpf_printk("Unidirectional stream with id %d\n", stream_id.value);
 
-        // struct client_unistream_id_map_key_t unistream_key = {
-        //         .key = key,
-        //         .unistream_id = stream_id.value,
-        // };
-        uint64_t *new_stream_id = bpf_map_lookup_elem(&connection_unistream_id_translation, key);
-        
-        uint64_t initial = 0b11; // 0b11 == unidirectional and server initiated
-        if (new_stream_id == NULL) {
-                bpf_printk("No unidirectional stream id found\n");
-                bpf_map_update_elem(&connection_unistream_id_translation, key, &initial, BPF_ANY);
-                new_stream_id = &initial;
+        if (skb==NULL || key==NULL) {
+                bpf_printk("Invalid arguments for update_stream_id\n");
+                return 1;
         }
-        uint64_t next_stream_id = *new_stream_id + 0b100; //((*new_stream_id >> 2) + 1) << 2 | 0b10;
-        bpf_map_update_elem(&connection_unistream_id_translation, key, &next_stream_id, BPF_ANY);
-        // Store new_stream_id in the packet
+
+        struct client_unistream_id_key_t unistream_key = {
+                .key = *key,
+                .unistream_id = stream_id.value,
+        };
+
+        // TODO: translation != NULL causes "panic: STREAM_STATE_ERROR (local): peer attempted to open stream 0" for some reason
+        uint64_t *translation = bpf_map_lookup_elem(&connection_unistream_id_translation, &unistream_key);
+        
+        // This is only needed if the stream id is not already translated.
+        uint64_t *new_stream_id;
+
+        // If not already translated, translate it.
+        if (translation == NULL) {
+                new_stream_id = bpf_map_lookup_elem(&connection_unistream_id_counter, key);
+                
+                uint64_t initial = 0b11; // 0b11 == unidirectional and server initiated.
+                if (new_stream_id == NULL) {
+                        bpf_printk("No unidirectional stream id found\n");
+                        bpf_map_update_elem(&connection_unistream_id_counter, key, &initial, BPF_ANY);
+                        new_stream_id = &initial;
+                }
+                // Do not touch the two least significant bits since they inicate stream type.
+                uint64_t next_stream_id = *new_stream_id + 0b100;
+                bpf_map_update_elem(&connection_unistream_id_counter, key, &next_stream_id, BPF_ANY);
+
+                bpf_map_update_elem(&connection_unistream_id_translation, &unistream_key, new_stream_id, BPF_ANY); 
+
+                translation = new_stream_id;
+        }
+
+        // Store new_stream_id in the packet.
         // TODO: for now userspace is expected to always use 8 byte stream ids
         uint8_t new_stream_id_bytes[8] = {0};
         for (int i=0; i<8; i++) {
-                new_stream_id_bytes[i] = (*new_stream_id >> (56 - 8 * i)) & 0xff;
+                new_stream_id_bytes[i] = (*translation >> (56 - 8 * i)) & 0xff;
         }
-        // TODO: check that only 62 bits are used
-        new_stream_id_bytes[0] |= 0xc0; // Set length
+        // Check that only 62 bits are used.
+        if (new_stream_id_bytes[0] & 0xc0) {
+                bpf_printk("Stream id too large\n");
+                return 1;
+        }
+        // Set length.
+        new_stream_id_bytes[0] |= 0xc0;
         bpf_skb_store_bytes(skb, stream_id_off, new_stream_id_bytes, 8, 0);
-        bpf_printk("Unidirectional stream id updated from %d to %d\n", stream_id.value, *new_stream_id);
+        bpf_printk("Unidirectional stream id updated from %d to %d\n", stream_id.value, *translation);
 
         return 0;
 }
 
-// Store packet-number and timestamp for potential RTT calculation.f
+// Store packet-number and timestamp for potential RTT calculation.
 __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, uint64_t timestamp, uint32_t ip_addr, uint16_t port) {
 
         uint32_t zero = 0;

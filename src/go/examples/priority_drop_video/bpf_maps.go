@@ -14,6 +14,7 @@ var connection_established *ebpf.Map = nil
 var client_pn *ebpf.Map = nil
 var connection_current_pn *ebpf.Map = nil
 var connection_pn_translation *ebpf.Map = nil
+var connection_unistream_id_counter *ebpf.Map = nil
 var connection_unistream_id_translation *ebpf.Map = nil
 var client_stream_offset *ebpf.Map = nil
 var packets_to_register *ebpf.Map = nil
@@ -32,6 +33,7 @@ func loadBPFMaps() {
 	client_pn = loadMap(base_dir + "client_pn")
 	connection_current_pn = loadMap(base_dir + "connection_current_pn")
 	connection_pn_translation = loadMap(base_dir + "connection_pn_translation")
+	connection_unistream_id_counter = loadMap(base_dir + "connection_unistream_id_counter")
 	connection_unistream_id_translation = loadMap(base_dir + "connection_unistream_id_translation")
 	client_stream_offset = loadMap(base_dir + "client_stream_offset")
 	packets_to_register = loadMap(base_dir + "packets_to_register")
