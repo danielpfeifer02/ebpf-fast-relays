@@ -74,6 +74,10 @@
 #define SERVER_PORT htons(4242)
 #define PORT_MARKER htons(6969)
 
+// These markers tell if a unistream originates from the relay or the media server.
+#define RELAY_ORIGIN 1
+#define MEDIA_SERVER_ORIGIN 2
+
 // For now only stream and datagram frames are supported.
 #define IS_STREAM_FRAME(x) ((x) >= 0x08 && (x) <= 0x0f)
 #define IS_DATAGRAM_FRAME(x) ((x) >= 0x30 && (x) <= 0x31)
@@ -174,6 +178,7 @@ struct client_pn_map_key_t {
 struct client_unistream_id_key_t {
         struct client_info_key_t key;
         uint64_t unistream_id;
+        uint8_t unistream_origin;
 };
 
 // Struct that represents the key for the map
@@ -382,7 +387,7 @@ struct {
 // ++++++++++++++++++ FUNCTION DEFINITIONS ++++++++++++++++++ //
 
 // Update the stream id of a packet.
-__attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key) {
+__attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key, uint8_t unistream_origin) {
         
         bpf_printk("Unidirectional stream with id %d\n", stream_id.value);
 
@@ -394,9 +399,12 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
         struct client_unistream_id_key_t unistream_key = {
                 .key = *key,
                 .unistream_id = stream_id.value,
+                // TODO: how to handle retranmissions that come from the relay but should be sent with a stream id of the media server?
+                .unistream_origin = unistream_origin
         };
 
-        // TODO: translation != NULL causes "panic: STREAM_STATE_ERROR (local): peer attempted to open stream 0" for some reason
+        // TODO: maybe egress does not identify relay- / server-sent packets correctly 
+
         uint64_t *translation = bpf_map_lookup_elem(&connection_unistream_id_translation, &unistream_key);
         
         // This is only needed if the stream id is not already translated.
@@ -416,10 +424,15 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
                 uint64_t next_stream_id = *new_stream_id + 0b100;
                 bpf_map_update_elem(&connection_unistream_id_counter, key, &next_stream_id, BPF_ANY);
 
-                bpf_map_update_elem(&connection_unistream_id_translation, &unistream_key, new_stream_id, BPF_ANY); 
+                // TODO: this map needs to be cleaned at some point?
+                bpf_map_update_elem(&connection_unistream_id_translation, &unistream_key, new_stream_id, BPF_ANY);  
 
                 translation = new_stream_id;
+        } else {
+                bpf_printk("Reusing unidirectional stream id %d\n", *translation);
         }
+
+        bpf_printk("Mapping unistream id %d to %d (%d)\n", stream_id.value, *translation, unistream_origin);
 
         // Store new_stream_id in the packet.
         // TODO: for now userspace is expected to always use 8 byte stream ids

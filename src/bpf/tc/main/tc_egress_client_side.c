@@ -42,7 +42,7 @@ int tc_egress(struct __sk_buff *skb)
         // listening we can pass it through since the packet is from a 
         // different program.
         if (udp->source != RELAY_PORT) {
-                bpf_printk("Not QUIC (port: %d)\n", htons(udp->source));
+                bpf_printk("Not QUIC (port: %d)\n", htons(udp->source));       
                 return TC_ACT_OK;
         }
 
@@ -56,7 +56,7 @@ int tc_egress(struct __sk_buff *skb)
         // In case the packet was redirected from ingress the packet number is always
         // set to zero.
         if (udp->check != 0) {
-                bpf_printk("Checksum not 0 (%d)\n", udp->check);             
+                bpf_printk("Checksum not 0 (%d)\n", udp->check);    
                 user_space = 1;
         }
 
@@ -271,7 +271,8 @@ int tc_egress(struct __sk_buff *skb)
 
                                 // If the stream is unidirectional we need to update the stream id
                                 if (is_unidirectional) {
-                                        update_stream_id(stream_id, skb, stream_id_off, &key);
+                                        bpf_printk("Key: %d %d %d\n", key.ip_addr, key.port, RELAY_ORIGIN);
+                                        update_stream_id(stream_id, skb, stream_id_off, &key, RELAY_ORIGIN);
                                 }
                         }
 
@@ -709,7 +710,8 @@ int tc_egress(struct __sk_buff *skb)
 
                         // If the stream is unidirectional we need to update the stream id
                         if (is_unidirectional) {
-                                update_stream_id(stream_id, skb, stream_id_off, &key);
+                                bpf_printk("Key: %d %d %d\n", key.ip_addr, key.port, MEDIA_SERVER_ORIGIN);
+                                update_stream_id(stream_id, skb, stream_id_off, &key, MEDIA_SERVER_ORIGIN);
                         }
 
 
