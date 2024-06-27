@@ -123,6 +123,7 @@ func client_stream_handling(relay_conn quic.Connection, ctx context.Context, end
 				panic(err)
 			}
 
+			// TODO: if packet is split this panic seems to happen
 			if n != len(ts_buffer) {
 				panic(fmt.Errorf("got %d bytes, expected %d", n, len(ts_buffer)))
 			}

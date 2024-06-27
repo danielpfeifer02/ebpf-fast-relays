@@ -258,20 +258,19 @@ int tc_egress(struct __sk_buff *skb)
                                 // Check if the stream is a unidirectional stream
                                 // Unidirectional streams are identified by the second
                                 // least significant bit of the stream id being set to 1.
-                                uint8_t mask = 0x02;
+                                uint8_t mask = 0x03;
                                 uint32_t stream_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 
                                                         1 /* Header flags */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
                                 uint32_t stream_id_off_from_quic = 1 /* Header byte */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
                                 struct var_int stream_id = {0};
                                 // TODO: userspace should make sure that the size of the stream id is always 8 byte to ensure that bpf counter always has space
                                 read_var_int(payload + stream_id_off_from_quic, &stream_id, VALUE_NEEDED); 
-                                uint8_t is_unidirectional = stream_id.value & mask;
+                                uint8_t is_unidirectional_and_server_side = stream_id.value & mask;
 
                                 // bpf_printk("stream id to be updated: %d\n", stream_id.value);
 
                                 // If the stream is unidirectional we need to update the stream id
-                                if (is_unidirectional) {
-                                        bpf_printk("Key: %d %d %d\n", key.ip_addr, key.port, RELAY_ORIGIN);
+                                if (is_unidirectional_and_server_side == mask) {
                                         update_stream_id(stream_id, skb, stream_id_off, &key, RELAY_ORIGIN);
                                 }
                         }
@@ -697,20 +696,19 @@ int tc_egress(struct __sk_buff *skb)
                         // Check if the stream is a unidirectional stream
                         // Unidirectional streams are identified by the second
                         // least significant bit of the stream id being set to 1.
-                        uint8_t mask = 0x02;
+                        uint8_t mask = 0x03;
                         uint32_t stream_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 
                                                 1 /* Header flags */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
                         uint32_t stream_id_off_from_quic = 1 /* Header byte */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
                         struct var_int stream_id = {0};
                         // TODO: userspace should make sure that the size of the stream id is always 8 byte to ensure that bpf counter always has space
                         read_var_int(payload + stream_id_off_from_quic, &stream_id, VALUE_NEEDED); 
-                        uint8_t is_unidirectional = stream_id.value & mask;
+                        uint8_t is_unidirectional_and_server_side = stream_id.value & mask;
 
                         // bpf_printk("stream id to be updated: %d\n", stream_id.value);
 
                         // If the stream is unidirectional we need to update the stream id
-                        if (is_unidirectional) {
-                                bpf_printk("Key: %d %d %d\n", key.ip_addr, key.port, MEDIA_SERVER_ORIGIN);
+                        if (is_unidirectional_and_server_side == mask) {
                                 update_stream_id(stream_id, skb, stream_id_off, &key, MEDIA_SERVER_ORIGIN);
                         }
 

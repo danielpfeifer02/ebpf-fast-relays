@@ -57,7 +57,7 @@
 // This is necessary since the IDs also have to be unique even if
 // the relay and the forwarding mechanism open streams at the same time.
 // Therefore translate in the relay.
-#define MAX_UNISTREAM_ID_TRANSLATIONS 1024
+#define MAX_UNISTREAM_ID_TRANSLATIONS 1<<15 // 32768 // TODO: what size is sufficient?
 // The maximum number of frames that are expected to be in a packet.
 // For now this is just an arbitrary number and can be adjusted.
 // Not sure if there is any limit defined in the QUIC standard.
@@ -388,9 +388,6 @@ struct {
 
 // Update the stream id of a packet.
 __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key, uint8_t unistream_origin) {
-        
-        bpf_printk("Unidirectional stream with id %d\n", stream_id.value);
-
         if (skb==NULL || key==NULL) {
                 bpf_printk("Invalid arguments for update_stream_id\n");
                 return 1;
@@ -407,32 +404,36 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
 
         uint64_t *translation = bpf_map_lookup_elem(&connection_unistream_id_translation, &unistream_key);
         
-        // This is only needed if the stream id is not already translated.
+        // These are only needed if the stream id is not already translated.
+        // They need to be out here to avoid problems with out of scope variables.
         uint64_t *new_stream_id;
+        uint64_t initial = 0b11; // 0b11 == unidirectional and server initiated.
 
         // If not already translated, translate it.
         if (translation == NULL) {
                 new_stream_id = bpf_map_lookup_elem(&connection_unistream_id_counter, key);
                 
-                uint64_t initial = 0b11; // 0b11 == unidirectional and server initiated.
                 if (new_stream_id == NULL) {
                         bpf_printk("No unidirectional stream id found\n");
                         bpf_map_update_elem(&connection_unistream_id_counter, key, &initial, BPF_ANY);
                         new_stream_id = &initial;
                 }
+
+                // TODO: this map needs to be cleaned at some point?
+                int unistr_ret = bpf_map_update_elem(&connection_unistream_id_translation, &unistream_key, new_stream_id, BPF_ANY); 
+                // TODO: In case the map update is actually to slow -> maybe use the return value + BPF_NOEXIST to avoid the problem?
+
                 // Do not touch the two least significant bits since they inicate stream type.
                 uint64_t next_stream_id = *new_stream_id + 0b100;
                 bpf_map_update_elem(&connection_unistream_id_counter, key, &next_stream_id, BPF_ANY);
 
-                // TODO: this map needs to be cleaned at some point?
-                bpf_map_update_elem(&connection_unistream_id_translation, &unistream_key, new_stream_id, BPF_ANY);  
-
                 translation = new_stream_id;
-        } else {
-                bpf_printk("Reusing unidirectional stream id %d\n", *translation);
-        }
 
-        bpf_printk("Mapping unistream id %d to %d (%d)\n", stream_id.value, *translation, unistream_origin);
+                // TODO: somehow the video does not play correcty is this print is not there. I assume this is because of the map update
+                // TODO: takes until the next packet is already being processed and this one then accesses old data?
+                bpf_printk("Unidirectional stream id mapping registered from %d to %d (%d %d %d)\n", stream_id.value, *new_stream_id, key->ip_addr, key->port, unistream_origin); 
+
+        } 
 
         // Store new_stream_id in the packet.
         // TODO: for now userspace is expected to always use 8 byte stream ids
@@ -447,8 +448,9 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
         }
         // Set length.
         new_stream_id_bytes[0] |= 0xc0;
+        // TODO: make size 8 a constant in config.
         bpf_skb_store_bytes(skb, stream_id_off, new_stream_id_bytes, 8, 0);
-        bpf_printk("Unidirectional stream id updated from %d to %d\n", stream_id.value, *translation);
+        bpf_printk("Unidirectional stream id updated from %d to %d (%d)\n", stream_id.value, *translation, unistream_origin);
 
         return 0;
 }

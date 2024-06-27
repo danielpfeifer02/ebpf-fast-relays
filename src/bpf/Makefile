@@ -146,7 +146,7 @@ $(BPF_TC_OBJ_TS_EG): ${TC_TS_PATH}/%.o: ${TC_TS_PATH}/%.c
 clean:
 
 	@echo $(CUR_NS)
-
+#	TODO: actually not needed to delete all maps individually, just clear the folder
 	@if [ "$(CUR_NS)" = "relay_ns" ]; then \
 		sudo rm -f $(BPF_TC_PINNED_PATH); \
 		if [ -e "$(BPF_TC_OBJ_ING_SERVER)" ]; then \
@@ -197,6 +197,7 @@ clean:
 			tc filter del dev ${TS_DEV_IN} ingress; \
 			tc qdisc del dev ${TS_DEV_IN} clsact; \
 		fi; \
+		rm -f /sys/fs/bpf/tc/globals/*; \
 	fi
 #	TODO: make a more general way of deleting them independently of the namespace
 	@if [ "$(CUR_NS)" = "server_ns" ]; then \
@@ -207,6 +208,7 @@ clean:
 			tc filter del dev ${TS_DEV_EG} egress; \
 			tc qdisc del dev ${TS_DEV_EG} clsact; \
 		fi; \
+		rm -f /sys/fs/bpf/tc/globals/*; \
 	fi
 
 
