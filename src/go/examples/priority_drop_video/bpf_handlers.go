@@ -276,7 +276,8 @@ func clearBPFMaps() {
 		"connection_pn_translation",
 		"connection_unistream_id_counter",
 		"connection_unistream_id_translation",
-		"client_stream_offset"}
+		"client_stream_offset",
+		"unistream_id_is_retransmission"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {

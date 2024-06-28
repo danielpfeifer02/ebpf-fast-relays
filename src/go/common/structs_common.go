@@ -64,3 +64,14 @@ type pn_ts_struct struct {
 	Valid        uint8
 	Padding      [5]uint8
 }
+
+type unistream_id_retransmission_struct struct {
+	IpAddr   uint32
+	Port     uint16
+	Padding  [2]uint8
+	StreamId uint64
+}
+
+type retransmission_val_struct struct {
+	IsRetransmission uint8
+}

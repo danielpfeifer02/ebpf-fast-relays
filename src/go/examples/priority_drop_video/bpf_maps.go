@@ -21,6 +21,7 @@ var packets_to_register *ebpf.Map = nil
 var index_packets_to_register *ebpf.Map = nil
 var pn_ts_storage *ebpf.Map = nil
 var index_pn_ts_storage *ebpf.Map = nil
+var unistream_id_is_retransmission *ebpf.Map = nil
 
 func loadBPFMaps() {
 	base_dir := "/sys/fs/bpf/tc/globals/"
@@ -40,6 +41,7 @@ func loadBPFMaps() {
 	index_packets_to_register = loadMap(base_dir + "index_packets_to_register")
 	pn_ts_storage = loadMap(base_dir + "pn_ts_storage")
 	index_pn_ts_storage = loadMap(base_dir + "index_pn_ts_storage")
+	unistream_id_is_retransmission = loadMap(base_dir + "unistream_id_is_retransmission")
 }
 
 func loadMap(path string) *ebpf.Map {

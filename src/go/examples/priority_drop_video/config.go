@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"common.com/common"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
@@ -172,6 +173,8 @@ func relayConfig() {
 
 		// This is to get the highest packet number of a connection that was sent
 		packet_setting.ConnectionGetLargestSentPacketNumber = getLargestSentPacketNumber
+
+		packet_setting.MarkStreamIdAsRetransmission = common.MarkStreamIdAsRetransmission
 
 		// TODO: fix in prio_packs repo?
 		packet_setting.SET_ONLY_APP_DATA = true

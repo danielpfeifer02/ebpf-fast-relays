@@ -21,9 +21,9 @@ const (
 	bpf_enabled                = true //!local_usage
 	forwarding_enabled         = true //!bpf_enabled
 	count_errors               = true
-	payload_length             = 210
+	payload_length             = 512
 	USERSPACE_FLAG             = 0b10000000
-	number_of_analysis_packets = 250
+	number_of_analysis_packets = 512
 )
 
 var (
@@ -94,6 +94,8 @@ func setBPFHandlers() {
 
 		// This is to get the highest packet number of a connection that was sent
 		packet_setting.ConnectionGetLargestSentPacketNumber = common.GetLargestSentPacketNumber
+
+		packet_setting.MarkStreamIdAsRetransmission = common.MarkStreamIdAsRetransmission
 
 		// TODO: fix in prio_packs repo?
 		packet_setting.SET_ONLY_APP_DATA = true

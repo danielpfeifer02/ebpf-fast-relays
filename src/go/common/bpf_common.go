@@ -35,7 +35,8 @@ func ClearBPFMaps() {
 		"connection_pn_translation",
 		"connection_unistream_id_counter",
 		"connection_unistream_id_translation",
-		"client_stream_offset"}
+		"client_stream_offset",
+		"unistream_id_is_retransmission"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
@@ -430,4 +431,37 @@ func SetConnectionEstablished(ip net.IP, port uint16) error {
 
 	fmt.Println("Connection established for", ip, ":", port)
 	return nil
+}
+
+func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConnection) {
+
+	// // TODO: the stream_id we get here is the server<->relay stream id
+	// // TODO: we first need to translate it into the correct relay<->client stream id
+	// // TODO NVM we dont
+
+	qconn := conn.(quic.Connection)
+
+	ipaddr, port := GetIPAndPort(qconn, true)
+	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+
+	key := unistream_id_retransmission_struct{
+		IpAddr:   ipaddr_key,
+		Port:     port_key,
+		Padding:  [2]uint8{0, 0},
+		StreamId: stream_id,
+	}
+
+	retrans := &retransmission_val_struct{
+		IsRetransmission: uint8(1),
+	}
+
+	err := Unistream_id_is_retransmission.Update(key, retrans, ebpf.UpdateAny)
+	if err != nil {
+		fmt.Println("Error updating unistream_id_is_retransmission")
+		panic(err)
+	}
+
+	fmt.Println("Marked stream id as retransmission", key.IpAddr, key.Port, key.StreamId)
+
 }

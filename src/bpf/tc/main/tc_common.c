@@ -58,6 +58,9 @@
 // the relay and the forwarding mechanism open streams at the same time.
 // Therefore translate in the relay.
 #define MAX_UNISTREAM_ID_TRANSLATIONS 1<<15 // 32768 // TODO: what size is sufficient?
+// This stores the maximum number of ids stores at the same
+// time to identify them as being part of a retransmission.
+#define MAX_RETRANSMISSION_IDS_STORED 1<<11 // 2048 // TODO: what size is sufficient?
 // The maximum number of frames that are expected to be in a packet.
 // For now this is just an arbitrary number and can be adjusted.
 // Not sure if there is any limit defined in the QUIC standard.
@@ -173,12 +176,18 @@ struct client_pn_map_key_t {
         uint32_t packet_number;
 };
 
-// Struct that represents the key for the map
-// containing the unistream id translations.
-struct client_unistream_id_key_t {
+// This struct servers for the retransmission check of unidirectional stream ids.
+struct client_unistream_id_pair_t {
         struct client_info_key_t key;
         uint64_t unistream_id;
+};
+
+// Struct that represents the key for the map
+// containing the unistream id translations.
+struct client_unistream_id_lookup_key_t {
+        struct client_unistream_id_pair_t key;
         uint8_t unistream_origin;
+        uint8_t padding[7];
 };
 
 // Struct that represents the key for the map
@@ -325,7 +334,7 @@ struct {
 // This is needed to avoid translating the same stream id multiple times.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, struct client_unistream_id_key_t);
+    __type(key, struct client_unistream_id_lookup_key_t);
     __type(value, uint64_t);
     __uint(max_entries, MAX_UNISTREAM_ID_TRANSLATIONS);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
@@ -383,6 +392,18 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } index_pn_ts_storage SEC(".maps");
 
+// This map stores if the unirectional stream id is part of a retransmission 
+// by the relay. This is needed when updating the stream id to make sure that 
+// retransmission do not get a new stream id when they should reuse the old one
+// (they would potentially get a new one since the origin of the stream differs).
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_unistream_id_pair_t);
+    __type(value, uint8_t);
+    __uint(max_entries, MAX_RETRANSMISSION_IDS_STORED);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} unistream_id_is_retransmission SEC(".maps");
+
 
 // ++++++++++++++++++ FUNCTION DEFINITIONS ++++++++++++++++++ //
 
@@ -393,9 +414,39 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
                 return 1;
         }
 
-        struct client_unistream_id_key_t unistream_key = {
+        struct client_unistream_id_pair_t stream_id_key = {
                 .key = *key,
-                .unistream_id = stream_id.value,
+                .unistream_id = stream_id.value
+        };
+
+        // In case the origin is the relay userspace we need to check if it is a retransmission of a packet.
+        // If it is a retransmission we can find out by checking the translation map with the origin set to
+        // the media server. If there is an entry with it we know the media server has snet out on a unidirectional
+        // stream with the same stream id. This does not necessarly mean that the relay is not just coincidentally
+        // at the same stream id counter though. That's why we need to use a different map where the relay sets the 
+        // stream id to be a retransmission explicitly. That way we can rule out accidental reusage of the same stream id.
+        if (unistream_origin == RELAY_ORIGIN) {
+
+                uint8_t *is_retransmission = bpf_map_lookup_elem(&unistream_id_is_retransmission, &stream_id_key);
+                if (is_retransmission != NULL && *is_retransmission == 1) {
+                        bpf_printk("Retransmission detected\n");
+                        unistream_origin = MEDIA_SERVER_ORIGIN;
+                        bpf_map_delete_elem(&unistream_id_is_retransmission, &stream_id.value);
+                } else {
+                        bpf_printk("Nothing detected for %d %d %d\n", key->ip_addr, key->port, stream_id.value);
+                }
+
+
+                // TODO: isn't the stream id already correct in case of a retransmission?
+                // TODO: is the packet registering process working properly regarding stream id (i.e. not, for exmple, storing before adapting stream id)?
+                // TODO: check with caching to make sure that the stream id in the wire.frame matches the one we actually want.
+                // TODO:        StoreServerPacket(...) in cache_common.go (A_MoQ code) is called in connection.go (prio-packs code)
+                // TODO:        and does store the raw short header data the relay gets from the server. 
+                // TODO:        -> the stream_id should be set correctly by just changing the origin.
+        }
+
+        struct client_unistream_id_lookup_key_t unistream_key = {
+                .key = stream_id_key,
                 // TODO: how to handle retranmissions that come from the relay but should be sent with a stream id of the media server?
                 .unistream_origin = unistream_origin
         };
@@ -431,6 +482,7 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
 
                 // TODO: somehow the video does not play correcty is this print is not there. I assume this is because of the map update
                 // TODO: takes until the next packet is already being processed and this one then accesses old data?
+                // TODO: using 5 * "%d" seems to be necessary since for 4 * "%d" it still does not work.
                 bpf_printk("Unidirectional stream id mapping registered from %d to %d (%d %d %d)\n", stream_id.value, *new_stream_id, key->ip_addr, key->port, unistream_origin); 
 
         } 
