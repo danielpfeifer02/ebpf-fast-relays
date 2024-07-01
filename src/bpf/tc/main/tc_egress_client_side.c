@@ -10,6 +10,11 @@ __section("egress")
 int tc_egress(struct __sk_buff *skb)
 {
 
+        if (TURNOFF) {
+                bpf_printk("Dropping because of turn off\n");
+                return TC_ACT_OK;
+        }
+
         // Get data pointers from the buffer.
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;

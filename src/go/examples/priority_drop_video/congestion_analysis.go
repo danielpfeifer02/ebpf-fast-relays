@@ -65,7 +65,7 @@ func register_client(alpha float64, max_hist_size uint64) client_indices {
 	ewma_idx := register_ewma(alpha)
 	max_hist_idx := register_hist(max_hist_size)
 
-	if relay_printing_congestion_analysis {
+	if relay_printing_additional_congestion_analysis {
 		go func() {
 
 			for {

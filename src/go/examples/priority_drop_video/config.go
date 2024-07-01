@@ -49,7 +49,15 @@ const cache_packet_size = 1024
 const relay_printing_rtt = false
 
 // Specify if the relay should print the congestion analysis information.
+// Basci info contains congestion window size and bytes in flight.
 const relay_printing_congestion_analysis = true
+
+// Specity if the relay should print some extra analsis information
+// like EWMA, standard deviation, etc.
+const relay_printing_additional_congestion_analysis = false
+
+// Specify if the relay should print the congestion window data.
+const relay_printing_congestion_window = true
 
 // Specify whether metrics should be saved to a mysql database
 // for visualization in grafana.
@@ -156,7 +164,8 @@ func relayConfig() {
 	if bpf_enabled {
 
 		// Load the BPF maps
-		loadBPFMaps()
+		common.LoadBPFMaps()
+		loadBPFMaps() // TODO: switch to only one setup (the common one)
 
 		InitializeCacheSetup()
 
@@ -175,6 +184,9 @@ func relayConfig() {
 		packet_setting.ConnectionGetLargestSentPacketNumber = getLargestSentPacketNumber
 
 		packet_setting.MarkStreamIdAsRetransmission = common.MarkStreamIdAsRetransmission
+
+		packet_setting.RELAY_CWND_DATA_PRINT = relay_printing_congestion_analysis
+		packet_setting.HandleCongestionMetricUpdate = common.HandleCongestionMetricUpdate
 
 		// TODO: fix in prio_packs repo?
 		packet_setting.SET_ONLY_APP_DATA = true

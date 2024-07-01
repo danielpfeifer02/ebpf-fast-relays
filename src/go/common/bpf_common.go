@@ -435,10 +435,6 @@ func SetConnectionEstablished(ip net.IP, port uint16) error {
 
 func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConnection) {
 
-	// // TODO: the stream_id we get here is the server<->relay stream id
-	// // TODO: we first need to translate it into the correct relay<->client stream id
-	// // TODO NVM we dont
-
 	qconn := conn.(quic.Connection)
 
 	ipaddr, port := GetIPAndPort(qconn, true)
@@ -462,6 +458,59 @@ func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConn
 		panic(err)
 	}
 
-	fmt.Println("Marked stream id as retransmission", key.IpAddr, key.Port, key.StreamId)
+	// fmt.Println("Marked stream id as retransmission", key.IpAddr, key.Port, key.StreamId)
 
+}
+
+var already_started_printing = false // TODO: not the most elegant way to do this
+var last_data *packet_setting.CongestionWindowData = nil
+var last_data_mutex = &sync.Mutex{}
+
+func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn packet_setting.QuicConnection) {
+
+	if conn == nil {
+		return // Could be the case in the beginning before the connection is set everywhere
+	}
+	qconn := conn.(quic.Connection)
+
+	ipaddr, port := GetIPAndPort(qconn, true)
+	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+
+	key := client_key_struct{
+		Ipaddr:  ipaddr_key,
+		Port:    port_key,
+		Padding: [2]uint8{0, 0},
+	}
+
+	last_data_mutex.Lock()
+	last_data = &data
+	last_data_mutex.Unlock()
+	if !already_started_printing && packet_setting.RELAY_CWND_DATA_PRINT {
+		go startPrintCongestionWindowDataThread()
+		already_started_printing = true
+	}
+
+	key = key // just to avoid unused error
+	// TODO: actually set congestion window stuff in bpf map
+
+}
+
+func startPrintCongestionWindowDataThread() {
+	for {
+		last_data_mutex.Lock()
+		fmt.Println("+-----------------------------------------------+")
+		fmt.Println("|\tCongestion window data\t\t\t|")
+		fmt.Println("+-----------------------------------------------+")
+		fmt.Println("|\tMinRTT:\t\t\t", last_data.MinRTT, "\t|")
+		fmt.Println("|\tSmoothedRTT:\t\t", last_data.SmoothedRTT, "\t|")
+		fmt.Println("|\tLatestRTT:\t\t", last_data.LatestRTT, "\t|")
+		fmt.Println("|\tRTTVariance:\t\t", last_data.RTTVariance, "\t\t|")
+		fmt.Println("|\tCongestionWindow:\t", last_data.CongestionWindow, "\t\t|")
+		fmt.Println("|\tBytesInFlight:\t\t", last_data.BytesInFlight, "\t|")
+		fmt.Println("|\tPacketsInFlight:\t", last_data.PacketsInFlight, "\t\t|")
+		fmt.Println("+-----------------------------------------------+")
+		last_data_mutex.Unlock()
+		time.Sleep(1 * time.Second)
+	}
 }
