@@ -1,5 +1,3 @@
-# Create a simple python script that creates plots from data it reads from output/results.txt
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -91,44 +89,5 @@ plt.tight_layout()
 plt.subplots_adjust(top=0.9)
 plt.show()
 
-
-# # Create plots (show all of them at the same time)
-# fig, axs = plt.subplots(2)
-# fig.suptitle('Delays between send and receive timestamps for each type of message')
-# # Draw both arrays in the same histogram (one red, one blue)
-# axs[0].hist(histogram_1, bins=100, color='red')
-# axs[0].hist(histogram_2, bins=100, color='blue')
-# axs[0].set_title('Type ' + type_1)
-# axs[0].set_xlabel('Delay (ns)')
-# axs[0].set_ylabel('Frequency')
-
-
-# axs[1].hist(histogram_difference, bins=100)
-# axs[1].set_title('Difference between delays')
-# axs[1].set_xlabel('Difference (ns)')
-
-# # Add more spacing between plots
-# plt.tight_layout()
-# plt.subplots_adjust(top=0.9)
-
-
-# plt.show()
-
-
-# plt.hist(histogram_1, bins=100)
-# plt.title('Delay between send and receive timestamps for type ', type_1)
-# plt.xlabel('Delay (ms)')
-# plt.ylabel('Frequency')
-# plt.show()
-
-# plt.hist(histogram_2, bins=100)
-# plt.title('Delay between send and receive timestamps for type ', type_2)
-# plt.xlabel('Delay (ms)')
-# plt.ylabel('Frequency')
-# plt.show()
-
-# plt.hist(histogram_difference, bins=100)
-# plt.title('Difference in delays between message types')
-# plt.xlabel('Difference (ms)')
-# plt.ylabel('Frequency')
-# plt.show()
+# Save the plot
+# fig.savefig('output/plot.png', dpi=300)
