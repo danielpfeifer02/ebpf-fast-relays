@@ -88,7 +88,7 @@ while true; do
         echo "pid $go_pid uses $cpu_info% of cpu at ($ts_ns)."
         echo "$go_pid,$cpu_info,$ts_ns" >> $output_file
     done
-    sleep 0.1
+    sleep 1
     
     # Get the PID of the processes in the namespace
     pids=$(sudo ip netns exec "$CPU_NAMESPACE" ip netns pids "$CPU_NAMESPACE")
