@@ -3,6 +3,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import enum
+import os
 from scipy.interpolate import make_interp_spline, BSpline
 
 class PlotType(enum.Enum):
@@ -10,19 +11,27 @@ class PlotType(enum.Enum):
     BAR = 2
 
 ns = ["server_ns", "relay_ns", "client_ns"]
-types = ["kernel", "user"]
-file_prefix = "output/cpu_usage_pids_"
+types = ["user", "kernel"]
+file_prefix = "output/csvs/cpu_usage_pids_"
 
-use_splines_for_smoothing = True
-plot_separate_pids = True
+use_splines_for_smoothing = False
+plot_separate_pids = False
 cut_off_early_data = False
 early_data_cut_off_threshold = 10
 plot_type = PlotType.LINE
+show_decreasing_pids = True
+cut_to_same_length = False
+
+
+# ! Run the example video until the dragon is put into the dungeon and the video cuts to the next scene
 
 def pid_cpu_decreases(pid, df):
 
+    if show_decreasing_pids:
+        return False
+
     cpu_arr = df[df['pid'] == pid]['cpu'].to_numpy()
-    earliest_cpu = cpu_arr[0]
+    earliest_cpu = cpu_arr[len(cpu_arr) // 10]
     last_cpu = cpu_arr[-1]
     return last_cpu < earliest_cpu
 
@@ -39,7 +48,7 @@ def pid_cpu_decreases(pid, df):
     #         counter = 0
     # return False
 
-def create_plot_of_file(filename, kern_or_user):
+def create_plot_of_file(filename, kern_or_user, ns):
     # Read csv file
     df = pd.read_csv(filename, dtype={'pid': int, 'ts': int, 'cpu': float})
 
@@ -109,7 +118,7 @@ def create_plot_of_file(filename, kern_or_user):
             smoothed = spl(xnew)
             plt.plot(np.linspace(accumulated_data['ts'].min(), accumulated_data['ts'].max(), 300), smoothed, label="Total CPU Usage (" + kern_or_user + ")")
         else:
-            plt.plot(accumulated_data['ts'], accumulated_data['cpu'], label="Accumulated Data")
+            plt.plot(accumulated_data['ts'], accumulated_data['cpu'], label=f"Total CPU Usage {ns} in {kern_or_user} mode")
     elif plot_type == PlotType.BAR:
         # Create a bar plot
         # sns.barplot(x='ts', y='cpu', data=accumulated_data, color='blue', alpha=0.5)
@@ -134,12 +143,36 @@ def create_plot_of_file(filename, kern_or_user):
         if i % label_lim != 0:
             label.set_visible(False)
 
-for type in types:
-    create_plot_of_file(file_prefix + ns[0] + "-" + type + ".csv", type) # TODO: only for now since it's the only file that exists
+# for type in types:
+#     create_plot_of_file(file_prefix + ns[0] + "-" + type + ".csv", type) # TODO: only for now since it's the only file that exists
+
+if cut_to_same_length:
+    min_len = 1 << 63 - 1
+    for type in types:
+        for namespace in ns:
+            path = file_prefix + namespace + "-" + type + ".csv"
+            df = pd.read_csv(path, dtype={'pid': int, 'ts': int, 'cpu': float})
+            min_len = min(min_len, len(df))
+    for type in types:
+        for namespace in ns:
+            path = file_prefix + namespace + "-" + type + ".csv"
+            df = pd.read_csv(path, dtype={'pid': int, 'ts': int, 'cpu': float})
+            df = df[:min_len]
+            new_path = path.replace(".csv", "_cut.csv")
+            df.to_csv(new_path, index=False)
+            create_plot_of_file(new_path, type, namespace)
+            os.remove(new_path)
+else:
+    for type in types:
+        for namespace in ns:
+            create_plot_of_file(file_prefix + namespace + "-" + type + ".csv", type, namespace)
 
 plt.xlabel('Timestamp')
 plt.ylabel('CPU Usage')
 plt.title('CPU Usage over Time')
 plt.legend()
+
+# Set Legend location with margins from top and left
+plt.legend(loc='upper left', bbox_to_anchor=(0.35, 0.85))
 
 plt.show()

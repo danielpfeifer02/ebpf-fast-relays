@@ -2,6 +2,9 @@ package main
 
 import (
 	"log"
+	"os"
+	"runtime/pprof"
+	"time"
 
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
@@ -37,6 +40,20 @@ func video_main(user string) {
 		}
 		return
 	} else if user == "relay" {
+
+		if log_cpu_performance {
+			f, err := os.Create("build/prof/cpu.prof")
+			if err != nil {
+				panic(err)
+			}
+			pprof.StartCPUProfile(f)
+			go func() {
+				time.Sleep(30 * time.Second)
+				pprof.StopCPUProfile()
+				panic("CPU profile stopped")
+			}()
+		}
+
 		// Not ideal here, but if this function is called in the nested
 		// structure of the relay() function it gets non-obvious to
 		// verify that this is always called in the main goroutine.

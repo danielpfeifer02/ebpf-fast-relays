@@ -63,6 +63,9 @@ const relay_printing_congestion_window = true
 // for visualization in grafana.
 const grafana_usage = true
 
+// Specify if the relay should log the cpu usage using pprof.
+const log_cpu_performance = true
+
 // Specify wether the default test video should be played by the server
 // or if an actual video file should be played.
 const test_video = false
