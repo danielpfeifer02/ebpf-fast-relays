@@ -24,7 +24,7 @@ var (
 
 var lock = &sync.Mutex{}
 
-func client() {
+func client_latency_diff() {
 
 	tlsConf := generatePATLSConfig()
 	quicConf := generatePAQuicConfig()
@@ -55,67 +55,68 @@ func client() {
 
 			for {
 				datagram, err := conn.ReceiveDatagram(ctx)
-			if err != nil {
-				fmt.Println("Error receiving datagram from server")
-				panic(err)
-			}
+				if err != nil {
+					fmt.Println("Error receiving datagram from server")
+					panic(err)
+				}
 				if strings.Contains(string(datagram), "END") {
-			fmt.Println("Received END datagram from server")
+					fmt.Println("Received END datagram from server")
 					break
 				} else {
 					fmt.Println("Received unexpected datagram from server", string(datagram))
 				}
 			}
 
-			for i, sent_recv_list := range times {
-				if len(sent_recv_list) != 2 {
-					if count_errors {
-						fmt.Println("expected 2 timestamps, got", len(sent_recv_list), "for index", i, "-", ctr, "th time this is happening")
-						ctr++
-						if len(sent_recv_list) == 1 {
-							if sent_recv_list[0].through_userspace {
-								received_user++
-							} else {
-								received_kern++
+			if analyse_diff_data {
+				for i, sent_recv_list := range times {
+					if len(sent_recv_list) != 2 {
+						if count_errors {
+							fmt.Println("expected 2 timestamps, got", len(sent_recv_list), "for index", i, "-", ctr, "th time this is happening")
+							ctr++
+							if len(sent_recv_list) == 1 {
+								if sent_recv_list[0].through_userspace {
+									received_user++
+								} else {
+									received_kern++
+								}
 							}
+							continue
 						}
-						continue
+						// TODO: why does this happen? Why are some packets lost even with loss 0%?
+						panic(fmt.Errorf("expected 2 timestamps, got %d for index %d", len(sent_recv_list), i))
 					}
-					// TODO: why does this happen? Why are some packets lost even with loss 0%?
-					panic(fmt.Errorf("expected 2 timestamps, got %d for index %d", len(sent_recv_list), i))
-				}
-				sent_ts_1 := sent_recv_list[0].sent_ts
-				recv_ts_1 := sent_recv_list[0].recv_ts
-				latency_1 := recv_ts_1 - sent_ts_1
-				l1_type := "Userspace"
-				if !sent_recv_list[0].through_userspace {
-					l1_type = "Kernel"
-				}
+					sent_ts_1 := sent_recv_list[0].sent_ts
+					recv_ts_1 := sent_recv_list[0].recv_ts
+					latency_1 := recv_ts_1 - sent_ts_1
+					l1_type := "Userspace"
+					if !sent_recv_list[0].through_userspace {
+						l1_type = "Kernel"
+					}
 
-				sent_ts_2 := sent_recv_list[1].sent_ts
-				recv_ts_2 := sent_recv_list[1].recv_ts
-				latency_2 := recv_ts_2 - sent_ts_2
-				l2_type := "Userspace"
-				if !sent_recv_list[1].through_userspace {
-					l2_type = "Kernel"
-				}
+					sent_ts_2 := sent_recv_list[1].sent_ts
+					recv_ts_2 := sent_recv_list[1].recv_ts
+					latency_2 := recv_ts_2 - sent_ts_2
+					l2_type := "Userspace"
+					if !sent_recv_list[1].through_userspace {
+						l2_type = "Kernel"
+					}
 
-				fmt.Println(l1_type, "Latency 1:", time.Unix(0, int64(latency_1)).Sub(time.Unix(0, 0)))
-				fmt.Println(l2_type, "Latency 2:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, 0)))
-				fmt.Println("Latency Difference:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, int64(latency_1))))
-				fmt.Println("Raw Nanosecond Difference:", latency_2-latency_1)
-				fmt.Println()
+					fmt.Println(l1_type, "Latency 1:", time.Unix(0, int64(latency_1)).Sub(time.Unix(0, 0)))
+					fmt.Println(l2_type, "Latency 2:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, 0)))
+					fmt.Println("Latency Difference:", time.Unix(0, int64(latency_2)).Sub(time.Unix(0, int64(latency_1))))
+					fmt.Println("Raw Nanosecond Difference:", latency_2-latency_1)
+					fmt.Println()
 
-				_, err := f.WriteString(fmt.Sprintf("%d %d %d %s %d %d %s %d\n", i, sent_ts_1, recv_ts_1, l1_type, sent_ts_2, recv_ts_2, l2_type, latency_2-latency_1))
-				if err != nil {
-					panic(err)
+					_, err := f.WriteString(fmt.Sprintf("%d %d %d %s %d %d %s %d\n", i, sent_ts_1, recv_ts_1, l1_type, sent_ts_2, recv_ts_2, l2_type, latency_2-latency_1))
+					if err != nil {
+						panic(err)
+					}
 				}
 
+				fmt.Println("Got", len(times), "out of", number_of_analysis_packets, "packets and", ctr, "of them only partially (", received_kern, "received by kernel and", received_user, "received by userspace )")
 			}
 
-			fmt.Println("Got", len(times), "out of", number_of_analysis_packets, "packets and", ctr, "of them only partially (", received_kern, "received by kernel and", received_user, "received by userspace )")
-
-			time.Sleep(1 * time.Second)
+			<-time.After(1 * time.Second)
 			end_chan <- struct{}{}
 			os.Exit(0)
 		}(end_chan)
@@ -129,45 +130,47 @@ func client() {
 func client_stream_handling(relay_conn quic.Connection, ctx context.Context) {
 	ts_buffer := make([]byte, payload_length)
 
-			str, err := relay_conn.AcceptUniStream(ctx)
-			if err != nil {
-				panic(err)
-			}
+	str, err := relay_conn.AcceptUniStream(ctx)
+	if err != nil {
+		panic(err)
+	}
 
 	// fmt.Printf("Waiting for Timestamp on stream with id %d...\n", str.StreamID())
-			n, err := str.Read(ts_buffer)
-			if err != nil {
-				panic(err)
-			}
+	n, err := str.Read(ts_buffer)
+	if err != nil {
+		panic(err)
+	}
 
-			// TODO: if packet is split this panic seems to happen
-			if n != len(ts_buffer) {
-				panic(fmt.Errorf("got %d bytes, expected %d", n, len(ts_buffer)))
-			}
+	// TODO: if packet is split this panic seems to happen
+	if n != len(ts_buffer) {
+		panic(fmt.Errorf("got %d bytes, expected %d", n, len(ts_buffer)))
+	}
 
-			// now := time.Now().UnixNano()
+	// now := time.Now().UnixNano()
 
-			data := ts_buffer[:n]
-			flag := data[0]
-			sent_index := binary.LittleEndian.Uint32(data[1:5])
-			sent_ts := binary.LittleEndian.Uint64(data[5:13])
-			recv_ts := binary.LittleEndian.Uint64(data[13:21])
+	if analyse_diff_data {
 
-	// fmt.Printf("Received Timestamp for index %d from server (%x)\n", sent_index, flag)
+		data := ts_buffer[:n]
+		flag := data[0]
+		sent_index := binary.LittleEndian.Uint32(data[1:5])
+		sent_ts := binary.LittleEndian.Uint64(data[5:13])
+		recv_ts := binary.LittleEndian.Uint64(data[13:21])
 
-			lock.Lock()
-			if _, ok := times[sent_index]; !ok {
-				times[sent_index] = make([]sent_recv, 0)
-			}
-	through_userspace := (flag & USERSPACE_FLAG) != 0
-	// fmt.Println("Flags:", flag)
-			// srv := sent_recv{sent_ts, uint64(now), through_userspace}
-			srv := sent_recv{sent_ts, recv_ts, through_userspace}
-			times[sent_index] = append(times[sent_index], srv)
-			lock.Unlock()
+		// fmt.Printf("Received Timestamp for index %d from server (%x)\n", sent_index, flag)
+		lock.Lock()
+		if _, ok := times[sent_index]; !ok {
+			times[sent_index] = make([]sent_recv, 0)
+		}
+		through_userspace := (flag & USERSPACE_FLAG) != 0
+		// fmt.Println("Flags:", flag)
+		// srv := sent_recv{sent_ts, uint64(now), through_userspace}
+		srv := sent_recv{sent_ts, recv_ts, through_userspace}
+		times[sent_index] = append(times[sent_index], srv)
+		lock.Unlock()
+	}
 
-			// latency := now - int64(sent_ts)
-			// fmt.Println("Latency:", latency)
+	// latency := now - int64(sent_ts)
+	// fmt.Println("Latency:", latency)
 }
 
 func client_datagram_handling(relay_conn quic.Connection, ctx context.Context) {

@@ -9,7 +9,7 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 )
 
-func server() {
+func server_latency_diff() {
 
 	tlsConf := generatePATLSConfig()
 	quicConf := generatePAQuicConfig()
@@ -36,12 +36,15 @@ func server_stream_handling(conn quic.Connection, ctx context.Context) {
 	// This one will be replaced by the actual timestamp in the bpf program
 	ts_buffer := make([]byte, payload_length)
 
+	for i := 0; i < payload_length; i++ {
+		ts_buffer[i] = byte(0x01)
+	} // for easier debugging
+
 	for i := 0; i < number_of_analysis_packets; i++ {
 		str, err := conn.OpenUniStream() //WithPriority(priority_setting.HighPriority)
 		if err != nil {
 			panic(err)
 		}
-		defer str.Close()
 
 		flags := uint8(0)
 		binary.LittleEndian.PutUint32(ts_buffer, uint32(flags))
@@ -61,13 +64,17 @@ func server_stream_handling(conn quic.Connection, ctx context.Context) {
 		}
 
 		// fmt.Println("Sent timestamp to client")
-		time.Sleep(1 * time.Millisecond)
+		// ! Needed since we essentially duplicate each packet at the relay and forward it twice
+		// ! This can cause the client to drop packets as a dos prevention mechanism for now (since
+		// ! the rate limiting is not yet implemented at the relay)
+		<-time.After(1 * time.Millisecond)
+		defer str.Close()
 	}
 
-	time.Sleep(1 * time.Second)
+	<-time.After(1 * time.Second)
 	conn.SendDatagram([]byte("END"))
 	fmt.Println("Sent END datagram to client")
-	time.Sleep(100 * time.Millisecond)
+	<-time.After(100 * time.Millisecond)
 }
 
 func server_datagram_handling(conn quic.Connection) {

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 )
 
 const addr = "localhost:4242"
@@ -243,5 +244,7 @@ func generateTLSConfig() *tls.Config {
 }
 
 func generateQUICConfig() *quic.Config {
-	return &quic.Config{}
+	return &quic.Config{
+		Tracer: qlog.DefaultTracer,
+	}
 }

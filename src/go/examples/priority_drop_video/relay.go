@@ -11,6 +11,7 @@ import (
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 )
 
 func relay() error {
@@ -36,6 +37,7 @@ func relay() error {
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"moq-00"},
 		}, &quic.Config{
+			Tracer:                     qlog.DefaultTracer,
 			EnableDatagrams:            true,
 			MaxIdleTimeout:             5 * time.Minute,
 			MaxIncomingStreams:         1 << 60,
@@ -178,7 +180,7 @@ func relay() error {
 			fmt.Println("Max Ack Delay:", stats.MaxAckDelay.Milliseconds())
 			fmt.Print("\n-----------------------------------------\n")
 
-			time.Sleep(1 * time.Second)
+			<-time.After(1 * time.Second)
 		}
 	}(conn)
 

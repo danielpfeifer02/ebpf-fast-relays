@@ -8,6 +8,7 @@ import (
 
 	"common.com/common"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 )
 
 func relay() {
@@ -84,9 +85,9 @@ func relay() {
 			var dtg []byte
 			for {
 				dtg, err = server_conn.ReceiveDatagram(ctx)
-			if err != nil {
-				fmt.Println("Error receiving datagram from server")
-				panic(err)
+				if err != nil {
+					fmt.Println("Error receiving datagram from server")
+					panic(err)
 				}
 				if string(dtg) == "END" {
 					fmt.Println("Received END datagram from server")
@@ -99,9 +100,9 @@ func relay() {
 			for i := 0; i < 10; i++ {
 				client_conn.SendDatagram([]byte(fmt.Sprintf("END%d", i)))
 			}
-			time.Sleep(1 * time.Second)
+			<-time.After(1 * time.Second)
 			os.Exit(0)
-			time.Sleep(100 * time.Millisecond)
+			<-time.After(100 * time.Millisecond)
 			end_chan <- struct{}{}
 		}()
 
@@ -144,7 +145,12 @@ func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context
 					panic("First byte is not 0")
 				}
 				ts_buffer[0] = ts_buffer[0] | USERSPACE_FLAG
-				_, err = client_str.Write(ts_buffer[:n])
+
+				// TODO: just for debugging
+				new_buffer := make([]byte, n+1)
+				copy(new_buffer[0:], ts_buffer[:n])
+				new_buffer[n] = byte(0x01)
+				_, err = client_str.Write(new_buffer)
 				if err != nil {
 					fmt.Println("Error writing to client")
 					panic(err)

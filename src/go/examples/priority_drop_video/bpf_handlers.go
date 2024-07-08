@@ -91,7 +91,8 @@ func retireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 			if len(connection_ids[key]) > 0 {
 				break
 			}
-			time.Sleep(10 * time.Millisecond)
+			// <-time.After(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) // TODO: Sleep or After?
 		}
 
 		if len(connection_ids[key]) == 0 {
@@ -295,7 +296,13 @@ func clearBPFMaps() {
 // BPF program.
 func registerBPFPacket(conn quic.Connection) {
 
+	if !bpf_enabled {
+		fmt.Println("BPF not enabled. Registering packets not sensical.")
+		return
+	}
+
 	go func() {
+		// return
 
 		ipaddr, port := getIPAndPort(conn, true)
 		key := client_key_struct{
@@ -308,11 +315,13 @@ func registerBPFPacket(conn quic.Connection) {
 		for {
 
 			err := connection_current_pn.Lookup(key, current_pn)
-			if err == nil {
+			if err != nil {
+				panic(err)
 				break
 			}
 			conn.SetHighestSent(int64(current_pn.Pn) - 1)
-
+			time.Sleep(100 * time.Millisecond) // TODO: Sleep or After?
+			// fmt.Println("DEBUG FLAG")
 		}
 	}()
 
@@ -325,6 +334,9 @@ func registerBPFPacket(conn quic.Connection) {
 	fmt.Println("Start registering packets...")
 
 	for {
+
+		time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
+		// TODO: instead of sleep, use (if there is) a cheap way to find out if map changed
 
 		// Check if there are packets to register
 		err := packets_to_register.Lookup(current_index, val)
@@ -340,7 +352,9 @@ func registerBPFPacket(conn quic.Connection) {
 					if server_pack.Valid {
 						break
 					}
-					time.Sleep(1 * time.Millisecond) // TODO: optimal?
+					<-time.After(1 * time.Millisecond) // TODO: optimal?
+					// time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
+					// fmt.Println("DEBUG FLAG")
 				}
 				if len(server_pack.RawData) == 0 {
 					panic("No server packet found")
@@ -376,12 +390,18 @@ func registerBPFPacket(conn quic.Connection) {
 			}(*val, current_index, packets_to_register) // this pass by copy is necessary since the goroutine might be executed after the next iteration
 
 			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
+		} else {
+			fmt.Println("DEBUG TAG")
 		}
-
 	}
 }
 
 func setConnectionEstablished(ip net.IP, port uint16) error {
+
+	if !bpf_enabled {
+		fmt.Println("BPF not enabled. Not setting connection established.")
+		return nil
+	}
 
 	key := client_key_struct{
 		Ipaddr:  swapEndianness32(ipToInt32(ip)),
@@ -478,7 +498,7 @@ func readPnTsSent() {
 			}
 		} else {
 			// fmt.Println(err)
-			time.Sleep(10 * time.Millisecond)
+			<-time.After(10 * time.Millisecond)
 		}
 	}
 }

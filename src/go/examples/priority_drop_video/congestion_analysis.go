@@ -91,7 +91,7 @@ func register_client(alpha float64, max_hist_size uint64) client_indices {
 				}
 
 				fmt.Println("------------------------------------")
-				time.Sleep(2 * time.Second)
+				<-time.After(2 * time.Second)
 			}
 
 		}()
@@ -132,7 +132,7 @@ func register_client(alpha float64, max_hist_size uint64) client_indices {
 					tables.std_dev_chan <- basic_table_entry{Timestamp: ts, Value: std_dev}
 				}
 
-				time.Sleep(99 * time.Millisecond)
+				<-time.After(99 * time.Millisecond)
 
 			}
 

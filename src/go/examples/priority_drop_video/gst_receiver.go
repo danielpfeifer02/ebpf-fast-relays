@@ -11,6 +11,7 @@ import (
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
 )
@@ -29,6 +30,7 @@ func newReceiver(ctx context.Context, addr string) (*receiver, error) {
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"moq-00"},
 		}, &quic.Config{
+			Tracer:                     qlog.DefaultTracer,
 			EnableDatagrams:            true,
 			MaxIdleTimeout:             5 * time.Minute,
 			MaxIncomingStreams:         1 << 60,

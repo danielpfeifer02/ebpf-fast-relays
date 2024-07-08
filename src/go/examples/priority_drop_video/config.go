@@ -65,6 +65,7 @@ const grafana_usage = true
 
 // Specify if the relay should log the cpu usage using pprof.
 const log_cpu_performance = true
+const cpu_log_time = 60 * time.Second
 
 // Specify wether the default test video should be played by the server
 // or if an actual video file should be played.

@@ -48,7 +48,7 @@ func video_main(user string) {
 			}
 			pprof.StartCPUProfile(f)
 			go func() {
-				time.Sleep(30 * time.Second)
+				time.Sleep(cpu_log_time)
 				pprof.StopCPUProfile()
 				panic("CPU profile stopped")
 			}()

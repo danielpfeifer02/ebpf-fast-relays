@@ -60,7 +60,7 @@ func swapEndianness32(val uint32) uint32 {
 }
 
 func debugPrint(p ...interface{}) {
-	if true {
+	if false {
 		fmt.Println(p...)
 		fmt.Println("Not really debugprint")
 	}

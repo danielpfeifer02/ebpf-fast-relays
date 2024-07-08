@@ -117,8 +117,8 @@ def create_plot_of_file(filename, kern_or_user, ns):
             spl = make_interp_spline(accumulated_data['ts'], accumulated_data['cpu'], k=3)
             smoothed = spl(xnew)
             plt.plot(np.linspace(accumulated_data['ts'].min(), accumulated_data['ts'].max(), 300), smoothed, label="Total CPU Usage (" + kern_or_user + ")")
-        else:
-            plt.plot(accumulated_data['ts'], accumulated_data['cpu'], label=f"Total CPU Usage {ns} in {kern_or_user} mode")
+        elif ns == "relay_ns":
+            plt.plot(accumulated_data['ts'], accumulated_data['cpu'], label=f"{ns} ({kern_or_user})")
     elif plot_type == PlotType.BAR:
         # Create a bar plot
         # sns.barplot(x='ts', y='cpu', data=accumulated_data, color='blue', alpha=0.5)
@@ -173,6 +173,6 @@ plt.title('CPU Usage over Time')
 plt.legend()
 
 # Set Legend location with margins from top and left
-plt.legend(loc='upper left', bbox_to_anchor=(0.35, 0.85))
+# plt.legend(loc='upper left', bbox_to_anchor=(0.35, 0.85))
 
 plt.show()

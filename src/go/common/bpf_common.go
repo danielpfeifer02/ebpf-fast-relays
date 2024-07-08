@@ -129,7 +129,8 @@ func RetireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 			if len(connection_ids[key]) > 0 {
 				break
 			}
-			time.Sleep(10 * time.Millisecond)
+			// <-time.After(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) // TODO: Sleep or After?
 		}
 
 		if len(connection_ids[key]) == 0 {
@@ -194,7 +195,7 @@ func SetBPFMapConnectionID(qconn quic.Connection, v []byte) {
 		return
 	}
 
-	fmt.Println("ipaddr", ipaddr, "port", port)
+	debugPrint("ipaddr", ipaddr, "port", port)
 
 	err := Client_id.Lookup(key, id)
 	if err != nil {
@@ -370,7 +371,8 @@ func RegisterBPFPacket(conn quic.Connection) {
 					if server_pack.Valid {
 						break
 					}
-					time.Sleep(1 * time.Millisecond) // TODO: optimal?
+					// <-time.After(1 * time.Millisecond) // TODO: optimal?
+					time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
 				}
 				if len(server_pack.RawData) == 0 {
 					panic("No server packet found")
@@ -380,6 +382,9 @@ func RegisterBPFPacket(conn quic.Connection) {
 				// 	fmt.Println(server_pack.Length, val.Length)
 				// 	panic("Lengths do not match")
 				// }
+
+				// diff := uint64(time.Now().UnixNano()) - val.SentTime
+				// fmt.Println("Diff:", diff, "Val.SentTime:", val.SentTime)
 
 				packet := packet_setting.PacketRegisterContainerBPF{
 					PacketNumber: int64(val.PacketNumber),
@@ -511,6 +516,6 @@ func startPrintCongestionWindowDataThread() {
 		fmt.Println("|\tPacketsInFlight:\t", last_data.PacketsInFlight, "\t\t|")
 		fmt.Println("+-----------------------------------------------+")
 		last_data_mutex.Unlock()
-		time.Sleep(1 * time.Second)
+		<-time.After(1 * time.Second)
 	}
 }

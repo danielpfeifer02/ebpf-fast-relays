@@ -60,7 +60,7 @@
 #define MAX_UNISTREAM_ID_TRANSLATIONS 1<<15 // 32768 // TODO: what size is sufficient?
 // This stores the maximum number of ids stores at the same
 // time to identify them as being part of a retransmission.
-#define MAX_RETRANSMISSION_IDS_STORED 1<<11 // 2048 // TODO: what size is sufficient?
+#define MAX_RETRANSMISSION_IDS_STORED 1<<15 // 32768 // TODO: what size is sufficient? (why are the entries not properly deleted?)
 // The maximum number of frames that are expected to be in a packet.
 // For now this is just an arbitrary number and can be adjusted.
 // Not sure if there is any limit defined in the QUIC standard.
@@ -409,6 +409,8 @@ struct {
 
 // Update the stream id of a packet.
 __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key, uint8_t unistream_origin) {
+        
+        // return 0;
         if (skb==NULL || key==NULL) {
                 bpf_printk("Invalid arguments for update_stream_id\n");
                 return 1;
@@ -431,7 +433,7 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
                 if (is_retransmission != NULL && *is_retransmission == 1) {
                         bpf_printk("Retransmission detected\n");
                         unistream_origin = MEDIA_SERVER_ORIGIN;
-                        bpf_map_delete_elem(&unistream_id_is_retransmission, &stream_id.value);
+                        bpf_map_delete_elem(&unistream_id_is_retransmission, &stream_id.value); // TODO: seems to not work?
                 } else {
                         bpf_printk("Nothing detected for %d %d %d\n", key->ip_addr, key->port, stream_id.value);
                 }
