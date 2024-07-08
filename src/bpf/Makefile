@@ -169,6 +169,7 @@ clean:
 			rm -f /sys/fs/bpf/tc/globals/pn_ts_storage; \
 			rm -f /sys/fs/bpf/tc/globals/index_pn_ts_storage; \
 			rm -f /sys/fs/bpf/tc/globals/unistream_id_is_retransmission; \
+			rm -f /sys/fs/bpf/tc/globals/packet_events; \
 			rm -f /sys/fs/bpf/tc/globals/*; \
 			tc filter del dev ${DEV_EG} egress; \
 			tc filter del dev ${DEV_IN} ingress; \

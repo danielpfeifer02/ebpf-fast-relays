@@ -404,12 +404,35 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } unistream_id_is_retransmission SEC(".maps");
 
+// This is used to signal events (mainly arrival of a new packet to register) to 
+// the userspace program.
+struct {
+__uint(type, BPF_MAP_TYPE_RINGBUF);
+__uint(max_entries, 4096);
+__uint(pinning, LIBBPF_PIN_BY_NAME);
+} packet_events SEC(".maps");
+// const char* packet_events_pin_path = "/sys/fs/bpf/tc/packet_events";
+
 
 // ++++++++++++++++++ FUNCTION DEFINITIONS ++++++++++++++++++ //
 
+
+// Storing a packet to register in the ring buffer which allows for more efficient 
+// communication with the userspace program.
+__attribute__((always_inline)) int32_t store_packet_to_register_rb(struct register_packet_t packet) {
+
+        // TODO: how to signal to packet_events 
+        struct register_packet_t *data = bpf_ringbuf_reserve(&packet_events, sizeof(struct register_packet_t), 0); // TODO: check flags for waking up / not waking up
+        if (!data)
+                return 0;
+        *data = packet;
+        bpf_ringbuf_submit(data, 0); // TODO: check correct flags for wake up 8https://stackoverflow.com/questions/74092376/regarding-the-ebpf-question-bpf-ringbuf-submit-is-not-in-effect)
+
+}
+
 // Update the stream id of a packet.
 __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key, uint8_t unistream_origin) {
-        
+
         // return 0;
         if (skb==NULL || key==NULL) {
                 bpf_printk("Invalid arguments for update_stream_id\n");
@@ -539,6 +562,10 @@ __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, u
 // This function is used to store a packet that has to be registered
 // by the userspace program.
 __attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) { // TODO: need to consider ip and port to support multiple clients
+
+        // TODO: just for testing
+        store_packet_to_register_rb(packet);
+        return 0;
 
         uint32_t zero = 0;
         uint32_t *index = bpf_map_lookup_elem(&index_packets_to_register, &zero);

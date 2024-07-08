@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 )
@@ -333,13 +335,52 @@ func registerBPFPacket(conn quic.Connection) {
 
 	fmt.Println("Start registering packets...")
 
+	perfMap, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packet_events", nil)
+	if err != nil {
+		fmt.Println("Error loading perf map")
+		panic(err)
+	}
+	pack_to_reg_rb_reader, err := ringbuf.NewReader(perfMap)
+	if err != nil {
+		fmt.Println("Error creating ringbuffer reader")
+		panic(err)
+	}
+
+	// TODO: remove before final version
+	use_lookup := false // TODO: for easy performance comparison
+	var record *ringbuf.Record = &ringbuf.Record{}
+
 	for {
 
-		time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
-		// TODO: instead of sleep, use (if there is) a cheap way to find out if map changed
+		// TODO: add same changes to common and other Lookup examples
+		if !use_lookup {
+			// TODO: instead of sleep, use (if there is) a cheap way to find out if map changed
+			err := pack_to_reg_rb_reader.ReadInto(record) // TODO: ReadInto to reuse memory?
+			// err := error(nil)
+			if err != nil {
+				fmt.Println("Error reading from ringbuffer")
+				panic(err)
+			}
 
-		// Check if there are packets to register
-		err := packets_to_register.Lookup(current_index, val)
+			if len(record.RawSample) < 29 {
+				panic("Record too short")
+			}
+			fmt.Println("Record:", len(record.RawSample))
+			val = &packet_register_struct{
+				PacketNumber: binary.LittleEndian.Uint64(record.RawSample[0:8]),
+				SentTime:     binary.LittleEndian.Uint64(record.RawSample[8:16]),
+				Length:       binary.LittleEndian.Uint64(record.RawSample[16:24]),
+				ServerPN:     binary.LittleEndian.Uint32(record.RawSample[24:28]),
+				Valid:        record.RawSample[28],
+				Padding:      [3]uint8{0, 0, 0},
+			}
+
+		} else {
+			// time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
+			// Check if there are packets to register
+			err = packets_to_register.Lookup(current_index, val)
+		}
+
 		if err == nil && val.Valid == 1 { // TODO: why not valid?
 
 			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
