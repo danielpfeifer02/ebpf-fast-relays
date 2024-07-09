@@ -16,6 +16,12 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 )
 
+const (
+	NO_CHANGE = iota
+	INCREASE
+	DECREASE
+)
+
 // This function will clear all BPF maps once the relay is started.
 // This relies on an external C program since there exist wrappers
 // to iterate over keys of a map.
@@ -478,6 +484,11 @@ func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn
 	}
 	qconn := conn.(quic.Connection)
 
+	if qconn.RemoteAddr().String() == packet_setting.SERVER_ADDR {
+		// We only consider connection ids for client connections.
+		return
+	}
+
 	ipaddr, port := GetIPAndPort(qconn, true)
 	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
 	port_key := swapEndianness16(port)
@@ -496,8 +507,94 @@ func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn
 		already_started_printing = true
 	}
 
-	key = key // just to avoid unused error
-	// TODO: actually set congestion window stuff in bpf map
+	client_id := &id_struct{}
+	err := Client_id.Lookup(key, client_id)
+	if err != nil {
+		fmt.Println("Error looking up client_id")
+		fmt.Println("When booting this can occur if the connection is not yet been set up fully")
+		return
+	}
+
+	client_data := &client_data_struct{}
+	err = Client_data.Lookup(client_id, client_data)
+	if err != nil {
+		fmt.Println("Error looking up client_data")
+		panic(err)
+	}
+
+	neededChange := calculateNeededChangeOfPriorityDropLimit(data, client_data)
+	if neededChange == NO_CHANGE {
+		return
+	}
+
+	UnitChangePriorityDropLimit(client_id.Id, neededChange == INCREASE)
+
+}
+
+func calculateNeededChangeOfPriorityDropLimit(data packet_setting.CongestionWindowData, client_data *client_data_struct) int {
+
+	// TODO: add logic to determine if change is needed
+	return NO_CHANGE
+
+}
+
+func UnitChangePriorityDropLimit(c_id uint32, increment bool) error {
+
+	id := &id_struct{
+		Id: c_id,
+	}
+
+	client_info := &client_data_struct{}
+	err := Client_data.Lookup(id, client_info)
+	if err != nil {
+		fmt.Println("Error looking up client_data")
+		return err
+	}
+
+	if client_info.PriorityDropLimit == 0 {
+		return nil
+	}
+
+	if increment {
+		client_info.PriorityDropLimit++
+	} else {
+		client_info.PriorityDropLimit--
+	}
+
+	err = Client_data.Update(id, client_info, ebpf.UpdateAny)
+	if err != nil {
+		fmt.Println("Error updating client_data")
+		return err
+	}
+
+	debugPrint("Successfully updated client_data for retired connection id")
+	return nil
+}
+
+func ChangePriorityDropLimit(c_id uint32, limit uint8) error {
+
+	id := &id_struct{
+		Id: c_id,
+	}
+
+	client_info := &client_data_struct{}
+	err := Client_data.Lookup(id, client_info)
+	if err != nil {
+		fmt.Println("Error looking up client_data")
+		return err
+	}
+
+	client_info.PriorityDropLimit = limit
+
+	err = Client_data.Update(id, client_info, ebpf.UpdateAny)
+	debugPrint("Update at point nr.", 11)
+	if err != nil {
+		fmt.Println("Error updating client_data")
+		return err
+	}
+
+	debugPrint("Successfully updated client_data for retired connection id")
+	return nil
 
 }
 
