@@ -61,11 +61,11 @@ const relay_printing_congestion_window = true
 
 // Specify whether metrics should be saved to a mysql database
 // for visualization in grafana.
-const grafana_usage = true
+const grafana_usage = false
 
 // Specify if the relay should log the cpu usage using pprof.
 const log_cpu_performance = false
-const cpu_log_time = 60 * time.Second
+const cpu_log_time = 30 * time.Second
 
 // Specify wether the default test video should be played by the server
 // or if an actual video file should be played.

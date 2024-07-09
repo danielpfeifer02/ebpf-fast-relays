@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"runtime"
 	"sync"
 	"time"
 
@@ -330,7 +331,7 @@ func GetLargestSentPacketNumber(conn packet_setting.QuicConnection) int64 {
 
 // This function is used for registering the packets that have been sent by the
 // BPF program.
-func RegisterBPFPacket(conn quic.Connection) {
+func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with ringbuffer bpf map
 
 	go func() {
 
@@ -372,13 +373,16 @@ func RegisterBPFPacket(conn quic.Connection) {
 			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
 
 				var server_pack packet_setting.RetransmissionPacketContainer
-				for {
+				for i := 0; i < 100; i++ {
 					server_pack = RetreiveServerPacket(int64(val.ServerPN))
 					if server_pack.Valid {
 						break
 					}
 					// <-time.After(1 * time.Millisecond) // TODO: optimal?
 					time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
+				}
+				if !server_pack.Valid {
+					panic("No server packet found")
 				}
 				if len(server_pack.RawData) == 0 {
 					panic("No server packet found")
@@ -600,9 +604,10 @@ func ChangePriorityDropLimit(c_id uint32, limit uint8) error {
 
 func startPrintCongestionWindowDataThread() {
 	for {
+		num_of_routines := runtime.NumGoroutine()
 		last_data_mutex.Lock()
 		fmt.Println("+-----------------------------------------------+")
-		fmt.Println("|\tCongestion window data\t\t\t|")
+		fmt.Println("|\tCongestion window data (", num_of_routines, ")\t\t|")
 		fmt.Println("+-----------------------------------------------+")
 		fmt.Println("|\tMinRTT:\t\t\t", last_data.MinRTT, "\t|")
 		fmt.Println("|\tSmoothedRTT:\t\t", last_data.SmoothedRTT, "\t|")
@@ -613,6 +618,6 @@ func startPrintCongestionWindowDataThread() {
 		fmt.Println("|\tPacketsInFlight:\t", last_data.PacketsInFlight, "\t\t|")
 		fmt.Println("+-----------------------------------------------+")
 		last_data_mutex.Unlock()
-		<-time.After(1 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }

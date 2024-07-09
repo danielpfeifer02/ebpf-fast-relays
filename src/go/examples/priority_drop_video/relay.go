@@ -15,6 +15,14 @@ import (
 )
 
 func relay() error {
+
+	// go func() {
+	// 	for {
+	// 		fmt.Println("NumGoroutine()", runtime.NumGoroutine())
+	// 		time.Sleep(5 * time.Second)
+	// 	}
+	// }()
+
 	var err error
 	if bpf_enabled {
 
@@ -180,7 +188,7 @@ func relay() error {
 			fmt.Println("Max Ack Delay:", stats.MaxAckDelay.Milliseconds())
 			fmt.Print("\n-----------------------------------------\n")
 
-			<-time.After(1 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 	}(conn)
 

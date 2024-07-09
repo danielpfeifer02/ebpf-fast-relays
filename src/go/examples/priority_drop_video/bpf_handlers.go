@@ -335,6 +335,7 @@ func registerBPFPacket(conn quic.Connection) {
 
 	fmt.Println("Start registering packets...")
 
+	// TODO: move to common
 	perfMap, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packet_events", nil)
 	if err != nil {
 		fmt.Println("Error loading perf map")
@@ -365,7 +366,7 @@ func registerBPFPacket(conn quic.Connection) {
 			if len(record.RawSample) < 29 {
 				panic("Record too short")
 			}
-			fmt.Println("Record:", len(record.RawSample))
+			// fmt.Println("Record:", len(record.RawSample))
 			val = &packet_register_struct{
 				PacketNumber: binary.LittleEndian.Uint64(record.RawSample[0:8]),
 				SentTime:     binary.LittleEndian.Uint64(record.RawSample[8:16]),
@@ -376,7 +377,7 @@ func registerBPFPacket(conn quic.Connection) {
 			}
 
 		} else {
-			// time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
+			time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
 			// Check if there are packets to register
 			err = packets_to_register.Lookup(current_index, val)
 		}
@@ -385,50 +386,59 @@ func registerBPFPacket(conn quic.Connection) {
 
 			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
 
-			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
+			// TODO: this as go routine causes A LOT of go routines. is there any benefit?
+			// go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
+			val := *val
+			idx := current_index
+			mp := packets_to_register
 
-				var server_pack packet_setting.RetransmissionPacketContainer
-				for {
-					server_pack = RetreiveServerPacket(int64(val.ServerPN))
-					if server_pack.Valid {
-						break
-					}
-					<-time.After(1 * time.Millisecond) // TODO: optimal?
-					// time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
-					// fmt.Println("DEBUG FLAG")
+			fmt.Println("Create registerBPFPacket goroutine func2")
+
+			var server_pack packet_setting.RetransmissionPacketContainer
+			for {
+				server_pack = RetreiveServerPacket(int64(val.ServerPN))
+				if server_pack.Valid {
+					break
 				}
-				if len(server_pack.RawData) == 0 {
-					panic("No server packet found")
-				}
+				// <-time.After(1 * time.Millisecond) // TODO: optimal?
+				time.Sleep(1 * time.Millisecond) // TODO: sleep more efficient than after (based on pprof)
+				// fmt.Println("DEBUG FLAG")
+			}
+			if len(server_pack.RawData) == 0 {
+				panic("No server packet found")
+			}
 
-				// if server_pack.Length != int64(val.Length) { // TODO: useful check?
-				// 	fmt.Println(server_pack.Length, val.Length)
-				// 	panic("Lengths do not match")
-				// }
+			// if server_pack.Length != int64(val.Length) { // TODO: useful check?
+			// 	fmt.Println(server_pack.Length, val.Length)
+			// 	panic("Lengths do not match")
+			// }
 
-				packet := packet_setting.PacketRegisterContainerBPF{
-					PacketNumber: int64(val.PacketNumber),
-					SentTime:     int64(val.SentTime),
-					Length:       int64(val.Length), // TODO: length needed if its in server_pack?
+			packet := packet_setting.PacketRegisterContainerBPF{
+				PacketNumber: int64(val.PacketNumber),
+				SentTime:     int64(val.SentTime),
+				Length:       int64(val.Length), // TODO: length needed if its in server_pack?
 
-					RawData: server_pack.RawData,
+				RawData: server_pack.RawData,
 
-					// These two will be set in the wrapper of the quic connection.
-					Frames:       nil,
-					StreamFrames: nil,
-				}
+				// These two will be set in the wrapper of the quic connection.
+				Frames:       nil,
+				StreamFrames: nil,
+			}
 
-				conn.RegisterBPFPacket(packet)
+			conn.RegisterBPFPacket(packet)
 
-				// Set valid to 0 to indicate that the packet has been registered
-				val.Valid = 0
-				err = mp.Update(idx, val, ebpf.UpdateAny)
-				if err != nil {
-					fmt.Println("Error updating buffer map")
-					panic(err)
-				}
+			// Set valid to 0 to indicate that the packet has been registered
+			val.Valid = 0
+			err = mp.Update(idx, val, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating buffer map")
+				panic(err)
+			}
 
-			}(*val, current_index, packets_to_register) // this pass by copy is necessary since the goroutine might be executed after the next iteration
+			// fmt.Println("Finish registerBPFPacket goroutine func2")
+
+			// TODO: this as go routine causes A LOT of go routines. is there any benefit?
+			// }(*val, current_index, packets_to_register) // this pass by copy is necessary since the goroutine might be executed after the next iteration
 
 			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
 		} else {
@@ -539,7 +549,7 @@ func readPnTsSent() {
 			}
 		} else {
 			// fmt.Println(err)
-			<-time.After(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 }
