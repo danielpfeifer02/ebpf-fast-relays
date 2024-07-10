@@ -106,6 +106,7 @@
 
 // These definitions are mostly used for development purposes.
 #define TURNOFF 0
+#define TURNOFF_INGRESS_FORWARDING 0
 #define PRIO_DROP 1
 #define MOQ_PAYLOAD 1
 #define VP8_VIDEO_PAYLOAD 1
@@ -207,7 +208,8 @@ struct register_packet_t { // TODO: what fields are necessary?
         uint32_t server_pn;
 
         uint8_t valid;
-        uint8_t padding[3];
+        uint8_t non_userspace;
+        uint8_t padding[2];
 };
 
 // This struct represents an entry in the ring buffer storing
@@ -427,7 +429,7 @@ __attribute__((always_inline)) int32_t store_packet_to_register_rb(struct regist
                 return 0;
         *data = packet;
         bpf_ringbuf_submit(data, 0); // TODO: check correct flags for wake up 8https://stackoverflow.com/questions/74092376/regarding-the-ebpf-question-bpf-ringbuf-submit-is-not-in-effect)
-
+        return 0;
 }
 
 // Update the stream id of a packet.
@@ -443,6 +445,13 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
                 .key = *key,
                 .unistream_id = stream_id.value
         };
+
+        // uint64_t ts = bpf_ktime_get_tai_ns();
+        // if (unistream_origin == RELAY_ORIGIN) {
+        //         bpf_printk("Relay origin for %d %lu\n", stream_id.value, ts);
+        // } else {
+        //         bpf_printk("Media server origin for %d %lu\n", stream_id.value, ts);
+        // }
 
         // In case the origin is the relay userspace we need to check if it is a retransmission of a packet.
         // If it is a retransmission we can find out by checking the translation map with the origin set to
@@ -563,10 +572,12 @@ __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, u
 // by the userspace program.
 __attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) { // TODO: need to consider ip and port to support multiple clients
 
+        // bpf_printk("Storing packet to register with pn %d\n", packet.packet_number);
         // TODO: just for testing
         store_packet_to_register_rb(packet);
         return 0;
 
+        // TODO: remove usage of normal map
         uint32_t zero = 0;
         uint32_t *index = bpf_map_lookup_elem(&index_packets_to_register, &zero);
         if (index == NULL) {

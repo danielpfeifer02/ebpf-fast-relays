@@ -368,13 +368,16 @@ func registerBPFPacket(conn quic.Connection) {
 			}
 			// fmt.Println("Record:", len(record.RawSample))
 			val = &packet_register_struct{
-				PacketNumber: binary.LittleEndian.Uint64(record.RawSample[0:8]),
-				SentTime:     binary.LittleEndian.Uint64(record.RawSample[8:16]),
-				Length:       binary.LittleEndian.Uint64(record.RawSample[16:24]),
-				ServerPN:     binary.LittleEndian.Uint32(record.RawSample[24:28]),
-				Valid:        record.RawSample[28],
-				Padding:      [3]uint8{0, 0, 0},
+				PacketNumber:          binary.LittleEndian.Uint64(record.RawSample[0:8]),
+				SentTime:              binary.LittleEndian.Uint64(record.RawSample[8:16]),
+				Length:                binary.LittleEndian.Uint64(record.RawSample[16:24]),
+				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[24:28]),
+				Valid:                 record.RawSample[28],
+				SpecialRetransmission: record.RawSample[29],
+				Padding:               [2]uint8{0, 0},
 			}
+
+			// fmt.Printf("Loaded %d bytes from ringbuffer\n", len(record.RawSample))
 
 		} else {
 			time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
@@ -394,18 +397,24 @@ func registerBPFPacket(conn quic.Connection) {
 
 			fmt.Println("Create registerBPFPacket goroutine func2")
 
-			var server_pack packet_setting.RetransmissionPacketContainer
-			for {
-				server_pack = RetreiveServerPacket(int64(val.ServerPN))
-				if server_pack.Valid {
-					break
-				}
-				// <-time.After(1 * time.Millisecond) // TODO: optimal?
-				time.Sleep(1 * time.Millisecond) // TODO: sleep more efficient than after (based on pprof)
-				// fmt.Println("DEBUG FLAG")
+			var server_pack packet_setting.RetransmissionPacketContainer = packet_setting.RetransmissionPacketContainer{
+				Valid:   true,
+				RawData: nil,
 			}
-			if len(server_pack.RawData) == 0 {
-				panic("No server packet found")
+
+			if val.SpecialRetransmission == 1 {
+				for i := 0; i < 1_000; i++ {
+					server_pack = RetreiveServerPacket(int64(val.ServerPN))
+					if server_pack.Valid {
+						break
+					}
+					// <-time.After(1 * time.Millisecond) // TODO: optimal?
+					time.Sleep(1 * time.Millisecond) // TODO: sleep more efficient than after (based on pprof)
+					// fmt.Println("DEBUG FLAG")
+				}
+			}
+			if !server_pack.Valid {
+				panic("No server packet found (non-common-code)")
 			}
 
 			// if server_pack.Length != int64(val.Length) { // TODO: useful check?

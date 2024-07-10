@@ -245,6 +245,7 @@ int tc_egress(struct __sk_buff *skb)
                                 .length = payload_size,
                                 .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
                                 .valid = 1,
+                                .non_userspace = 0,
                         };
                         store_packet_to_register(pack_to_reg);
 
@@ -841,6 +842,7 @@ int tc_egress(struct __sk_buff *skb)
                         .length = payload_size,
                         .server_pn = old_pn,
                         .valid = 1,
+                        .non_userspace = 1,
                 };
                 store_packet_to_register(pack_to_reg);
 
@@ -916,6 +918,7 @@ int tc_egress(struct __sk_buff *skb)
                         .length = payload_size,
                         .server_pn = -1, // -1 -> we don't care right now // TODO: what to do with long headers?
                         .valid = 1,
+                        .non_userspace = 0, // TODOregister_packet_t: long header can only be from userspace (verify)
                 };
                 store_packet_to_register(pack_to_reg);
 

@@ -5,6 +5,7 @@ package common
 // TODO: change all calls from the examples from bpf_handler.go to here
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 )
@@ -362,29 +364,93 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 
 	fmt.Println("Start registering packets...")
 
+	// TODO: move to common
+	perfMap, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packet_events", nil)
+	if err != nil {
+		fmt.Println("Error loading perf map")
+		panic(err)
+	}
+	pack_to_reg_rb_reader, err := ringbuf.NewReader(perfMap)
+	if err != nil {
+		fmt.Println("Error creating ringbuffer reader")
+		panic(err)
+	}
+
+	// TODO: remove before final version
+	use_lookup := false // TODO: for easy performance comparison
+	var record *ringbuf.Record = &ringbuf.Record{}
+
 	for {
 
-		// Check if there are packets to register
-		err := Packets_to_register.Lookup(current_index, val)
+		// TODO: add same changes to common and other Lookup examples
+		if !use_lookup {
+			// TODO: instead of sleep, use (if there is) a cheap way to find out if map changed
+			err := pack_to_reg_rb_reader.ReadInto(record) // TODO: ReadInto to reuse memory?
+			// err := error(nil)
+			if err != nil {
+				fmt.Println("Error reading from ringbuffer")
+				panic(err)
+			}
+
+			if len(record.RawSample) < 29 {
+				panic("Record too short")
+			}
+			// fmt.Println("Record:", len(record.RawSample))
+			val = &packet_register_struct{
+				PacketNumber:          binary.LittleEndian.Uint64(record.RawSample[0:8]),
+				SentTime:              binary.LittleEndian.Uint64(record.RawSample[8:16]),
+				Length:                binary.LittleEndian.Uint64(record.RawSample[16:24]),
+				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[24:28]),
+				Valid:                 record.RawSample[28],
+				SpecialRetransmission: record.RawSample[29],
+				Padding:               [2]uint8{0, 0},
+			}
+
+			// if val.PacketNumber <= 39 && val.PacketNumber >= 30 {
+			// 	fmt.Println("Packet number", val.PacketNumber, "at time", time.Now().UnixNano())
+			// }
+
+			fmt.Printf("Loaded %d bytes from ringbuffer\n", len(record.RawSample))
+
+		} else {
+			time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
+			// Check if there are packets to register
+			err = Packets_to_register.Lookup(current_index, val)
+		}
+
 		if err == nil && val.Valid == 1 { // TODO: why not valid?
 
 			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
 
 			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
 
-				var server_pack packet_setting.RetransmissionPacketContainer
-				for i := 0; i < 100; i++ {
-					server_pack = RetreiveServerPacket(int64(val.ServerPN))
-					if server_pack.Valid {
-						break
+				var server_pack packet_setting.RetransmissionPacketContainer = packet_setting.RetransmissionPacketContainer{
+					Valid:   true,
+					RawData: nil,
+				}
+				// We only need to retrieve the server packet if it is indeed a packet from the server.
+				// Packets from the relay are handled normally.
+				if val.SpecialRetransmission == 1 {
+					for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
+						server_pack = RetreiveServerPacket(int64(val.ServerPN))
+						if server_pack.Valid {
+							break
+						}
+						// <-time.After(1 * time.Millisecond) // TODO: optimal?
+						time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
 					}
-					// <-time.After(1 * time.Millisecond) // TODO: optimal?
-					time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
+				} else {
+					for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
+						server_pack = RetreiveRelayPacket(int64(val.ServerPN))
+						if server_pack.Valid {
+							break
+						}
+						// <-time.After(1 * time.Millisecond) // TODO: optimal?
+						time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
+					}
 				}
 				if !server_pack.Valid {
-					panic("No server packet found")
-				}
-				if len(server_pack.RawData) == 0 {
+					fmt.Println("No server packet found for packet number", val.ServerPN)
 					panic("No server packet found")
 				}
 
@@ -408,7 +474,10 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 					StreamFrames: nil,
 				}
 
+				fmt.Println("Counttag")
+
 				conn.RegisterBPFPacket(packet)
+				fmt.Println("Registered packet")
 
 				// Set valid to 0 to indicate that the packet has been registered
 				val.Valid = 0

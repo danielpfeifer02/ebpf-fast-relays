@@ -20,8 +20,8 @@ import (
 const (
 	local_usage            = false
 	use_datagrams          = false
-	bpf_enabled            = true  //!local_usage
-	forwarding_enabled     = false //!bpf_enabled
+	bpf_enabled            = true //!local_usage
+	forwarding_enabled     = true //!bpf_enabled
 	count_errors           = true
 	payload_length         = 21 //512
 	USERSPACE_FLAG         = 0b10000000
@@ -34,7 +34,7 @@ var (
 	relay_addr = map[bool]string{true: "localhost:4244", false: "192.168.11.2:4242"}[local_usage]
 
 	// Needs to be var since cpu flag changes it
-	number_of_analysis_packets = 4096
+	number_of_analysis_packets = 128
 	analyse_diff_data          = false
 )
 
@@ -99,6 +99,7 @@ func setBPFHandlers() {
 		fmt.Println("Setting up BPF for relay")
 
 		packet_setting.StoreServerPacket = common.StoreServerPacket
+		packet_setting.StoreRelayPacket = common.StoreRelayPacket
 
 		// TODO: check if those three functions are correctly implemented
 		packet_setting.ConnectionInitiationBPFHandler = common.InitConnectionId

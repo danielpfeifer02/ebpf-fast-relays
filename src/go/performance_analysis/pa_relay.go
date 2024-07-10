@@ -155,6 +155,7 @@ func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context
 					fmt.Println("Error writing to client")
 					panic(err)
 				}
+				defer client_str.Close()
 			}
 		}
 	}
