@@ -64,7 +64,7 @@ const relay_printing_congestion_window = true
 const grafana_usage = false
 
 // Specify if the relay should log the cpu usage using pprof.
-const log_cpu_performance = false
+const log_cpu_performance = true
 const cpu_log_time = 30 * time.Second
 
 // Specify wether the default test video should be played by the server
@@ -172,6 +172,7 @@ func relayConfig() {
 		loadBPFMaps() // TODO: switch to only one setup (the common one)
 
 		InitializeCacheSetup()
+		common.InitializeCacheSetup()
 
 		packet_setting.StoreServerPacket = StoreServerPacket
 

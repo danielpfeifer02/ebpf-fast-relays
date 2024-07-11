@@ -34,7 +34,7 @@ var (
 	relay_addr = map[bool]string{true: "localhost:4244", false: "192.168.11.2:4242"}[local_usage]
 
 	// Needs to be var since cpu flag changes it
-	number_of_analysis_packets = 128
+	number_of_analysis_packets = 1024
 	analyse_diff_data          = false
 )
 
@@ -100,6 +100,7 @@ func setBPFHandlers() {
 
 		packet_setting.StoreServerPacket = common.StoreServerPacket
 		packet_setting.StoreRelayPacket = common.StoreRelayPacket
+		packet_setting.PacketOriginatedAtRelay = common.PacketOriginatedAtRelay
 
 		// TODO: check if those three functions are correctly implemented
 		packet_setting.ConnectionInitiationBPFHandler = common.InitConnectionId

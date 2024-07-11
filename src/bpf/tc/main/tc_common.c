@@ -572,7 +572,7 @@ __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, u
 // by the userspace program.
 __attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) { // TODO: need to consider ip and port to support multiple clients
 
-        // bpf_printk("Storing packet to register with pn %d\n", packet.packet_number);
+        bpf_printk("Storing packet to register with pn %d\n", packet.packet_number);
         // TODO: just for testing
         store_packet_to_register_rb(packet);
         return 0;

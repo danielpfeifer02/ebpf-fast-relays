@@ -410,7 +410,7 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			// 	fmt.Println("Packet number", val.PacketNumber, "at time", time.Now().UnixNano())
 			// }
 
-			fmt.Printf("Loaded %d bytes from ringbuffer\n", len(record.RawSample))
+			// fmt.Printf("Loaded %d bytes from ringbuffer\n", len(record.RawSample))
 
 		} else {
 			time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
@@ -422,72 +422,82 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 
 			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
 
-			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
+			// TODO: this as go routine causes A LOT of go routines. is there any benefit?
+			// go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
 
-				var server_pack packet_setting.RetransmissionPacketContainer = packet_setting.RetransmissionPacketContainer{
-					Valid:   true,
-					RawData: nil,
-				}
-				// We only need to retrieve the server packet if it is indeed a packet from the server.
-				// Packets from the relay are handled normally.
-				if val.SpecialRetransmission == 1 {
-					for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
-						server_pack = RetreiveServerPacket(int64(val.ServerPN))
-						if server_pack.Valid {
-							break
-						}
-						// <-time.After(1 * time.Millisecond) // TODO: optimal?
-						time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
+			var server_pack packet_setting.RetransmissionPacketContainer = packet_setting.RetransmissionPacketContainer{
+				Valid:   true,
+				RawData: nil,
+			}
+			// We only need to retrieve the server packet if it is indeed a packet from the server.
+			// Packets from the relay are handled normally.
+			if val.SpecialRetransmission == 1 {
+				for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
+					server_pack = RetreiveServerPacket(int64(val.ServerPN))
+					if server_pack.Valid {
+						break
 					}
-				} else {
-					for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
-						server_pack = RetreiveRelayPacket(int64(val.ServerPN))
-						if server_pack.Valid {
-							break
-						}
-						// <-time.After(1 * time.Millisecond) // TODO: optimal?
-						time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
-					}
+					// <-time.After(1 * time.Millisecond) // TODO: optimal?
+					time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
 				}
-				if !server_pack.Valid {
-					fmt.Println("No server packet found for packet number", val.ServerPN)
-					panic("No server packet found")
-				}
+			} else {
+				// In case the packet originated in the relay already we only need to update the packet number
+				// since it is already registered.
 
-				// if server_pack.Length != int64(val.Length) { // TODO: useful check?
-				// 	fmt.Println(server_pack.Length, val.Length)
-				// 	panic("Lengths do not match")
+				packet_number_mapping := packet_setting.PacketNumberMapping{
+					OriginalPacketNumber: int64(val.ServerPN),
+					NewPacketNumber:      int64(val.PacketNumber),
+				}
+				conn.UpdatePacketNumberMapping(packet_number_mapping)
+				return
+
+				// for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
+				// 	server_pack = RetreiveRelayPacket(int64(val.ServerPN))
+				// 	if server_pack.Valid {
+				// 		break
+				// 	}
+				// 	// <-time.After(1 * time.Millisecond) // TODO: optimal?
+				// 	time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
 				// }
+			}
+			if !server_pack.Valid {
+				fmt.Println("No server packet found for packet number", val.ServerPN)
+				panic("No server packet found")
+			}
 
-				// diff := uint64(time.Now().UnixNano()) - val.SentTime
-				// fmt.Println("Diff:", diff, "Val.SentTime:", val.SentTime)
+			// if server_pack.Length != int64(val.Length) { // TODO: useful check?
+			// 	fmt.Println(server_pack.Length, val.Length)
+			// 	panic("Lengths do not match")
+			// }
 
-				packet := packet_setting.PacketRegisterContainerBPF{
-					PacketNumber: int64(val.PacketNumber),
-					SentTime:     int64(val.SentTime),
-					Length:       int64(val.Length), // TODO: length needed if its in server_pack?
+			// diff := uint64(time.Now().UnixNano()) - val.SentTime
+			// fmt.Println("Diff:", diff, "Val.SentTime:", val.SentTime)
 
-					RawData: server_pack.RawData,
+			packet := packet_setting.PacketRegisterContainerBPF{
+				PacketNumber: int64(val.PacketNumber),
+				SentTime:     int64(val.SentTime),
+				Length:       int64(val.Length), // TODO: length needed if its in server_pack?
 
-					// These two will be set in the wrapper of the quic connection.
-					Frames:       nil,
-					StreamFrames: nil,
-				}
+				RawData: server_pack.RawData,
 
-				fmt.Println("Counttag")
+				// These two will be set in the wrapper of the quic connection.
+				Frames:       nil,
+				StreamFrames: nil,
+			}
 
-				conn.RegisterBPFPacket(packet)
-				fmt.Println("Registered packet")
+			conn.RegisterBPFPacket(packet)
+			// fmt.Println("Registered packet")
 
-				// Set valid to 0 to indicate that the packet has been registered
-				val.Valid = 0
-				err = mp.Update(idx, val, ebpf.UpdateAny)
-				if err != nil {
-					fmt.Println("Error updating buffer map")
-					panic(err)
-				}
+			// Set valid to 0 to indicate that the packet has been registered
+			val.Valid = 0
+			err = Packets_to_register.Update(current_index, val, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating buffer map")
+				panic(err)
+			}
 
-			}(*val, current_index, Packets_to_register) // this pass by copy is necessary since the goroutine might be executed after the next iteration
+			// TODO: this as go routine causes A LOT of go routines. is there any benefit?
+			// }(*val, current_index, Packets_to_register) // this pass by copy is necessary since the goroutine might be executed after the next iteration
 
 			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
 		}

@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"common.com/common"
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
@@ -165,7 +166,8 @@ func relay() error {
 	// }()
 
 	// Run goroutine that will register the packets sent by the BPF program
-	go registerBPFPacket(conn)
+	// go registerBPFPacket(conn) // TODO: change all to common
+	go common.RegisterBPFPacket(conn) // TODO: check that there are no differences
 
 	// Now we set the connection to be established
 	ip, port := getIPAndPort(conn, true)

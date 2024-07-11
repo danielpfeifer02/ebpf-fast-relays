@@ -1,8 +1,6 @@
 package common
 
 import (
-	"encoding/hex"
-	"fmt"
 	"sync"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
@@ -27,7 +25,7 @@ func StoreServerPacket(pn, ts int64, data []byte,
 	lock.Lock()
 	defer lock.Unlock()
 
-	fmt.Println("Storing server packet", hex.Dump(data))
+	// fmt.Println("Storing server packet", hex.Dump(data))
 
 	storage_server_packets[pn] = packet_setting.RetransmissionPacketContainer{
 		PacketNumber: pn,
@@ -49,6 +47,15 @@ func StoreRelayPacket(pn, ts int64, data []byte,
 		RawData:      data,
 		Valid:        true,
 	}
+}
+
+func PacketOriginatedAtRelay(pn int64) bool {
+	for k := range storage_relay_packets {
+		if k == pn {
+			return true
+		}
+	}
+	return false
 }
 
 func RemoveServerPacket(pn int64, conn packet_setting.QuicConnection) {

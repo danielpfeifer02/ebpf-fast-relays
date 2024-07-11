@@ -176,7 +176,8 @@ int tc_egress(struct __sk_buff *skb)
                         SAVE_BPF_PROBE_READ_KERNEL(&old_pn, sizeof(old_pn), payload
                                                                         + 1 /* Short header bits */
                                                                         + CONN_ID_LEN /* Connection ID */);
-                        old_pn = ntohs(old_pn);
+                        
+                        old_pn = ntohl(old_pn);
 
                         // Now we lookup the next packet number for the connection.
                         uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key);
@@ -243,11 +244,14 @@ int tc_egress(struct __sk_buff *skb)
                                 .packet_number = pn_key.packet_number,
                                 .timestamp = time_ns,
                                 .length = payload_size,
-                                .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
+                                // .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
+                                .server_pn = old_pn,
                                 .valid = 1,
                                 .non_userspace = 0,
                         };
                         store_packet_to_register(pack_to_reg);
+                        bpf_printk("Old packet number: %d, New packet numbe: %d\n", old_pn, pn_key.packet_number);
+
 
                         store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 
@@ -918,9 +922,9 @@ int tc_egress(struct __sk_buff *skb)
                         .length = payload_size,
                         .server_pn = -1, // -1 -> we don't care right now // TODO: what to do with long headers?
                         .valid = 1,
-                        .non_userspace = 0, // TODOregister_packet_t: long header can only be from userspace (verify)
+                        .non_userspace = 0, // TODO: register_packet_t: long header can only be from userspace (verify)
                 };
-                store_packet_to_register(pack_to_reg);
+                // store_packet_to_register(pack_to_reg); // TODO: even needed for long headers?
 
                 store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 
