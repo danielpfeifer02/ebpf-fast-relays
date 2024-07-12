@@ -49,10 +49,10 @@
 // and number of storable packet number translations.
 // These have been arbitrarily chosen and can be adjusted.
 #define MAX_CLIENTS 1024
-#define MAX_STREAMS_PER_CLIENT 16
+#define MAX_STREAMS_PER_CLIENT 1024
 // Since the packet number translations are deleted by the userspace program
 // 1024 might not even be necessary and this could be lowered.
-#define MAX_PN_TRANSLATIONS 1024
+#define MAX_PN_TRANSLATIONS 1 << 15 // 32768 // TODO: what size is sufficient?
 // The same goes for the unistream id translations.
 // This is necessary since the IDs also have to be unique even if
 // the relay and the forwarding mechanism open streams at the same time.
@@ -66,10 +66,10 @@
 // Not sure if there is any limit defined in the QUIC standard.
 #define MAX_FRAMES_PER_PACKET 16
 // The maximum number of packets in the queue that have to be registered
-#define MAX_REGISTER_QUEUE_SIZE 1<<11 // 2048 // TODO: what size is sufficient?
+#define MAX_REGISTER_QUEUE_SIZE 1<<15 // 32768 // TODO: what size is sufficient?
 // The maximum number of pairs of packet number and timestamp that can be stored
 // for RTT calculations.
-#define MAX_PN_TS_PAIRS 1<<11 // 2048 // TODO: what size is sufficient?
+#define MAX_PN_TS_PAIRS 1<<15 // 32768 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
 // which is also used in the userspace program (i.e. should be changed with care).
@@ -410,7 +410,7 @@ struct {
 // the userspace program.
 struct {
 __uint(type, BPF_MAP_TYPE_RINGBUF);
-__uint(max_entries, 4096);
+__uint(max_entries, (1 << 15));
 __uint(pinning, LIBBPF_PIN_BY_NAME);
 } packet_events SEC(".maps");
 // const char* packet_events_pin_path = "/sys/fs/bpf/tc/packet_events";

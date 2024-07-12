@@ -173,11 +173,12 @@ int tc_egress(struct __sk_buff *skb)
                         // Here we read the old packer number for the connection in question.
                         // We will store that one in the translation map so that the userspace
                         // can retranslate any incoming ACKs.
-                        SAVE_BPF_PROBE_READ_KERNEL(&old_pn, sizeof(old_pn), payload
-                                                                        + 1 /* Short header bits */
-                                                                        + CONN_ID_LEN /* Connection ID */);
-                        
-                        old_pn = ntohl(old_pn);
+                        // TODO: why was this here this does not make sense?
+                        // SAVE_BPF_PROBE_READ_KERNEL(&old_pn, sizeof(old_pn), payload
+                        //                                                 + 1 /* Short header bits */
+                        //                                                 + CONN_ID_LEN /* Connection ID */);
+                        // bpf_printk("Old packet number: %d\n", old_pn);
+                        // old_pn = ntohl(old_pn);
 
                         // Now we lookup the next packet number for the connection.
                         uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key);
