@@ -113,6 +113,8 @@ func relay() {
 func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context.Context, end_chan chan struct{}) {
 	ts_buffer := make([]byte, payload_length)
 
+	packets_sent := 0
+
 	for {
 		select {
 		case <-end_chan:
@@ -149,13 +151,21 @@ func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context
 				// TODO: just for debugging
 				new_buffer := make([]byte, n+1)
 				copy(new_buffer[0:], ts_buffer[:n])
+
 				new_buffer[n] = byte(0x01)
-				_, err = client_str.Write(new_buffer)
+				n, err = client_str.Write(new_buffer)
 				if err != nil {
 					fmt.Println("Error writing to client")
 					panic(err)
 				}
-				defer client_str.Close()
+				if n != len(new_buffer) {
+					panic(fmt.Errorf("wrote %d bytes, expected %d", n, len(new_buffer)))
+				}
+				client_str.Close()
+				packets_sent++
+				if packets_sent == number_of_analysis_packets {
+					fmt.Println("Forwarded all packets")
+				}
 			}
 		}
 	}
