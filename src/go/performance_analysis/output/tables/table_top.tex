@@ -1,0 +1,19 @@
+\begin{table}
+\label{tab:example}
+\begin{tabular}{llllll}
+\toprule
+flat & flat\% & sum\% & cum & cum\% & cause \\
+\midrule
+440ms & 28.39\% & 28.39\% & 440ms & 28.39\% & runtime/internal/syscall.Syscall6 \\
+140ms & 9.03\% & 37.42\% & 140ms & 9.03\% & runtime.futex \\
+120ms & 7.74\% & 45.16\% & 120ms & 7.74\% & runtime.cgocall \\
+40ms & 2.58\% & 47.74\% & 40ms & 2.58\% & runtime.write1 \\
+30ms & 1.94\% & 49.68\% & 60ms & 3.87\% & runtime.checkTimers \\
+30ms & 1.94\% & 51.61\% & 50ms & 3.23\% & runtime.mapaccess2 \\
+20ms & 1.29\% & 52.90\% & 70ms & 4.52\% & .../cilium/ebpf/internal/unix.Syscall \\
+20ms & 1.29\% & 54.19\% & 20ms & 1.29\% & net.IP.String \\
+20ms & 1.29\% & 55.48\% & 20ms & 1.29\% & runtime.casgstatus \\
+20ms & 1.29\% & 56.77\% & 20ms & 1.29\% & runtime.duffcopy \\
+\bottomrule
+\end{tabular}
+\end{table}

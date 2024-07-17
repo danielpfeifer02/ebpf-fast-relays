@@ -1,0 +1,19 @@
+\begin{table}
+\label{tab:example}
+\begin{tabular}{llllll}
+\toprule
+flat & flat\% & sum\% & cum & cum\% & cause \\
+\midrule
+0.44s & 28.39\% & 28.39\% & 0.44s & 28.39\% & runtime/internal/syscall.Syscall6 \\
+0 & 0\% & 28.39\% & 0.43s & 27.74\% & runtime.mcall \\
+0.01s & 0.65\% & 29.03\% & 0.42s & 27.10\% & runtime.schedule \\
+0 & 0\% & 29.03\% & 0.41s & 26.45\% & runtime.park\_m \\
+0 & 0\% & 29.03\% & 0.40s & 25.81\% & syscall.RawSyscall6 \\
+0.01s & 0.65\% & 29.68\% & 0.32s & 20.65\% & runtime.findRunnable \\
+0 & 0\% & 29.68\% & 0.28s & 18.06\% & .../quic-go-prio-packs.(*connection).run \\
+0 & 0\% & 29.68\% & 0.28s & 18.06\% & syscall.Syscall \\
+0 & 0\% & 29.68\% & 0.23s & 14.84\% & .../quic-go-prio-packs.(*Transport).listen \\
+0 & 0\% & 29.68\% & 0.23s & 14.84\% & .../quic-go-prio-packs.(*connection).run.func2 \\
+\bottomrule
+\end{tabular}
+\end{table}

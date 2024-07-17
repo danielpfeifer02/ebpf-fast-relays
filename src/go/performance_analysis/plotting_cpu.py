@@ -48,7 +48,8 @@ def pid_cpu_decreases(pid, df):
     #         counter = 0
     # return False
 
-def create_plot_of_file(filename, kern_or_user, ns):
+def create_plot_of_file(filename, kern_or_user, ns, only_plot_for_ns=None):
+    print(f"Creating plot for {filename} ({kern_or_user})")
     # Read csv file
     df = pd.read_csv(filename, dtype={'pid': int, 'ts': int, 'cpu': float})
 
@@ -117,7 +118,7 @@ def create_plot_of_file(filename, kern_or_user, ns):
             spl = make_interp_spline(accumulated_data['ts'], accumulated_data['cpu'], k=3)
             smoothed = spl(xnew)
             plt.plot(np.linspace(accumulated_data['ts'].min(), accumulated_data['ts'].max(), 300), smoothed, label="Total CPU Usage (" + kern_or_user + ")")
-        elif ns == "relay_ns":
+        elif ns == only_plot_for_ns or only_plot_for_ns == None: # Only plotting for one specific namespace
             plt.plot(accumulated_data['ts'], accumulated_data['cpu'], label=f"{ns} ({kern_or_user})")
     elif plot_type == PlotType.BAR:
         # Create a bar plot
@@ -165,7 +166,7 @@ if cut_to_same_length:
 else:
     for type in types:
         for namespace in ns:
-            create_plot_of_file(file_prefix + namespace + "-" + type + ".csv", type, namespace)
+            create_plot_of_file(file_prefix + namespace + "-" + type + ".csv", type, namespace, only_plot_for_ns="server_ns")
 
 plt.xlabel('Timestamp')
 plt.ylabel('CPU Usage')
@@ -174,5 +175,7 @@ plt.legend()
 
 # Set Legend location with margins from top and left
 # plt.legend(loc='upper left', bbox_to_anchor=(0.35, 0.85))
+
+plt.savefig('output/plots/last_plot.pdf')
 
 plt.show()
