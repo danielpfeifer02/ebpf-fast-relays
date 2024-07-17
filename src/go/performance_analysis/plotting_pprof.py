@@ -48,8 +48,10 @@ def table_for_command(input, name="table"):
 
     print(df)
 
+    caption = f"Table for {'cumulative' if 'cum' in name else ''} CPU usage of relay Go processes"
+
     # Export the DataFrame to a LaTeX table
-    latex_table = df.to_latex(index=False, caption='', label='tab:example')
+    latex_table = df.to_latex(index=False, caption=caption, label='tab:example')
 
     # Save the LaTeX table to a .tex file
     with open("./output/tables/"+name+".tex", 'w') as f:
