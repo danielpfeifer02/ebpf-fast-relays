@@ -70,6 +70,8 @@
 // The maximum number of pairs of packet number and timestamp that can be stored
 // for RTT calculations.
 #define MAX_PN_TS_PAIRS 1<<15 // 32768 // TODO: what size is sufficient?
+// Defines the size of the rinbuffer used for packet events
+#define MAX_PACKET_EVENTS 1<<15 // 32768 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
 // which is also used in the userspace program (i.e. should be changed with care).
@@ -409,9 +411,9 @@ struct {
 // This is used to signal events (mainly arrival of a new packet to register) to 
 // the userspace program.
 struct {
-__uint(type, BPF_MAP_TYPE_RINGBUF);
-__uint(max_entries, (1 << 15));
-__uint(pinning, LIBBPF_PIN_BY_NAME);
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, MAX_PACKET_EVENTS);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
 } packet_events SEC(".maps");
 // const char* packet_events_pin_path = "/sys/fs/bpf/tc/packet_events";
 
