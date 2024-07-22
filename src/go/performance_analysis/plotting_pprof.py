@@ -48,7 +48,7 @@ def table_for_command(input, name="table"):
 
     print(df)
 
-    caption = f"Table for {'cumulative' if 'cum' in name else ''} CPU usage of relay Go processes"
+    caption = f"Table for {'cumulative ' if 'cum' in name else ''}CPU usage of relay Go processes"
 
     # Export the DataFrame to a LaTeX table
     latex_table = df.to_latex(index=False, caption=caption, label='tab:example')
