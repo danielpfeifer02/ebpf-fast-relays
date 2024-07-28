@@ -115,7 +115,7 @@ func createReceivePipeline(flow *moqtransport.ReceiveSubscription) (*gst.Pipelin
 			if n == 0 {
 				continue
 			}
-			fmt.Println("Received", n, "bytes")
+			// fmt.Println("Received", n, "bytes")
 			send_chan <- buf[:n]
 		}
 	}()

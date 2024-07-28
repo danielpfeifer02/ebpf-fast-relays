@@ -1,8 +1,13 @@
 import subprocess
 import pandas as pd
+import sys
+
+# First parameter is input path, second is output path
+in_name = sys.argv[1]
+out_name = sys.argv[2]
 
 pprof_path = "../examples/priority_drop_video/build/prof/"
-pprof_name = "cpu.prof"
+pprof_name = in_name
 
 need_escape = ["%", "_", "&", "#", "$", "{", "}", "~", "^"]
 remove_from_causes = ["github.com/danielpfeifer02", "github.com"] # "github.com/danielpfeifer02" has to be before "github.com"
@@ -31,6 +36,7 @@ def table_for_command(input, name="table"):
     df = pd.DataFrame(columns=identifiers)
 
     for line in output[3:-1]:
+        line = line.replace(" (inline)", "")
         elements = line.split()
         # print(elements)
 
@@ -43,7 +49,7 @@ def table_for_command(input, name="table"):
                 if cause in elements[i]:
                     elements[i] = elements[i].replace(cause, "...")
 
-        assert len(elements) == len(identifiers)
+        assert len(elements) == len(identifiers), f"{elements} vs. {identifiers}"
         df.loc[len(df)] = {identifiers[i]: elements[i] for i in range(len(elements))}
 
     print(df)
@@ -58,5 +64,5 @@ def table_for_command(input, name="table"):
         f.write(latex_table)
 
 
-table_for_command("top\n", "table_top")
-table_for_command("top -cum\n", "table_top_cum")
+table_for_command("top\n", out_name+"_table_top")
+table_for_command("top -cum\n", out_name+"_table_top_cum")

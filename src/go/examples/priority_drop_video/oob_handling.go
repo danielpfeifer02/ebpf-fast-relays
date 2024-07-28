@@ -88,7 +88,7 @@ func startOOBHandler() {
 
 func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection) {
 	if oob_conn == nil {
-		fmt.Println("Out of band connection not initialized")
+		// fmt.Println("Out of band connection not initialized")
 		return
 	}
 	buf := make([]byte, 22) // 8 bytes for pn, 8 bytes for ts, 4 bytes for IP, 2 bytes for port

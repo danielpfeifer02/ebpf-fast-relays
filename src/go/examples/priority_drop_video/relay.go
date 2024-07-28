@@ -12,6 +12,7 @@ import (
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 )
 
@@ -111,7 +112,7 @@ func relay() error {
 
 			if relay_passing_on {
 				for i, cs := range subscriptionList {
-					fmt.Println("Trying to send", n, "bytes to peer", i)
+					packet_setting.DebugPrintln("Trying to send", n, "bytes to peer", i)
 					stream, err := cs.NewObjectStream(0, 0, 0)
 					if err != nil {
 						log.Printf("error on NewObjectStream: %v", err)
@@ -122,7 +123,7 @@ func relay() error {
 						log.Printf("error on write: %v", err)
 						return
 					}
-					fmt.Println("Sent", n, "bytes to peer", i)
+					packet_setting.DebugPrintln("Sent", n, "bytes to peer", i)
 					err = stream.Close()
 					if err != nil {
 						log.Printf("error on close: %v", err)
@@ -165,9 +166,11 @@ func relay() error {
 	// 	}
 	// }()
 
-	// Run goroutine that will register the packets sent by the BPF program
-	// go registerBPFPacket(conn) // TODO: change all to common
-	go common.RegisterBPFPacket(conn) // TODO: check that there are no differences
+	if bpf_enabled {
+		// Run goroutine that will register the packets sent by the BPF program
+		// go registerBPFPacket(conn) // TODO: change all to common
+		go common.RegisterBPFPacket(conn) // TODO: check that there are no differences
+	}
 
 	// Now we set the connection to be established
 	ip, port := getIPAndPort(conn, true)
