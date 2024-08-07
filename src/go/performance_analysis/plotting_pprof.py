@@ -64,5 +64,5 @@ def table_for_command(input, name="table"):
         f.write(latex_table)
 
 
-table_for_command("top\n", out_name+"_table_top")
-table_for_command("top -cum\n", out_name+"_table_top_cum")
+table_for_command("top 5\n", out_name+"_table_top")
+table_for_command("top -cum 5\n", out_name+"_table_top_cum")

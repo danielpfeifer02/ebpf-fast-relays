@@ -11,7 +11,7 @@ class PlotType(enum.Enum):
     BAR = 2
 
 ns = ["server_ns", "relay_ns", "client_ns"]
-types = ["user", "kernel"]
+types = ["kernel","user"]
 file_prefix = "output/csvs/cpu_usage_pids_"
 
 use_splines_for_smoothing = False
@@ -24,6 +24,18 @@ cut_to_same_length = False
 
 
 # ! Run the example video until the dragon is put into the dungeon and the video cuts to the next scene
+
+def create_label(ns, kern_or_user):
+    kern_or_user_label = "kernel forwarding" if kern_or_user == "kernel" else "userspace forwarding"
+    return kern_or_user_label
+    if ns == "server_ns":
+        return "server (" + kern_or_user_label + ")"
+    elif ns == "relay_ns":
+        return "relay (" + kern_or_user_label + ")"
+    elif ns == "client_ns":
+        return "client (" + kern_or_user_label + ")"
+    else:
+        return "unknown"
 
 def pid_cpu_decreases(pid, df):
 
@@ -119,7 +131,7 @@ def create_plot_of_file(filename, kern_or_user, ns, only_plot_for_ns=None):
             smoothed = spl(xnew)
             plt.plot(np.linspace(accumulated_data['ts'].min(), accumulated_data['ts'].max(), 300), smoothed, label="Total CPU Usage (" + kern_or_user + ")")
         elif ns == only_plot_for_ns or only_plot_for_ns == None: # Only plotting for one specific namespace
-            plt.plot(accumulated_data['ts'], accumulated_data['cpu'], label=f"{ns} ({kern_or_user})")
+            plt.plot(accumulated_data['ts'], accumulated_data['cpu'], label=f"{create_label(ns, kern_or_user)}")
     elif plot_type == PlotType.BAR:
         # Create a bar plot
         # sns.barplot(x='ts', y='cpu', data=accumulated_data, color='blue', alpha=0.5)
@@ -166,11 +178,11 @@ if cut_to_same_length:
 else:
     for type in types:
         for namespace in ns:
-            create_plot_of_file(file_prefix + namespace + "-" + type + ".csv", type, namespace, only_plot_for_ns="server_ns")
+            create_plot_of_file(file_prefix + namespace + "-" + type + ".csv", type, namespace, only_plot_for_ns="client_ns")
 
 plt.xlabel('Timestamp')
 plt.ylabel('CPU Usage')
-plt.title('CPU Usage over Time')
+plt.title('Client CPU Usage over Time')
 plt.legend()
 
 # Set Legend location with margins from top and left
