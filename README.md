@@ -21,26 +21,26 @@ is also provided such that there is no need to actually transmit video
 data but mock-data is sent instead.
 
 ## Set up the namespaces ##
-- Go into the directory ``src/shell/''
-- Run the following commands to set up the bridges and namespaces:
-    ``sudo sh ser-rel-bridge.sh''
-    ``sudo sh rel-cli-bridge.sh''
+- Go into the directory ``src/shell/``
+- Run the following commands to set up the bridges and namespaces:<br />
+    ``sudo sh ser-rel-bridge.sh`` <br />
+    ``sudo sh rel-cli-bridge.sh``
 - After the bridges and namespaces have been set up you can test the setup 
-by executing the following command:
-    ``sudo sh test-setup.sh''
+by executing the following command:<br />
+    ``sudo sh test-setup.sh``
 - In case you want to use grafana for the same ip that is used in our code
-you need to run:
-    ``sudo sh add_db_ip.sh''
+you need to run:<br />
+    ``sudo sh add_db_ip.sh``
 
 ## Enter a namespace and run the corresponding application layer program ##
-- To enter a certain namespace you need to execute the following command from within the directory src/go/examples/priority_drop_video:
-    ``sudo sh start_scripts/(server|relay|client)_start.sh''
-- After that you can run the program using:
-    ``source execute.sh''
+- To enter a certain namespace you need to execute the following command from within the directory src/go/examples/priority_drop_video:<br />
+    ``sudo sh start_scripts/(server|relay|client)_start.sh``
+- After that you can run the program using:<br />
+    ``source execute.sh``
 
 ## After program is done running clean up potential left-overs ##
 - To clean up potential left-overs after running an application layer
-program that used kernel-forwarding run:
-    ``source delete.sh''
+program that used kernel-forwarding run:<br />
+    ``source delete.sh``
 
 This, for example, removes all used eBPF programs that have been hooked to TC
