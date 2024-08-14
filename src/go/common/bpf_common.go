@@ -5,15 +5,24 @@ package common
 // TODO: change all calls from the examples from bpf_handler.go to here
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os/exec"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
+)
+
+const (
+	NO_CHANGE = iota
+	INCREASE
+	DECREASE
 )
 
 // This function will clear all BPF maps once the relay is started.
@@ -33,8 +42,10 @@ func ClearBPFMaps() {
 		"client_pn",
 		"connection_current_pn",
 		"connection_pn_translation",
+		"connection_unistream_id_counter",
 		"connection_unistream_id_translation",
-		"client_stream_offset"}
+		"client_stream_offset",
+		"unistream_id_is_retransmission"}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
@@ -127,7 +138,8 @@ func RetireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 			if len(connection_ids[key]) > 0 {
 				break
 			}
-			time.Sleep(10 * time.Millisecond)
+			// <-time.After(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) // TODO: Sleep or After?
 		}
 
 		if len(connection_ids[key]) == 0 {
@@ -192,7 +204,7 @@ func SetBPFMapConnectionID(qconn quic.Connection, v []byte) {
 		return
 	}
 
-	fmt.Println("ipaddr", ipaddr, "port", port)
+	debugPrint("ipaddr", ipaddr, "port", port)
 
 	err := Client_id.Lookup(key, id)
 	if err != nil {
@@ -321,7 +333,7 @@ func GetLargestSentPacketNumber(conn packet_setting.QuicConnection) int64 {
 
 // This function is used for registering the packets that have been sent by the
 // BPF program.
-func RegisterBPFPacket(conn quic.Connection) {
+func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with ringbuffer bpf map
 
 	go func() {
 
@@ -352,56 +364,140 @@ func RegisterBPFPacket(conn quic.Connection) {
 
 	fmt.Println("Start registering packets...")
 
+	// TODO: move to common
+	perfMap, err := ebpf.LoadPinnedMap("/sys/fs/bpf/tc/globals/packet_events", nil)
+	if err != nil {
+		fmt.Println("Error loading perf map")
+		panic(err)
+	}
+	pack_to_reg_rb_reader, err := ringbuf.NewReader(perfMap)
+	if err != nil {
+		fmt.Println("Error creating ringbuffer reader")
+		panic(err)
+	}
+
+	// TODO: remove before final version
+	use_lookup := false // TODO: for easy performance comparison
+	var record *ringbuf.Record = &ringbuf.Record{}
+
 	for {
 
-		// Check if there are packets to register
-		err := Packets_to_register.Lookup(current_index, val)
+		// TODO: add same changes to common and other Lookup examples
+		if !use_lookup {
+			// TODO: instead of sleep, use (if there is) a cheap way to find out if map changed
+			err := pack_to_reg_rb_reader.ReadInto(record) // TODO: ReadInto to reuse memory?
+			// err := error(nil)
+			if err != nil {
+				fmt.Println("Error reading from ringbuffer")
+				panic(err)
+			}
+
+			if len(record.RawSample) < 29 {
+				panic("Record too short")
+			}
+			// fmt.Println("Record:", len(record.RawSample))
+			val = &packet_register_struct{
+				PacketNumber:          binary.LittleEndian.Uint64(record.RawSample[0:8]),
+				SentTime:              binary.LittleEndian.Uint64(record.RawSample[8:16]),
+				Length:                binary.LittleEndian.Uint64(record.RawSample[16:24]),
+				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[24:28]),
+				Valid:                 record.RawSample[28],
+				SpecialRetransmission: record.RawSample[29],
+				Padding:               [2]uint8{0, 0},
+			}
+
+			// if val.PacketNumber <= 39 && val.PacketNumber >= 30 {
+			// 	fmt.Println("Packet number", val.PacketNumber, "at time", time.Now().UnixNano())
+			// }
+
+			// fmt.Printf("Loaded %d bytes from ringbuffer\n", len(record.RawSample))
+
+		} else {
+			time.Sleep(1 * time.Millisecond) // TODO: Sleep or After?
+			// Check if there are packets to register
+			err = Packets_to_register.Lookup(current_index, val)
+		}
+
 		if err == nil && val.Valid == 1 { // TODO: why not valid?
 
 			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
 
-			go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
+			// TODO: this as go routine causes A LOT of go routines. is there any benefit?
+			// go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
 
-				var server_pack packet_setting.RetransmissionPacketContainer
-				for {
+			var server_pack packet_setting.RetransmissionPacketContainer = packet_setting.RetransmissionPacketContainer{
+				Valid:   true,
+				RawData: nil,
+			}
+			// We only need to retrieve the server packet if it is indeed a packet from the server.
+			// Packets from the relay are handled normally.
+			if val.SpecialRetransmission == 1 {
+				for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
 					server_pack = RetreiveServerPacket(int64(val.ServerPN))
 					if server_pack.Valid {
 						break
 					}
-					time.Sleep(1 * time.Millisecond) // TODO: optimal?
+					// <-time.After(1 * time.Millisecond) // TODO: optimal?
+					time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
 				}
-				if len(server_pack.RawData) == 0 {
-					panic("No server packet found")
-				}
+			} else {
+				// In case the packet originated in the relay already we only need to update the packet number
+				// since it is already registered.
 
-				// if server_pack.Length != int64(val.Length) { // TODO: useful check?
-				// 	fmt.Println(server_pack.Length, val.Length)
-				// 	panic("Lengths do not match")
+				packet_number_mapping := packet_setting.PacketNumberMapping{
+					OriginalPacketNumber: int64(val.ServerPN),
+					NewPacketNumber:      int64(val.PacketNumber),
+				}
+				conn.UpdatePacketNumberMapping(packet_number_mapping)
+				return
+
+				// for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
+				// 	server_pack = RetreiveRelayPacket(int64(val.ServerPN))
+				// 	if server_pack.Valid {
+				// 		break
+				// 	}
+				// 	// <-time.After(1 * time.Millisecond) // TODO: optimal?
+				// 	time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
 				// }
+			}
+			if !server_pack.Valid {
+				fmt.Println("No server packet found for packet number", val.ServerPN)
+				panic("No server packet found")
+			}
 
-				packet := packet_setting.PacketRegisterContainerBPF{
-					PacketNumber: int64(val.PacketNumber),
-					SentTime:     int64(val.SentTime),
-					Length:       int64(val.Length), // TODO: length needed if its in server_pack?
+			// if server_pack.Length != int64(val.Length) { // TODO: useful check?
+			// 	fmt.Println(server_pack.Length, val.Length)
+			// 	panic("Lengths do not match")
+			// }
 
-					RawData: server_pack.RawData,
+			// diff := uint64(time.Now().UnixNano()) - val.SentTime
+			// fmt.Println("Diff:", diff, "Val.SentTime:", val.SentTime)
 
-					// These two will be set in the wrapper of the quic connection.
-					Frames:       nil,
-					StreamFrames: nil,
-				}
+			packet := packet_setting.PacketRegisterContainerBPF{
+				PacketNumber: int64(val.PacketNumber),
+				SentTime:     int64(val.SentTime),
+				Length:       int64(val.Length), // TODO: length needed if its in server_pack?
 
-				conn.RegisterBPFPacket(packet)
+				RawData: server_pack.RawData,
 
-				// Set valid to 0 to indicate that the packet has been registered
-				val.Valid = 0
-				err = mp.Update(idx, val, ebpf.UpdateAny)
-				if err != nil {
-					fmt.Println("Error updating buffer map")
-					panic(err)
-				}
+				// These two will be set in the wrapper of the quic connection.
+				Frames:       nil,
+				StreamFrames: nil,
+			}
 
-			}(*val, current_index, Packets_to_register) // this pass by copy is necessary since the goroutine might be executed after the next iteration
+			conn.RegisterBPFPacket(packet)
+			// fmt.Println("Registered packet")
+
+			// Set valid to 0 to indicate that the packet has been registered
+			val.Valid = 0
+			err = Packets_to_register.Update(current_index, val, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating buffer map")
+				panic(err)
+			}
+
+			// TODO: this as go routine causes A LOT of go routines. is there any benefit?
+			// }(*val, current_index, Packets_to_register) // this pass by copy is necessary since the goroutine might be executed after the next iteration
 
 			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
 		}
@@ -429,4 +525,178 @@ func SetConnectionEstablished(ip net.IP, port uint16) error {
 
 	fmt.Println("Connection established for", ip, ":", port)
 	return nil
+}
+
+func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConnection) {
+
+	qconn := conn.(quic.Connection)
+
+	ipaddr, port := GetIPAndPort(qconn, true)
+	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+
+	key := unistream_id_retransmission_struct{
+		IpAddr:   ipaddr_key,
+		Port:     port_key,
+		Padding:  [2]uint8{0, 0},
+		StreamId: stream_id,
+	}
+
+	retrans := &retransmission_val_struct{
+		IsRetransmission: uint8(1),
+	}
+
+	err := Unistream_id_is_retransmission.Update(key, retrans, ebpf.UpdateAny)
+	if err != nil {
+		fmt.Println("Error updating unistream_id_is_retransmission")
+		panic(err)
+	}
+
+	// fmt.Println("Marked stream id as retransmission", key.IpAddr, key.Port, key.StreamId)
+
+}
+
+var already_started_printing = false // TODO: not the most elegant way to do this
+var last_data *packet_setting.CongestionWindowData = nil
+var last_data_mutex = &sync.Mutex{}
+
+func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn packet_setting.QuicConnection) {
+
+	if conn == nil {
+		return // Could be the case in the beginning before the connection is set everywhere
+	}
+	qconn := conn.(quic.Connection)
+
+	if qconn.RemoteAddr().String() == packet_setting.SERVER_ADDR {
+		// We only consider connection ids for client connections.
+		return
+	}
+
+	ipaddr, port := GetIPAndPort(qconn, true)
+	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+
+	key := client_key_struct{
+		Ipaddr:  ipaddr_key,
+		Port:    port_key,
+		Padding: [2]uint8{0, 0},
+	}
+
+	last_data_mutex.Lock()
+	last_data = &data
+	last_data_mutex.Unlock()
+	if !already_started_printing && packet_setting.RELAY_CWND_DATA_PRINT {
+		go startPrintCongestionWindowDataThread()
+		already_started_printing = true
+	}
+
+	client_id := &id_struct{}
+	err := Client_id.Lookup(key, client_id)
+	if err != nil {
+		fmt.Println("Error looking up client_id")
+		fmt.Println("When booting this can occur if the connection is not yet been set up fully")
+		return
+	}
+
+	client_data := &client_data_struct{}
+	err = Client_data.Lookup(client_id, client_data)
+	if err != nil {
+		fmt.Println("Error looking up client_data")
+		panic(err)
+	}
+
+	neededChange := calculateNeededChangeOfPriorityDropLimit(data, client_data)
+	if neededChange == NO_CHANGE {
+		return
+	}
+
+	UnitChangePriorityDropLimit(client_id.Id, neededChange == INCREASE)
+
+}
+
+func calculateNeededChangeOfPriorityDropLimit(data packet_setting.CongestionWindowData, client_data *client_data_struct) int {
+
+	// TODO: add logic to determine if change is needed
+	return NO_CHANGE
+
+}
+
+func UnitChangePriorityDropLimit(c_id uint32, increment bool) error {
+
+	id := &id_struct{
+		Id: c_id,
+	}
+
+	client_info := &client_data_struct{}
+	err := Client_data.Lookup(id, client_info)
+	if err != nil {
+		fmt.Println("Error looking up client_data")
+		return err
+	}
+
+	if client_info.PriorityDropLimit == 0 {
+		return nil
+	}
+
+	if increment {
+		client_info.PriorityDropLimit++
+	} else {
+		client_info.PriorityDropLimit--
+	}
+
+	err = Client_data.Update(id, client_info, ebpf.UpdateAny)
+	if err != nil {
+		fmt.Println("Error updating client_data")
+		return err
+	}
+
+	debugPrint("Successfully updated client_data for retired connection id")
+	return nil
+}
+
+func ChangePriorityDropLimit(c_id uint32, limit uint8) error {
+
+	id := &id_struct{
+		Id: c_id,
+	}
+
+	client_info := &client_data_struct{}
+	err := Client_data.Lookup(id, client_info)
+	if err != nil {
+		fmt.Println("Error looking up client_data")
+		return err
+	}
+
+	client_info.PriorityDropLimit = limit
+
+	err = Client_data.Update(id, client_info, ebpf.UpdateAny)
+	debugPrint("Update at point nr.", 11)
+	if err != nil {
+		fmt.Println("Error updating client_data")
+		return err
+	}
+
+	debugPrint("Successfully updated client_data for retired connection id")
+	return nil
+
+}
+
+func startPrintCongestionWindowDataThread() {
+	for {
+		num_of_routines := runtime.NumGoroutine()
+		last_data_mutex.Lock()
+		fmt.Println("+-----------------------------------------------+")
+		fmt.Println("|\tCongestion window data (", num_of_routines, ")\t\t|")
+		fmt.Println("+-----------------------------------------------+")
+		fmt.Println("|\tMinRTT:\t\t\t", last_data.MinRTT, "\t|")
+		fmt.Println("|\tSmoothedRTT:\t\t", last_data.SmoothedRTT, "\t|")
+		fmt.Println("|\tLatestRTT:\t\t", last_data.LatestRTT, "\t|")
+		fmt.Println("|\tRTTVariance:\t\t", last_data.RTTVariance, "\t\t|")
+		fmt.Println("|\tCongestionWindow:\t", last_data.CongestionWindow, "\t\t|")
+		fmt.Println("|\tBytesInFlight:\t\t", last_data.BytesInFlight, "\t|")
+		fmt.Println("|\tPacketsInFlight:\t", last_data.PacketsInFlight, "\t\t|")
+		fmt.Println("+-----------------------------------------------+")
+		last_data_mutex.Unlock()
+		time.Sleep(1 * time.Second)
+	}
 }

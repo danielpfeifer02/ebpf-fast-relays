@@ -146,7 +146,7 @@ $(BPF_TC_OBJ_TS_EG): ${TC_TS_PATH}/%.o: ${TC_TS_PATH}/%.c
 clean:
 
 	@echo $(CUR_NS)
-
+#	TODO: actually not needed to delete all maps individually, just clear the folder
 	@if [ "$(CUR_NS)" = "relay_ns" ]; then \
 		sudo rm -f $(BPF_TC_PINNED_PATH); \
 		if [ -e "$(BPF_TC_OBJ_ING_SERVER)" ]; then \
@@ -161,12 +161,16 @@ clean:
 			rm -f /sys/fs/bpf/tc/globals/client_pn; \
 			rm -f /sys/fs/bpf/tc/globals/connection_current_pn; \
 			rm -f /sys/fs/bpf/tc/globals/connection_pn_translation; \
+			rm -f /sys/fs/bpf/tc/globals/connection_unistream_id_counter; \
 			rm -f /sys/fs/bpf/tc/globals/connection_unistream_id_translation; \
 			rm -f /sys/fs/bpf/tc/globals/client_stream_offset; \
 			rm -f /sys/fs/bpf/tc/globals/packets_to_register; \
 			rm -f /sys/fs/bpf/tc/globals/index_packets_to_register; \
 			rm -f /sys/fs/bpf/tc/globals/pn_ts_storage; \
 			rm -f /sys/fs/bpf/tc/globals/index_pn_ts_storage; \
+			rm -f /sys/fs/bpf/tc/globals/unistream_id_is_retransmission; \
+			rm -f /sys/fs/bpf/tc/globals/packet_events; \
+			rm -f /sys/fs/bpf/tc/globals/*; \
 			tc filter del dev ${DEV_EG} egress; \
 			tc filter del dev ${DEV_IN} ingress; \
 			tc qdisc del dev ${DEV_EG} clsact; \
@@ -196,6 +200,7 @@ clean:
 			tc filter del dev ${TS_DEV_IN} ingress; \
 			tc qdisc del dev ${TS_DEV_IN} clsact; \
 		fi; \
+		rm -f /sys/fs/bpf/tc/globals/*; \
 	fi
 #	TODO: make a more general way of deleting them independently of the namespace
 	@if [ "$(CUR_NS)" = "server_ns" ]; then \
@@ -206,6 +211,7 @@ clean:
 			tc filter del dev ${TS_DEV_EG} egress; \
 			tc qdisc del dev ${TS_DEV_EG} clsact; \
 		fi; \
+		rm -f /sys/fs/bpf/tc/globals/*; \
 	fi
 
 

@@ -10,6 +10,11 @@ __section("egress")
 int tc_egress(struct __sk_buff *skb)
 {
 
+        if (TURNOFF) {
+                bpf_printk("Dropping because of turn off\n");
+                return TC_ACT_OK;
+        }
+
         // Get data pointers from the buffer.
         void *data = (void *)(long)skb->data;
         void *data_end = (void *)(long)skb->data_end;
@@ -42,7 +47,7 @@ int tc_egress(struct __sk_buff *skb)
         // listening we can pass it through since the packet is from a 
         // different program.
         if (udp->source != RELAY_PORT) {
-                bpf_printk("Not QUIC (port: %d)\n", htons(udp->source));
+                bpf_printk("Not QUIC (port: %d)\n", htons(udp->source));       
                 return TC_ACT_OK;
         }
 
@@ -56,7 +61,7 @@ int tc_egress(struct __sk_buff *skb)
         // In case the packet was redirected from ingress the packet number is always
         // set to zero.
         if (udp->check != 0) {
-                bpf_printk("Checksum not 0 (%d)\n", udp->check);             
+                bpf_printk("Checksum not 0 (%d)\n", udp->check);    
                 user_space = 1;
         }
 
@@ -168,10 +173,12 @@ int tc_egress(struct __sk_buff *skb)
                         // Here we read the old packer number for the connection in question.
                         // We will store that one in the translation map so that the userspace
                         // can retranslate any incoming ACKs.
-                        SAVE_BPF_PROBE_READ_KERNEL(&old_pn, sizeof(old_pn), payload
-                                                                        + 1 /* Short header bits */
-                                                                        + CONN_ID_LEN /* Connection ID */);
-                        old_pn = ntohs(old_pn);
+                        // TODO: why was this here this does not make sense?
+                        // SAVE_BPF_PROBE_READ_KERNEL(&old_pn, sizeof(old_pn), payload
+                        //                                                 + 1 /* Short header bits */
+                        //                                                 + CONN_ID_LEN /* Connection ID */);
+                        // bpf_printk("Old packet number: %d\n", old_pn);
+                        // old_pn = ntohl(old_pn);
 
                         // Now we lookup the next packet number for the connection.
                         uint32_t *new_pn = bpf_map_lookup_elem(&connection_current_pn, &key);
@@ -238,10 +245,14 @@ int tc_egress(struct __sk_buff *skb)
                                 .packet_number = pn_key.packet_number,
                                 .timestamp = time_ns,
                                 .length = payload_size,
-                                .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
+                                // .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
+                                .server_pn = old_pn,
                                 .valid = 1,
+                                .non_userspace = 0,
                         };
                         store_packet_to_register(pack_to_reg);
+                        bpf_printk("Old packet number: %d, New packet numbe: %d\n", old_pn, pn_key.packet_number);
+
 
                         store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 
@@ -258,20 +269,20 @@ int tc_egress(struct __sk_buff *skb)
                                 // Check if the stream is a unidirectional stream
                                 // Unidirectional streams are identified by the second
                                 // least significant bit of the stream id being set to 1.
-                                uint8_t mask = 0x02;
+                                uint8_t mask = 0x03;
                                 uint32_t stream_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 
                                                         1 /* Header flags */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
                                 uint32_t stream_id_off_from_quic = 1 /* Header byte */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
                                 struct var_int stream_id = {0};
                                 // TODO: userspace should make sure that the size of the stream id is always 8 byte to ensure that bpf counter always has space
                                 read_var_int(payload + stream_id_off_from_quic, &stream_id, VALUE_NEEDED); 
-                                uint8_t is_unidirectional = stream_id.value & mask;
+                                uint8_t is_unidirectional_and_server_side = stream_id.value & mask;
 
                                 // bpf_printk("stream id to be updated: %d\n", stream_id.value);
 
                                 // If the stream is unidirectional we need to update the stream id
-                                if (is_unidirectional) {
-                                        update_stream_id(stream_id, skb, stream_id_off, &key);
+                                if (is_unidirectional_and_server_side == mask) {
+                                        update_stream_id(stream_id, skb, stream_id_off, &key, RELAY_ORIGIN);
                                 }
                         }
 
@@ -696,20 +707,20 @@ int tc_egress(struct __sk_buff *skb)
                         // Check if the stream is a unidirectional stream
                         // Unidirectional streams are identified by the second
                         // least significant bit of the stream id being set to 1.
-                        uint8_t mask = 0x02;
+                        uint8_t mask = 0x03;
                         uint32_t stream_id_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + 
                                                 1 /* Header flags */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
                         uint32_t stream_id_off_from_quic = 1 /* Header byte */ + CONN_ID_LEN + pn_len + 1 /* Frame type (0x08-0x0f) */;
                         struct var_int stream_id = {0};
                         // TODO: userspace should make sure that the size of the stream id is always 8 byte to ensure that bpf counter always has space
                         read_var_int(payload + stream_id_off_from_quic, &stream_id, VALUE_NEEDED); 
-                        uint8_t is_unidirectional = stream_id.value & mask;
+                        uint8_t is_unidirectional_and_server_side = stream_id.value & mask;
 
                         // bpf_printk("stream id to be updated: %d\n", stream_id.value);
 
                         // If the stream is unidirectional we need to update the stream id
-                        if (is_unidirectional) {
-                                update_stream_id(stream_id, skb, stream_id_off, &key);
+                        if (is_unidirectional_and_server_side == mask) {
+                                update_stream_id(stream_id, skb, stream_id_off, &key, MEDIA_SERVER_ORIGIN);
                         }
 
 
@@ -836,6 +847,7 @@ int tc_egress(struct __sk_buff *skb)
                         .length = payload_size,
                         .server_pn = old_pn,
                         .valid = 1,
+                        .non_userspace = 1,
                 };
                 store_packet_to_register(pack_to_reg);
 
@@ -911,8 +923,9 @@ int tc_egress(struct __sk_buff *skb)
                         .length = payload_size,
                         .server_pn = -1, // -1 -> we don't care right now // TODO: what to do with long headers?
                         .valid = 1,
+                        .non_userspace = 0, // TODO: register_packet_t: long header can only be from userspace (verify)
                 };
-                store_packet_to_register(pack_to_reg);
+                // store_packet_to_register(pack_to_reg); // TODO: even needed for long headers?
 
                 store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 

@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"common.com/common"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
@@ -48,11 +49,23 @@ const cache_packet_size = 1024
 const relay_printing_rtt = false
 
 // Specify if the relay should print the congestion analysis information.
-const relay_printing_congestion_analysis = true
+// Basci info contains congestion window size and bytes in flight.
+const relay_printing_congestion_analysis = false
+
+// Specity if the relay should print some extra analsis information
+// like EWMA, standard deviation, etc.
+const relay_printing_additional_congestion_analysis = false
+
+// Specify if the relay should print the congestion window data.
+const relay_printing_congestion_window = false
 
 // Specify whether metrics should be saved to a mysql database
 // for visualization in grafana.
-const grafana_usage = true
+const grafana_usage = false
+
+// Specify if the relay should log the cpu usage using pprof.
+const log_cpu_performance = true
+const cpu_log_time = 30 * time.Second
 
 // Specify wether the default test video should be played by the server
 // or if an actual video file should be played.
@@ -63,7 +76,7 @@ const DEBUG_PRINT = false
 
 // Specify if the relay should create a video config managing window
 // which allows for easier debugging / changing of the video settings.
-const video_config_window = true
+const video_config_window = false
 
 // Sepcifications for a sender of video data.
 var sender_specs = sender_spec_struct{
@@ -77,7 +90,7 @@ var sender_specs = sender_spec_struct{
 
 // Specifying if the server application should allow the user to change the
 // sender spcifications.
-const server_changing_sender_specs = true
+const server_changing_sender_specs = false
 
 // Specifying if the relay application should allow the user to change the
 // sender spcifications.
@@ -98,6 +111,9 @@ const oob_addr_server = "192.168.11.2:12345"
 // This is the connection at the relay that will receive the packet number and
 // timestamp data from the client.
 var oob_conn quic.Connection
+
+// Specify if oob communication should be used.
+const use_oob = false
 
 // Defaut alpha value for exponential weighted moving average.
 const default_ewma_alpha = 0.01
@@ -121,7 +137,7 @@ func mainConfig() {
 	// set from outside the underlying QUIC implementation.
 	// This is not needed if the packet number translation from
 	// within the bpf program is used.
-	packet_setting.ALLOW_SETTING_PN = false
+	packet_setting.ALLOW_SETTING_PN = true
 
 	// Specify if two end points should exchange the priority of a
 	// created stream (i.e. if the server should send it to the client).
@@ -155,9 +171,11 @@ func relayConfig() {
 	if bpf_enabled {
 
 		// Load the BPF maps
-		loadBPFMaps()
+		common.LoadBPFMaps()
+		loadBPFMaps() // TODO: switch to only one setup (the common one)
 
 		InitializeCacheSetup()
+		common.InitializeCacheSetup()
 
 		packet_setting.StoreServerPacket = StoreServerPacket
 
@@ -172,6 +190,11 @@ func relayConfig() {
 
 		// This is to get the highest packet number of a connection that was sent
 		packet_setting.ConnectionGetLargestSentPacketNumber = getLargestSentPacketNumber
+
+		packet_setting.MarkStreamIdAsRetransmission = common.MarkStreamIdAsRetransmission
+
+		packet_setting.RELAY_CWND_DATA_PRINT = relay_printing_congestion_analysis
+		packet_setting.HandleCongestionMetricUpdate = common.HandleCongestionMetricUpdate
 
 		// TODO: fix in prio_packs repo?
 		packet_setting.SET_ONLY_APP_DATA = true
@@ -188,7 +211,9 @@ func relayConfig() {
 	packet_setting.IS_CLIENT = false
 
 	// Setup an out of band connection for the relay
-	setupOOBConnectionRelaySide()
+	if use_oob {
+		setupOOBConnectionRelaySide()
+	}
 }
 
 func clientConfig() {
@@ -211,7 +236,9 @@ func clientConfig() {
 	// stored in the bpf map (for RTT analysis).
 	packet_setting.ReceivedPacketAtTimestampHandler = receivedPacketAtTimestamp
 
-	setupOOBConnectionClientSide()
+	if use_oob {
+		setupOOBConnectionClientSide()
+	}
 }
 
 // Setup basic QUIC config for server/relay/client

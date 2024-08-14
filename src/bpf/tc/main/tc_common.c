@@ -49,30 +49,39 @@
 // and number of storable packet number translations.
 // These have been arbitrarily chosen and can be adjusted.
 #define MAX_CLIENTS 1024
-#define MAX_STREAMS_PER_CLIENT 16
+#define MAX_STREAMS_PER_CLIENT 1024
 // Since the packet number translations are deleted by the userspace program
 // 1024 might not even be necessary and this could be lowered.
-#define MAX_PN_TRANSLATIONS 1024
+#define MAX_PN_TRANSLATIONS 1 << 15 // 32768 // TODO: what size is sufficient?
 // The same goes for the unistream id translations.
 // This is necessary since the IDs also have to be unique even if
 // the relay and the forwarding mechanism open streams at the same time.
 // Therefore translate in the relay.
-#define MAX_UNISTREAM_ID_TRANSLATIONS 1024
+#define MAX_UNISTREAM_ID_TRANSLATIONS 1<<15 // 32768 // TODO: what size is sufficient?
+// This stores the maximum number of ids stores at the same
+// time to identify them as being part of a retransmission.
+#define MAX_RETRANSMISSION_IDS_STORED 1<<15 // 32768 // TODO: what size is sufficient? (why are the entries not properly deleted?)
 // The maximum number of frames that are expected to be in a packet.
 // For now this is just an arbitrary number and can be adjusted.
 // Not sure if there is any limit defined in the QUIC standard.
 #define MAX_FRAMES_PER_PACKET 16
 // The maximum number of packets in the queue that have to be registered
-#define MAX_REGISTER_QUEUE_SIZE 1<<11 // 2048 // TODO: what size is sufficient?
+#define MAX_REGISTER_QUEUE_SIZE 1<<15 // 32768 // TODO: what size is sufficient?
 // The maximum number of pairs of packet number and timestamp that can be stored
 // for RTT calculations.
-#define MAX_PN_TS_PAIRS 1<<11 // 2048 // TODO: what size is sufficient?
+#define MAX_PN_TS_PAIRS 1<<15 // 32768 // TODO: what size is sufficient?
+// Defines the size of the rinbuffer used for packet events
+#define MAX_PACKET_EVENTS 1<<15 // 32768 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
 // which is also used in the userspace program (i.e. should be changed with care).
 #define RELAY_PORT htons(4242)
 #define SERVER_PORT htons(4242)
 #define PORT_MARKER htons(6969)
+
+// These markers tell if a unistream originates from the relay or the media server.
+#define RELAY_ORIGIN 1
+#define MEDIA_SERVER_ORIGIN 2
 
 // For now only stream and datagram frames are supported.
 #define IS_STREAM_FRAME(x) ((x) >= 0x08 && (x) <= 0x0f)
@@ -99,6 +108,7 @@
 
 // These definitions are mostly used for development purposes.
 #define TURNOFF 0
+#define TURNOFF_INGRESS_FORWARDING 0
 #define PRIO_DROP 1
 #define MOQ_PAYLOAD 1
 #define VP8_VIDEO_PAYLOAD 1
@@ -169,11 +179,18 @@ struct client_pn_map_key_t {
         uint32_t packet_number;
 };
 
-// Struct that represents the key for the map
-// containing the unistream id translations.
-struct client_unistream_id_map_key_t {
+// This struct servers for the retransmission check of unidirectional stream ids.
+struct client_unistream_id_pair_t {
         struct client_info_key_t key;
         uint64_t unistream_id;
+};
+
+// Struct that represents the key for the map
+// containing the unistream id translations.
+struct client_unistream_id_lookup_key_t {
+        struct client_unistream_id_pair_t key;
+        uint8_t unistream_origin;
+        uint8_t padding[7];
 };
 
 // Struct that represents the key for the map
@@ -193,7 +210,8 @@ struct register_packet_t { // TODO: what fields are necessary?
         uint32_t server_pn;
 
         uint8_t valid;
-        uint8_t padding[3];
+        uint8_t non_userspace;
+        uint8_t padding[2];
 };
 
 // This struct represents an entry in the ring buffer storing
@@ -304,9 +322,23 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } connection_pn_translation SEC(".maps");
 
+// This map acts as the counter for the next unidirectional stream id.
+// This is needed since the Media Server and the Relay both might open
+// uni-directional streams and the stream ids have to be unique.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, struct client_info_key_t);
+    __type(value, uint64_t);
+    __uint(max_entries, MAX_UNISTREAM_ID_TRANSLATIONS); // TODO: separate size?
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} connection_unistream_id_counter SEC(".maps");
+
+// This map is used to be able to lookup if a unidirectional stream id
+// already has been translated.
+// This is needed to avoid translating the same stream id multiple times.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_unistream_id_lookup_key_t);
     __type(value, uint64_t);
     __uint(max_entries, MAX_UNISTREAM_ID_TRANSLATIONS);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
@@ -364,42 +396,154 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } index_pn_ts_storage SEC(".maps");
 
+// This map stores if the unirectional stream id is part of a retransmission 
+// by the relay. This is needed when updating the stream id to make sure that 
+// retransmission do not get a new stream id when they should reuse the old one
+// (they would potentially get a new one since the origin of the stream differs).
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct client_unistream_id_pair_t);
+    __type(value, uint8_t);
+    __uint(max_entries, MAX_RETRANSMISSION_IDS_STORED);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} unistream_id_is_retransmission SEC(".maps");
+
+// This is used to signal events (mainly arrival of a new packet to register) to 
+// the userspace program.
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, MAX_PACKET_EVENTS);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} packet_events SEC(".maps");
+// const char* packet_events_pin_path = "/sys/fs/bpf/tc/packet_events";
+
 
 // ++++++++++++++++++ FUNCTION DEFINITIONS ++++++++++++++++++ //
 
-// Update the stream id of a packet.
-__attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key) {
-        bpf_printk("Unidirectional stream with id %d\n", stream_id.value);
 
-        // struct client_unistream_id_map_key_t unistream_key = {
-        //         .key = key,
-        //         .unistream_id = stream_id.value,
-        // };
-        uint64_t *new_stream_id = bpf_map_lookup_elem(&connection_unistream_id_translation, key);
-        
-        uint64_t initial = 0b11; // 0b11 == unidirectional and server initiated
-        if (new_stream_id == NULL) {
-                bpf_printk("No unidirectional stream id found\n");
-                bpf_map_update_elem(&connection_unistream_id_translation, key, &initial, BPF_ANY);
-                new_stream_id = &initial;
+// Storing a packet to register in the ring buffer which allows for more efficient 
+// communication with the userspace program.
+__attribute__((always_inline)) int32_t store_packet_to_register_rb(struct register_packet_t packet) {
+
+        // TODO: how to signal to packet_events 
+        struct register_packet_t *data = bpf_ringbuf_reserve(&packet_events, sizeof(struct register_packet_t), 0); // TODO: check flags for waking up / not waking up
+        if (!data)
+                return 0;
+        *data = packet;
+        bpf_ringbuf_submit(data, 0); // TODO: check correct flags for wake up 8https://stackoverflow.com/questions/74092376/regarding-the-ebpf-question-bpf-ringbuf-submit-is-not-in-effect)
+        return 0;
+}
+
+// Update the stream id of a packet.
+__attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key, uint8_t unistream_origin) {
+
+        // return 0;
+        if (skb==NULL || key==NULL) {
+                bpf_printk("Invalid arguments for update_stream_id\n");
+                return 1;
         }
-        uint64_t next_stream_id = *new_stream_id + 0b100; //((*new_stream_id >> 2) + 1) << 2 | 0b10;
-        bpf_map_update_elem(&connection_unistream_id_translation, key, &next_stream_id, BPF_ANY);
-        // Store new_stream_id in the packet
+
+        struct client_unistream_id_pair_t stream_id_key = {
+                .key = *key,
+                .unistream_id = stream_id.value
+        };
+
+        // uint64_t ts = bpf_ktime_get_tai_ns();
+        // if (unistream_origin == RELAY_ORIGIN) {
+        //         bpf_printk("Relay origin for %d %lu\n", stream_id.value, ts);
+        // } else {
+        //         bpf_printk("Media server origin for %d %lu\n", stream_id.value, ts);
+        // }
+
+        // In case the origin is the relay userspace we need to check if it is a retransmission of a packet.
+        // If it is a retransmission we can find out by checking the translation map with the origin set to
+        // the media server. If there is an entry with it we know the media server has snet out on a unidirectional
+        // stream with the same stream id. This does not necessarly mean that the relay is not just coincidentally
+        // at the same stream id counter though. That's why we need to use a different map where the relay sets the 
+        // stream id to be a retransmission explicitly. That way we can rule out accidental reusage of the same stream id.
+        if (unistream_origin == RELAY_ORIGIN) {
+
+                uint8_t *is_retransmission = bpf_map_lookup_elem(&unistream_id_is_retransmission, &stream_id_key);
+                if (is_retransmission != NULL && *is_retransmission == 1) {
+                        bpf_printk("Retransmission detected\n");
+                        unistream_origin = MEDIA_SERVER_ORIGIN;
+                        bpf_map_delete_elem(&unistream_id_is_retransmission, &stream_id.value); // TODO: seems to not work?
+                } else {
+                        bpf_printk("Nothing detected for %d %d %d\n", key->ip_addr, key->port, stream_id.value);
+                }
+
+
+                // TODO: isn't the stream id already correct in case of a retransmission?
+                // TODO: is the packet registering process working properly regarding stream id (i.e. not, for exmple, storing before adapting stream id)?
+                // TODO: check with caching to make sure that the stream id in the wire.frame matches the one we actually want.
+                // TODO:        StoreServerPacket(...) in cache_common.go (A_MoQ code) is called in connection.go (prio-packs code)
+                // TODO:        and does store the raw short header data the relay gets from the server. 
+                // TODO:        -> the stream_id should be set correctly by just changing the origin.
+        }
+
+        struct client_unistream_id_lookup_key_t unistream_key = {
+                .key = stream_id_key,
+                // TODO: how to handle retranmissions that come from the relay but should be sent with a stream id of the media server?
+                .unistream_origin = unistream_origin
+        };
+
+        // TODO: maybe egress does not identify relay- / server-sent packets correctly 
+
+        uint64_t *translation = bpf_map_lookup_elem(&connection_unistream_id_translation, &unistream_key);
+        
+        // These are only needed if the stream id is not already translated.
+        // They need to be out here to avoid problems with out of scope variables.
+        uint64_t *new_stream_id;
+        uint64_t initial = 0b11; // 0b11 == unidirectional and server initiated.
+
+        // If not already translated, translate it.
+        if (translation == NULL) {
+                new_stream_id = bpf_map_lookup_elem(&connection_unistream_id_counter, key);
+                
+                if (new_stream_id == NULL) {
+                        bpf_printk("No unidirectional stream id found\n");
+                        bpf_map_update_elem(&connection_unistream_id_counter, key, &initial, BPF_ANY);
+                        new_stream_id = &initial;
+                }
+
+                // TODO: this map needs to be cleaned at some point?
+                int unistr_ret = bpf_map_update_elem(&connection_unistream_id_translation, &unistream_key, new_stream_id, BPF_ANY); 
+                // TODO: In case the map update is actually to slow -> maybe use the return value + BPF_NOEXIST to avoid the problem?
+
+                // Do not touch the two least significant bits since they inicate stream type.
+                uint64_t next_stream_id = *new_stream_id + 0b100;
+                bpf_map_update_elem(&connection_unistream_id_counter, key, &next_stream_id, BPF_ANY);
+
+                translation = new_stream_id;
+
+                // TODO: somehow the video does not play correcty is this print is not there. I assume this is because of the map update
+                // TODO: takes until the next packet is already being processed and this one then accesses old data?
+                // TODO: using 5 * "%d" seems to be necessary since for 4 * "%d" it still does not work.
+                bpf_printk("Unidirectional stream id mapping registered from %d to %d (%d %d %d)\n", stream_id.value, *new_stream_id, key->ip_addr, key->port, unistream_origin); 
+
+        } 
+
+        // Store new_stream_id in the packet.
         // TODO: for now userspace is expected to always use 8 byte stream ids
         uint8_t new_stream_id_bytes[8] = {0};
         for (int i=0; i<8; i++) {
-                new_stream_id_bytes[i] = (*new_stream_id >> (56 - 8 * i)) & 0xff;
+                new_stream_id_bytes[i] = (*translation >> (56 - 8 * i)) & 0xff;
         }
-        // TODO: check that only 62 bits are used
-        new_stream_id_bytes[0] |= 0xc0; // Set length
+        // Check that only 62 bits are used.
+        if (new_stream_id_bytes[0] & 0xc0) {
+                bpf_printk("Stream id too large\n");
+                return 1;
+        }
+        // Set length.
+        new_stream_id_bytes[0] |= 0xc0;
+        // TODO: make size 8 a constant in config.
         bpf_skb_store_bytes(skb, stream_id_off, new_stream_id_bytes, 8, 0);
-        bpf_printk("Unidirectional stream id updated from %d to %d\n", stream_id.value, *new_stream_id);
+        bpf_printk("Unidirectional stream id updated from %d to %d (%d)\n", stream_id.value, *translation, unistream_origin);
 
         return 0;
 }
 
-// Store packet-number and timestamp for potential RTT calculation.f
+// Store packet-number and timestamp for potential RTT calculation.
 __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, uint64_t timestamp, uint32_t ip_addr, uint16_t port) {
 
         uint32_t zero = 0;
@@ -430,6 +574,12 @@ __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, u
 // by the userspace program.
 __attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) { // TODO: need to consider ip and port to support multiple clients
 
+        bpf_printk("Storing packet to register with pn %d\n", packet.packet_number);
+        // TODO: just for testing
+        store_packet_to_register_rb(packet);
+        return 0;
+
+        // TODO: remove usage of normal map
         uint32_t zero = 0;
         uint32_t *index = bpf_map_lookup_elem(&index_packets_to_register, &zero);
         if (index == NULL) {

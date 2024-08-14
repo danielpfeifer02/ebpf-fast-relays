@@ -1,0 +1,15 @@
+\begin{table}
+\caption{Table for CPU usage of relay Go processes}
+\label{tab:example}
+\begin{tabular}{llllll}
+\toprule
+flat & flat\% & sum\% & cum & cum\% & cause \\
+\midrule
+440ms & 25.58\% & 25.58\% & 440ms & 25.58\% & runtime/internal/syscall.Syscall6 \\
+180ms & 10.47\% & 36.05\% & 180ms & 10.47\% & runtime.futex \\
+130ms & 7.56\% & 43.60\% & 150ms & 8.72\% & runtime.cgocall \\
+40ms & 2.33\% & 45.93\% & 50ms & 2.91\% & runtime.findObject \\
+40ms & 2.33\% & 48.26\% & 110ms & 6.40\% & runtime.stealWork \\
+\bottomrule
+\end{tabular}
+\end{table}

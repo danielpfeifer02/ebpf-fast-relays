@@ -1,18 +1,46 @@
-# Adaptive_MoQ
-Adaptive media streaming implementation ideas using AF_XDP, TC, eBPF and potentially NIC offload
+# eBPF-Assisted Relays for Media-Streaming
+This repository contains eBPF programs that allow kernel-space
+forwarding of packets for a decrease in forwarding delay.
+This approach avoids immediate user-space processing and delays 
+it until after a packet was forwarded.
+For this we use the TC hook point for BPF both on ingress and 
+egress side.
 
-## Add an ingress packet handler based on eBPF using XDP hook ##
-Execute 'sudo make ingress' inside of the directory 'loopback_quic/'
+## Contents ##
+The repository contains, aside from the eBPF programs, also
+application level implementations of server, relay and client side
+(within ``src/go/examples``), as well as shell scripts that allow for 
+easy setup, testing and analysis.
+The examples contain a chat example where messages are kernel-forwarded
+and a video example where a video stream is created using gstreamer and
+kernel-forwarded.
+There is also a "proof-of-concept" example that just shows that forwarding 
+from ingress to egress still triggers the egress eBPF program.
+A special performance analysis implementation of the application layer
+is also provided such that there is no need to actually transmit video
+data but mock-data is sent instead.
 
-## Add an egress packet handler based on eBPF using TC hook ##
-Execute 'sudo make egress' inside of the directory 'loopback_quic/'
+## Set up the namespaces ##
+- Go into the directory ``src/shell/``
+- Run the following commands to set up the bridges and namespaces:<br />
+    ``sudo sh ser-rel-bridge.sh`` <br />
+    ``sudo sh rel-cli-bridge.sh``
+- After the bridges and namespaces have been set up you can test the setup 
+by executing the following command:<br />
+    ``sudo sh test-setup.sh``
+- In case you want to use grafana for the same ip that is used in our code
+you need to run:<br />
+    ``sudo sh add_db_ip.sh``
 
-## Remove all packet handlers ##
-Execute 'sudo make clean' inside of the directory 'loopback_quic/'
+## Enter a namespace and run the corresponding application layer program ##
+- To enter a certain namespace you need to execute the following command from within the directory ``src/go/examples/priority_drop_video``:<br />
+    ``sudo sh start_scripts/(server|relay|client)_start.sh``
+- After that you can run the program using:<br />
+    ``source execute.sh``
 
-## Run the example of adaptive packet handling ##
-0)  Navigate inside the 'loopback_quic' folder
-1)  Execute 'sudo make ingress' to build and hook the eBPF program inside the kernel
-2)  Execute 'sudo make manage' to build the c program that will handle the eBPF-map access that is used to enable/disable the packet dropping
-3)  Execute 'go run *.go' to run the main program loop of the example
-4)  Execute 'sudo make clean' to remrove all the files and unhook the eBPF program from the kernel
+## After program is done running clean up potential left-overs ##
+- To clean up potential left-overs after running an application layer
+program that used kernel-forwarding run:<br />
+    ``source delete.sh``
+
+This, for example, removes all used eBPF programs that have been hooked to TC.

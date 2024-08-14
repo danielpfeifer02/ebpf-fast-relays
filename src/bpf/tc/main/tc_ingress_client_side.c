@@ -182,6 +182,11 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 // in the relay user space program.
                 bpf_map_update_elem(&client_data, cid, &value, BPF_ANY);
 
+        } else if (header_form == 0) { // Short header
+                
+                // TODO: this should not be needed since the stream id translation is only for unidirectional streams
+                // In case a short header comes in we need to check if we should re-translate the stream id such that the relay can understand it.
+                
         }
 
         return TC_ACT_OK;

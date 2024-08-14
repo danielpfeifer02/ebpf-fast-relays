@@ -693,3 +693,89 @@ cs     0x33
 fs     0x0
 gs     0x0
 exit status 2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+goroutine 7838 [running]:
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHistory).SentBPFPacket_test(0x698022b?, 0xede1a4873?)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_history.go:98 +0x65
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).RegisterBPFPacket(0x7e92e020fb98?, {0x1661, 0x17df69ae170ac02b, 0x22, {0xc003584e20, 0xf, 0xf}, {0x20395a0, 0x0, 0x0}, ...}, ...)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:367 +0x53a
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).RegisterBPFPacket(0xc000394808, {0x1661, 0x17df69ae170ac02b, 0x22, {0xc003584e20, 0xf, 0xf}, {0x20395a0, 0x0, 0x0}, ...})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:2834 +0x3db
+main.registerBPFPacket.func2({0x1661, 0x17df69ae170ac02b, 0x22, 0x1468, 0x1, {0x0, 0x0, 0x0}}, {0x0?}, 0xc0001c2f00)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:368 +0x1fd
+created by main.registerBPFPacket in goroutine 162
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:336 +0x285
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x19 pc=0x72fcc5]
+
+goroutine 7840 [running]:
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHistory).SentBPFPacket_test(0x69858ef?, 0xede1a4873?)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_history.go:98 +0x65
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).RegisterBPFPacket(0x7e92d80da9d8?, {0x1663, 0x17df69ae170b16ef, 0x58f, {0xc0036dc000, 0x57c, 0x57c}, {0x20395a0, 0x0, 0x0}, ...}, ...)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:367 +0x53a
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).RegisterBPFPacket(0xc000394808, {0x1663, 0x17df69ae170b16ef, 0x58f, {0xc0036dc000, 0x57c, 0x57c}, {0x20395a0, 0x0, 0x0}, ...})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:2834 +0x3db
+main.registerBPFPacket.func2({0x1663, 0x17df69ae170b16ef, 0x58f, 0x146a, 0x1, {0x0, 0x0, 0x0}}, {0x4de?}, 0xc0001c2f00)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:368 +0x1fd
+created by main.registerBPFPacket in goroutine 162
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:336 +0x285
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x19 pc=0x72fcc5]
+
+goroutine 7839 [running]:
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHistory).SentBPFPacket_test(0x69822e3?, 0xede1a4873?)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_history.go:98 +0x65
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).RegisterBPFPacket(0x0?, {0x1662, 0x17df69ae170ae0e3, 0x22, {0xc003584e50, 0xf, 0xf}, {0x20395a0, 0x0, 0x0}, ...}, ...)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:367 +0x53a
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).RegisterBPFPacket(0xc000394808, {0x1662, 0x17df69ae170ae0e3, 0x22, {0xc003584e50, 0xf, 0xf}, {0x20395a0, 0x0, 0x0}, ...})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:2834 +0x3db
+main.registerBPFPacket.func2({0x1662, 0x17df69ae170ae0e3, 0x22, 0x1469, 0x1, {0x0, 0x0, 0x0}}, {0x0?}, 0xc0001c2f00)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:368 +0x1fd
+created by main.registerBPFPacket in goroutine 162
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:336 +0x285
+exit status 2
+root@danpfei02-ThinkPad-T14-Gen-3:/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video# ^C
+root@danpfei02-ThinkPad-T14-Gen-3:/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video# 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+panic: This should not happen (BPF packet insertion failed)
+
+goroutine 46283 [running]:
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHistory).SentBPFPacket_test(0x2f3c3b3d?, 0xede1b69f1?)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_history.go:115 +0x267
+github.com/danielpfeifer02/quic-go-prio-packs/internal/ackhandler.(*sentPacketHandler).RegisterBPFPacket(0xc0040d81a0?, {0x7ce7, 0x17dfad1553e8653d, 0x58f, {0xc004934c00, 0x57c, 0x57c}, {0x20395a0, 0x0, 0x0}, ...}, ...)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/internal/ackhandler/sent_packet_handler.go:367 +0x53a
+github.com/danielpfeifer02/quic-go-prio-packs.(*connection).RegisterBPFPacket(0xc00054a808, {0x7ce7, 0x17dfad1553e8653d, 0x58f, {0xc004934c00, 0x57c, 0x57c}, {0x20395a0, 0x0, 0x0}, ...})
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/quic-go-prio-packs/connection.go:2834 +0x3db
+main.registerBPFPacket.func2({0x7ce7, 0x17dfad1553e8653d, 0x58f, 0x7b87, 0x1, {0x0, 0x0, 0x0}}, {0x0?}, 0xc0000b6f50)
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:373 +0x1fd
+created by main.registerBPFPacket in goroutine 113
+	/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/Adaptive_MoQ/src/go/examples/priority_drop_video/bpf_handlers.go:341 +0x285
+exit status 2

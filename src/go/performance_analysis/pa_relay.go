@@ -8,6 +8,7 @@ import (
 
 	"common.com/common"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
+	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 )
 
 func relay() {
@@ -81,16 +82,27 @@ func relay() {
 	} else {
 		end_chan := make(chan struct{})
 		go func() {
-			dtg, err := server_conn.ReceiveDatagram(ctx)
-			if err != nil {
-				fmt.Println("Error receiving datagram from server")
-				panic(err)
+			var dtg []byte
+			for {
+				dtg, err = server_conn.ReceiveDatagram(ctx)
+				if err != nil {
+					fmt.Println("Error receiving datagram from server")
+					panic(err)
+				}
+				if string(dtg) == "END" {
+					fmt.Println("Received END datagram from server")
+					break
+				} else {
+					fmt.Println("Received unexpected datagram from server", string(dtg))
+				}
 			}
 			fmt.Println("Received END datagram from server")
-			client_conn.SendDatagram(dtg)
-			time.Sleep(1 * time.Second)
+			for i := 0; i < 10; i++ {
+				client_conn.SendDatagram([]byte(fmt.Sprintf("END%d", i)))
+			}
+			<-time.After(1 * time.Second)
 			os.Exit(0)
-			time.Sleep(100 * time.Millisecond)
+			<-time.After(100 * time.Millisecond)
 			end_chan <- struct{}{}
 		}()
 
@@ -100,6 +112,8 @@ func relay() {
 
 func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context.Context, end_chan chan struct{}) {
 	ts_buffer := make([]byte, payload_length)
+
+	packets_sent := 0
 
 	for {
 		select {
@@ -126,14 +140,31 @@ func relay_stream_handling(server_conn, client_conn quic.Connection, ctx context
 					fmt.Println("Error opening stream to client")
 					panic(err)
 				}
-				fmt.Println("Stream id to client:", client_str.StreamID())
+				packet_setting.DebugPrintln("Stream id to client:", client_str.StreamID())
 				// defer client_str.Close()
 
+				if ts_buffer[0] != 0 {
+					panic("First byte is not 0")
+				}
 				ts_buffer[0] = ts_buffer[0] | USERSPACE_FLAG
-				_, err = client_str.Write(ts_buffer[:n])
+
+				// TODO: just for debugging
+				new_buffer := make([]byte, n+1)
+				copy(new_buffer[0:], ts_buffer[:n])
+
+				new_buffer[n] = byte(0x01)
+				n, err = client_str.Write(new_buffer)
 				if err != nil {
 					fmt.Println("Error writing to client")
 					panic(err)
+				}
+				if n != len(new_buffer) {
+					panic(fmt.Errorf("wrote %d bytes, expected %d", n, len(new_buffer)))
+				}
+				client_str.Close()
+				packets_sent++
+				if packets_sent == number_of_analysis_packets {
+					fmt.Println("Forwarded all packets")
 				}
 			}
 		}

@@ -42,8 +42,9 @@ type packet_register_struct struct {
 
 	ServerPN uint32
 
-	Valid   uint8
-	Padding [3]uint8
+	Valid                 uint8
+	SpecialRetransmission uint8
+	Padding               [2]uint8
 }
 
 type index_key_struct struct {

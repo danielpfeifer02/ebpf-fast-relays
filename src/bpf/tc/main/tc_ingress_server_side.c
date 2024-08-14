@@ -154,6 +154,9 @@ int tc_ingress(struct __sk_buff *skb)
                         
                         // We need to use clone_redirect to redirect the packet to the egress program
                         // since otherwise we get errors when changing the packet in here.
+                        if (TURNOFF_INGRESS_FORWARDING) {
+                                break; // TODO: not the most efficient place for this check but works for now
+                        }
                         bpf_clone_redirect(skb, veth2_egress_ifindex, 0);
                 
                 }

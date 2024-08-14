@@ -19,6 +19,12 @@ var sent_storage map[[6]byte]map[uint64]uint64
 var sent_storage_lock = sync.Mutex{}
 
 func setupOOBConnectionRelaySide() {
+
+	if !bpf_enabled {
+		fmt.Println("BPF not enabled, not setting up out of band connection since it does not make sense")
+		return
+	}
+
 	ctx := context.Background()
 	tlsConfig := generateTLSConfig(false)
 	listener, err := quic.ListenAddr(oob_addr_server, tlsConfig, generateQUICConfig())
@@ -42,6 +48,12 @@ func setupOOBConnectionRelaySide() {
 }
 
 func setupOOBConnectionClientSide() {
+
+	if !bpf_enabled {
+		fmt.Println("BPF not enabled, not setting up out of band connection since it does not make sense")
+		return
+	}
+
 	ctx := context.Background()
 	tlsConfig := generateTLSConfig(false)
 	conn, err := quic.DialAddr(ctx, oob_addr_server, tlsConfig, generateQUICConfig())
@@ -76,7 +88,7 @@ func startOOBHandler() {
 
 func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection) {
 	if oob_conn == nil {
-		fmt.Println("Out of band connection not initialized")
+		// fmt.Println("Out of band connection not initialized")
 		return
 	}
 	buf := make([]byte, 22) // 8 bytes for pn, 8 bytes for ts, 4 bytes for IP, 2 bytes for port
