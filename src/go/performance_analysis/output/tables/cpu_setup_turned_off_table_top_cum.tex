@@ -1,0 +1,15 @@
+\begin{table}
+\caption{Table for cumulative CPU usage of relay Go processes}
+\label{tab:example}
+\begin{tabular}{llllll}
+\toprule
+flat & flat\% & sum\% & cum & cum\% & cause \\
+\midrule
+0 & 0\% & 0\% & 580ms & 33.72\% & runtime.schedule \\
+0 & 0\% & 0\% & 570ms & 33.14\% & runtime.mcall \\
+0 & 0\% & 0\% & 450ms & 26.16\% & runtime.park\_m \\
+440ms & 25.58\% & 25.58\% & 440ms & 25.58\% & runtime/internal/syscall.Syscall6 \\
+30ms & 1.74\% & 27.33\% & 410ms & 23.84\% & runtime.findRunnable \\
+\bottomrule
+\end{tabular}
+\end{table}

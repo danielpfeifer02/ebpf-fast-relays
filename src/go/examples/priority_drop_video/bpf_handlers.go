@@ -437,6 +437,7 @@ func registerBPFPacket(conn quic.Connection) {
 			conn.RegisterBPFPacket(packet)
 
 			// Set valid to 0 to indicate that the packet has been registered
+			// TODO: not needed anymore
 			val.Valid = 0
 			err = mp.Update(idx, val, ebpf.UpdateAny)
 			if err != nil {
