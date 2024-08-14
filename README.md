@@ -9,12 +9,12 @@ egress side.
 ## Contents ##
 The repository contains, aside from the eBPF programs, also
 application level implementations of server, relay and client side
-(within src/go/examples), as well as shell scripts that allow for 
+(within ``src/go/examples``), as well as shell scripts that allow for 
 easy setup, testing and analysis.
 The examples contain a chat example where messages are kernel-forwarded
 and a video example where a video stream is created using gstreamer and
 kernel-forwarded.
-There is also a "proof of concept" example that just shows that forwarding 
+There is also a "proof-of-concept" example that just shows that forwarding 
 from ingress to egress still triggers the egress eBPF program.
 A special performance analysis implementation of the application layer
 is also provided such that there is no need to actually transmit video
@@ -33,7 +33,7 @@ you need to run:<br />
     ``sudo sh add_db_ip.sh``
 
 ## Enter a namespace and run the corresponding application layer program ##
-- To enter a certain namespace you need to execute the following command from within the directory src/go/examples/priority_drop_video:<br />
+- To enter a certain namespace you need to execute the following command from within the directory ``src/go/examples/priority_drop_video``:<br />
     ``sudo sh start_scripts/(server|relay|client)_start.sh``
 - After that you can run the program using:<br />
     ``source execute.sh``
@@ -43,4 +43,4 @@ you need to run:<br />
 program that used kernel-forwarding run:<br />
     ``source delete.sh``
 
-This, for example, removes all used eBPF programs that have been hooked to TC
+This, for example, removes all used eBPF programs that have been hooked to TC.
