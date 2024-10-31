@@ -206,6 +206,7 @@ struct register_packet_t { // TODO: what fields are necessary?
         uint64_t packet_number;
         uint64_t timestamp;
         uint64_t length;
+        uint64_t offset;
 
         uint32_t server_pn;
 
@@ -574,7 +575,7 @@ __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, u
 // by the userspace program.
 __attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) { // TODO: need to consider ip and port to support multiple clients
 
-        bpf_printk("Storing packet to register with pn %d\n", packet.packet_number);
+        bpf_printk("Storing packet to register with pn %d and offset %d\n", packet.packet_number, packet.offset);
         // TODO: just for testing
         store_packet_to_register_rb(packet);
         return 0;

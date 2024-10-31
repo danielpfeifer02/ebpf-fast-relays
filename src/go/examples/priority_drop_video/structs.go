@@ -39,6 +39,7 @@ type packet_register_struct struct {
 	PacketNumber uint64
 	SentTime     uint64
 	Length       uint64
+	Offset       uint64
 
 	ServerPN uint32
 

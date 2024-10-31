@@ -237,29 +237,15 @@ int tc_egress(struct __sk_buff *skb)
 
                         uint64_t time_ns = bpf_ktime_get_tai_ns();
 
-                        // Userspace packets do not need to be registered (in theory).
-                        // However somehow the userspace needs to know the translation of the
-                        // packet number so an easy way is to also register the packet.
-                        // TODO: other way to tell userspace the translation?
-                        struct register_packet_t pack_to_reg = {
-                                .packet_number = pn_key.packet_number,
-                                .timestamp = time_ns,
-                                .length = payload_size,
-                                // .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
-                                .server_pn = old_pn,
-                                .valid = 1,
-                                .non_userspace = 0,
-                        };
-                        store_packet_to_register(pack_to_reg);
-                        bpf_printk("Old packet number: %d, New packet numbe: %d\n", old_pn, pn_key.packet_number);
-
-
                         store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 
                         // uint8_t pl[4] = {0x00, 0x00, 0x00, 0x00};
                         // SAVE_BPF_PROBE_READ_KERNEL(&pl, sizeof(pl), payload+23);
                         // bpf_printk("Userspace packet %02x %02x %02x %02x\n", pl[0], pl[1], pl[2], pl[3]);
 
+                        // In case the frame contains an offset field we need to read it and hand it to the userspace
+                        // for potential retransmissions. In case it is not present the offset is to be interpreted as 0. 
+                        uint64_t data_offset = 0;
 
                         // Change stream id if unistream is used
                         uint8_t frame_type;
@@ -284,7 +270,33 @@ int tc_egress(struct __sk_buff *skb)
                                 if (is_unidirectional_and_server_side == mask) {
                                         update_stream_id(stream_id, skb, stream_id_off, &key, RELAY_ORIGIN);
                                 }
+
+                                // Check if the offset field is present and potentially read it.
+                                uint8_t off_bit_set = frame_type & 0x04;
+                                if (off_bit_set) {
+                                        struct var_int stream_offset = {0};
+                                        uint32_t stream_offset_off = stream_id_off + bounded_var_int_len(stream_id.len);
+                                        read_var_int(payload + stream_offset_off, &stream_offset, VALUE_NEEDED);
+                                        data_offset = stream_offset.value;
+                                }
                         }
+
+                        // Userspace packets do not need to be registered (in theory).
+                        // However somehow the userspace needs to know the translation of the
+                        // packet number so an easy way is to also register the packet.
+                        // TODO: other way to tell userspace the translation?
+                        struct register_packet_t pack_to_reg = {
+                                .packet_number = pn_key.packet_number,
+                                .timestamp = time_ns,
+                                .length = payload_size, // TODO: check if this is the same as the actual length field (if present) - maybe it's not needed bc only one frame per packet?
+                                .offset = data_offset,
+                                // .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
+                                .server_pn = old_pn,
+                                .valid = 1,
+                                .non_userspace = 0,
+                        };
+                        store_packet_to_register(pack_to_reg);
+                        bpf_printk("Old packet number: %d, New packet numbe: %d\n", old_pn, pn_key.packet_number);
 
 
                         return TC_ACT_OK;
@@ -361,6 +373,10 @@ int tc_egress(struct __sk_buff *skb)
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
                 SAVE_BPF_PROBE_READ_KERNEL(&frame_type, sizeof(frame_type), payload + frame_off);
 
+                // In case the frame is a stream frame we need to read the stream offset.
+                // In case it is not present it is to be interpreted as 0.
+                uint64_t data_offset = 0;
+
                 // In case we have a stream frame and the stream is used for multiple packets
                 // (i.e. not one stream per packet) we need to make some extra considerations 
                 // like handling the stream offset.
@@ -395,6 +411,9 @@ int tc_egress(struct __sk_buff *skb)
 
                         // ^ TODO: clean up vvvvvv
                         if (off_bit_set) {
+
+                                // TODO: normally the offset (if present) should be stored in the retransmission container
+                                // TODO: but since this part will be removed soon it is not in this case.
 
                                 // if the offset field is present we read it.
                                 uint32_t stream_offset_off = stream_id_off + bounded_var_int_len(stream_id.len);
@@ -723,6 +742,15 @@ int tc_egress(struct __sk_buff *skb)
                                 update_stream_id(stream_id, skb, stream_id_off, &key, MEDIA_SERVER_ORIGIN);
                         }
 
+                        // Check if the offset field is present and potentially read it.
+                        uint8_t off_bit_set = frame_type & 0x04;
+                        if (off_bit_set) {
+                                struct var_int stream_offset = {0};
+                                uint32_t stream_offset_off = stream_id_off_from_quic + bounded_var_int_len(stream_id.len);
+                                read_var_int(payload + stream_offset_off, &stream_offset, VALUE_NEEDED);
+                                data_offset = stream_offset.value;
+                        }
+
 
                         // TODO: anything to do for stream frames with individual
                         // TODO: stream per packet?
@@ -845,6 +873,7 @@ int tc_egress(struct __sk_buff *skb)
                         .packet_number = (uint64_t)(*new_pn - 1),
                         .timestamp = time_ns,
                         .length = payload_size,
+                        .offset = data_offset,
                         .server_pn = old_pn,
                         .valid = 1,
                         .non_userspace = 1,

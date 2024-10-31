@@ -1,0 +1,134 @@
+[H[2J[3JCurrent namespace: relay_ns
+relay_ns
+rm -f ../go/examples/priority_drop_video/build/main
+rm -f ../go/examples/priority_drop_chat/build/main
+rm -f ../go/examples/ingress_to_egress/build/main
+clang -S \
+	-Dveth2_egress_ifindex=14 \
+	-g \
+	-target bpf \
+  -I../../libbpf/src\
+  -I../../iproute2/include\
+	-Wall \
+	-O2 -emit-llvm -c -o tc/main/tc_common.ll tc/main/tc_common.c
+llc -march=bpf -filetype=obj -O2 -o tc/main/tc_common.o tc/main/tc_common.ll
+clang -S \
+	-Dveth2_egress_ifindex=14 \
+	-g \
+	-target bpf \
+  -I../../libbpf/src\
+  -I../../iproute2/include\
+	-Wall \
+	-O2 -emit-llvm -c -o tc/main/tc_egress_client_side.ll tc/main/tc_egress_client_side.c
+llc -march=bpf -filetype=obj -O2 -o tc/main/tc_egress_client_side.o tc/main/tc_egress_client_side.ll
+clang -S \
+	-Dveth2_egress_ifindex=14 \
+	-g \
+	-target bpf \
+  -I../../libbpf/src\
+  -I../../iproute2/include\
+	-Wall \
+	-O2 -emit-llvm -c -o tc/main/tc_frame_length_lut.ll tc/main/tc_frame_length_lut.c
+llc -march=bpf -filetype=obj -O2 -o tc/main/tc_frame_length_lut.o tc/main/tc_frame_length_lut.ll
+clang -S \
+	-Dveth2_egress_ifindex=14 \
+	-g \
+	-target bpf \
+  -I../../libbpf/src\
+  -I../../iproute2/include\
+	-Wall \
+	-O2 -emit-llvm -c -o tc/main/tc_ingress_client_side.ll tc/main/tc_ingress_client_side.c
+llc -march=bpf -filetype=obj -O2 -o tc/main/tc_ingress_client_side.o tc/main/tc_ingress_client_side.ll
+clang -S \
+	-Dveth2_egress_ifindex=14 \
+	-g \
+	-target bpf \
+  -I../../libbpf/src\
+  -I../../iproute2/include\
+	-Wall \
+	-O2 -emit-llvm -c -o tc/main/tc_ingress_server_side.ll tc/main/tc_ingress_server_side.c
+llc -march=bpf -filetype=obj -O2 -o tc/main/tc_ingress_server_side.o tc/main/tc_ingress_server_side.ll
+tc qdisc add dev veth1 clsact
+tc qdisc add dev veth2 clsact
+tc filter add dev veth1 ingress bpf da obj tc/main/tc_ingress_server_side.o sec ingress
+tc filter add dev veth2 egress bpf da obj tc/main/tc_egress_client_side.o sec egress
+tc filter add dev veth2 ingress bpf da obj tc/main/tc_ingress_client_side.o sec ingress_from_client
+tc filter show dev veth1 ingress
+filter protocol all pref 49152 bpf chain 0 
+filter protocol all pref 49152 bpf chain 0 handle 0x1 tc_ingress_server_side.o:[ingress] direct-action not_in_hw id 1108 tag 34c882a112469035 jited 
+tc filter show dev veth2 egress
+filter protocol all pref 49152 bpf chain 0 
+filter protocol all pref 49152 bpf chain 0 handle 0x1 tc_egress_client_side.o:[egress] direct-action not_in_hw id 1115 tag d58e2e22f2bd9947 jited 
+ifindex for veth2: 14
+Loaded map /sys/fs/bpf/tc/globals/id_counter
+Loaded map /sys/fs/bpf/tc/globals/client_data
+Loaded map /sys/fs/bpf/tc/globals/number_of_clients
+Loaded map /sys/fs/bpf/tc/globals/client_id
+Loaded map /sys/fs/bpf/tc/globals/connection_established
+Loaded map /sys/fs/bpf/tc/globals/client_pn
+Loaded map /sys/fs/bpf/tc/globals/connection_current_pn
+Loaded map /sys/fs/bpf/tc/globals/connection_pn_translation
+Loaded map /sys/fs/bpf/tc/globals/connection_unistream_id_counter
+Loaded map /sys/fs/bpf/tc/globals/connection_unistream_id_translation
+Loaded map /sys/fs/bpf/tc/globals/client_stream_offset
+Loaded map /sys/fs/bpf/tc/globals/packets_to_register
+Loaded map /sys/fs/bpf/tc/globals/index_packets_to_register
+Loaded map /sys/fs/bpf/tc/globals/pn_ts_storage
+Loaded map /sys/fs/bpf/tc/globals/index_pn_ts_storage
+Loaded map /sys/fs/bpf/tc/globals/unistream_id_is_retransmission
+Loaded map /sys/fs/bpf/tc/globals/id_counter
+Loaded map /sys/fs/bpf/tc/globals/client_data
+Loaded map /sys/fs/bpf/tc/globals/number_of_clients
+Loaded map /sys/fs/bpf/tc/globals/client_id
+Loaded map /sys/fs/bpf/tc/globals/connection_established
+Loaded map /sys/fs/bpf/tc/globals/client_pn
+Loaded map /sys/fs/bpf/tc/globals/connection_current_pn
+Loaded map /sys/fs/bpf/tc/globals/connection_pn_translation
+Loaded map /sys/fs/bpf/tc/globals/connection_unistream_id_counter
+Loaded map /sys/fs/bpf/tc/globals/connection_unistream_id_translation
+Loaded map /sys/fs/bpf/tc/globals/client_stream_offset
+Loaded map /sys/fs/bpf/tc/globals/packets_to_register
+Loaded map /sys/fs/bpf/tc/globals/index_packets_to_register
+Loaded map /sys/fs/bpf/tc/globals/pn_ts_storage
+Loaded map /sys/fs/bpf/tc/globals/index_pn_ts_storage
+Loaded map /sys/fs/bpf/tc/globals/unistream_id_is_retransmission
+[H[2JClearing BPF map at path: /sys/fs/bpf/tc/globals/client_data
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/client_id
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/id_counter
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/number_of_clients
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/client_pn
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/connection_current_pn
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/connection_pn_translation
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/connection_unistream_id_counter
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/connection_unistream_id_translation
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/client_stream_offset
+Map cleared successfully.
+
+Clearing BPF map at path: /sys/fs/bpf/tc/globals/unistream_id_is_retransmission
+Map cleared successfully.
+
+time=2024-10-28T10:29:15.453+01:00 level=INFO source=/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:63 msg="sending message" MOQ_CONTROL_STREAM.message="ClientSetupMessage:{\"SupportedVersions\":[4278190083],\"SetupParameters\":{\"0\":{}}}"
+time=2024-10-28T10:29:15.458+01:00 level=INFO source=/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:37 msg="handling message" MOQ_CONTROL_STREAM.message="ServerSetupMessage:{\"SelectedVersion\":4278190083,\"SetupParameters\":{\"0\":{}}}"
+moq peer connected
+time=2024-10-28T10:29:15.459+01:00 level=INFO source=/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:37 msg="handling message" MOQ_CONTROL_STREAM.message="AnnounceMessage:{\"TrackNamespace\":\"video\",\"TrackRequestParameters\":{}}"
+time=2024-10-28T10:29:15.459+01:00 level=INFO source=/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:63 msg="sending message" MOQ_CONTROL_STREAM.message="SubscribeMessage:{\"SubscribeID\":0,\"TrackAlias\":0,\"TrackNamespace\":\"video\",\"TrackName\":\"video\",\"StartGroup\":{\"Mode\":0,\"Value\":0},\"StartObject\":{\"Mode\":0,\"Value\":0},\"EndGroup\":{\"Mode\":0,\"Value\":0},\"EndObject\":{\"Mode\":0,\"Value\":0},\"Parameters\":{}}"
+time=2024-10-28T10:29:15.459+01:00 level=INFO source=/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:63 msg="sending message" MOQ_CONTROL_STREAM.message="AnnounceOkMessage:{\"TrackNamespace\":\"video\"}"
+time=2024-10-28T10:29:15.464+01:00 level=INFO source=/home/danpfei02/Desktop/Technical_University_of_Munich/thesis/gst-prio-moq-app/priority-moqtransport/session.go:37 msg="handling message" MOQ_CONTROL_STREAM.message="SubscribeOkMessage:{\"SubscribeID\":0,\"Expires\":0,\"ContentExists\":false,\"FinalGroup\":0,\"FinalObject\":0}"

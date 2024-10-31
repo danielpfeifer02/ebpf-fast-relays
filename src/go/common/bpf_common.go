@@ -382,6 +382,9 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 
 	for {
 
+		// print size of ringbuffer
+		// fmt.Println("Size of ringbuffer:", pack_to_reg_rb_reader.BufferSize())
+
 		// TODO: add same changes to common and other Lookup examples
 		if !use_lookup {
 			// TODO: instead of sleep, use (if there is) a cheap way to find out if map changed
@@ -400,9 +403,10 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 				PacketNumber:          binary.LittleEndian.Uint64(record.RawSample[0:8]),
 				SentTime:              binary.LittleEndian.Uint64(record.RawSample[8:16]),
 				Length:                binary.LittleEndian.Uint64(record.RawSample[16:24]),
-				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[24:28]),
-				Valid:                 record.RawSample[28],
-				SpecialRetransmission: record.RawSample[29],
+				Offset:                binary.LittleEndian.Uint64(record.RawSample[24:32]),
+				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[32:36]),
+				Valid:                 record.RawSample[36],
+				SpecialRetransmission: record.RawSample[37],
 				Padding:               [2]uint8{0, 0},
 			}
 
@@ -420,7 +424,7 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 
 		if err == nil && val.Valid == 1 { // TODO: why not valid?
 
-			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
+			// fmt.Println("Read into record: ", val.PacketNumber, val.SentTime, val.Length, val.ServerPN, val.Valid, val.SpecialRetransmission)
 
 			// TODO: this as go routine causes A LOT of go routines. is there any benefit?
 			// go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
@@ -429,9 +433,10 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 				Valid:   true,
 				RawData: nil,
 			}
+
 			// We only need to retrieve the server packet if it is indeed a packet from the server.
 			// Packets from the relay are handled normally.
-			if val.SpecialRetransmission == 1 {
+			if val.SpecialRetransmission == 1 || true { // TODO: turn back on (not sure what this is)
 				for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
 					server_pack = RetreiveServerPacket(int64(val.ServerPN))
 					if server_pack.Valid {
@@ -439,6 +444,10 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 					}
 					// <-time.After(1 * time.Millisecond) // TODO: optimal?
 					time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
+				}
+				if !server_pack.Valid {
+					fmt.Println("No server packet found for packet number", val.ServerPN)
+					continue // panic("No server packet found")
 				}
 			} else {
 				// In case the packet originated in the relay already we only need to update the packet number
@@ -449,7 +458,8 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 					NewPacketNumber:      int64(val.PacketNumber),
 				}
 				conn.UpdatePacketNumberMapping(packet_number_mapping)
-				return
+
+				// continue // TODO why was this here?
 
 				// for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
 				// 	server_pack = RetreiveRelayPacket(int64(val.ServerPN))
@@ -460,10 +470,6 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 				// 	time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
 				// }
 			}
-			if !server_pack.Valid {
-				fmt.Println("No server packet found for packet number", val.ServerPN)
-				panic("No server packet found")
-			}
 
 			// if server_pack.Length != int64(val.Length) { // TODO: useful check?
 			// 	fmt.Println(server_pack.Length, val.Length)
@@ -473,10 +479,18 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			// diff := uint64(time.Now().UnixNano()) - val.SentTime
 			// fmt.Println("Diff:", diff, "Val.SentTime:", val.SentTime)
 
+			// TODO: at this point we need to have the raw data of the packet
+			if len(server_pack.RawData) == 0 {
+				panic("No raw data found")
+			}
+
+			fmt.Println("Offset be like:", val.Offset, "Packet number be like:", val.PacketNumber)
+
 			packet := packet_setting.PacketRegisterContainerBPF{
 				PacketNumber: int64(val.PacketNumber),
 				SentTime:     int64(val.SentTime),
 				Length:       int64(val.Length), // TODO: length needed if its in server_pack?
+				Offset:       int64(val.Offset),
 
 				RawData: server_pack.RawData,
 
@@ -500,6 +514,8 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			// }(*val, current_index, Packets_to_register) // this pass by copy is necessary since the goroutine might be executed after the next iteration
 
 			current_index.Index = uint32((current_index.Index + 1) % uint32(max_register_queue_size))
+		} else if err == nil {
+			fmt.Println("Packet not valid?") //, err, val.Valid)
 		}
 
 	}

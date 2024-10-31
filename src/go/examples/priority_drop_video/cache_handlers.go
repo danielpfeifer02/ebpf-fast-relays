@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
@@ -18,6 +19,9 @@ func StoreServerPacket(pn, ts int64, data []byte,
 	conn packet_setting.QuicConnection) {
 	lock.Lock()
 	defer lock.Unlock()
+
+	fmt.Println("Storing server packet for pn", pn)
+
 	storage_server_packets[pn] = packet_setting.RetransmissionPacketContainer{
 		PacketNumber: pn,
 		Length:       int64(len(data)),
@@ -37,6 +41,7 @@ func RetreiveServerPacket(pn int64) packet_setting.RetransmissionPacketContainer
 			Valid: false,
 		}
 	}
+	fmt.Println("Retrieving server packet for pn", pn)
 	lock.Lock()
 	defer lock.Unlock()
 	if _, ok := storage_server_packets[pn]; ok {

@@ -22,10 +22,10 @@ func InitializeCacheSetup() {
 
 func StoreServerPacket(pn, ts int64, data []byte,
 	conn packet_setting.QuicConnection) {
+
+	// fmt.Println("Storing (from common) server packet for pn", pn)
 	lock.Lock()
 	defer lock.Unlock()
-
-	// fmt.Println("Storing server packet", hex.Dump(data))
 
 	storage_server_packets[pn] = packet_setting.RetransmissionPacketContainer{
 		PacketNumber: pn,
@@ -72,6 +72,7 @@ func RetreiveServerPacket(pn int64) packet_setting.RetransmissionPacketContainer
 			Valid: false,
 		}
 	}
+	// fmt.Println("Retrieving (from common) server packet for pn", pn)
 	lock.Lock()
 	defer lock.Unlock()
 	if _, ok := storage_server_packets[pn]; ok {

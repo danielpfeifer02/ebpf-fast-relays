@@ -371,9 +371,10 @@ func registerBPFPacket(conn quic.Connection) {
 				PacketNumber:          binary.LittleEndian.Uint64(record.RawSample[0:8]),
 				SentTime:              binary.LittleEndian.Uint64(record.RawSample[8:16]),
 				Length:                binary.LittleEndian.Uint64(record.RawSample[16:24]),
-				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[24:28]),
-				Valid:                 record.RawSample[28],
-				SpecialRetransmission: record.RawSample[29],
+				Offset:                binary.LittleEndian.Uint64(record.RawSample[24:32]),
+				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[32:36]),
+				Valid:                 record.RawSample[36],
+				SpecialRetransmission: record.RawSample[37],
 				Padding:               [2]uint8{0, 0},
 			}
 

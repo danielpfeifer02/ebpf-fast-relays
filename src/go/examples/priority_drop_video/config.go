@@ -177,7 +177,7 @@ func relayConfig() {
 		InitializeCacheSetup()
 		common.InitializeCacheSetup()
 
-		packet_setting.StoreServerPacket = StoreServerPacket
+		packet_setting.StoreServerPacket = common.StoreServerPacket
 
 		// TODO: check if those three functions are correctly implemented
 		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
@@ -209,6 +209,7 @@ func relayConfig() {
 	// This was mainly used for development purposes.
 	// TODO: is this still used?
 	packet_setting.IS_CLIENT = false
+	packet_setting.IS_RELAY = true
 
 	// Setup an out of band connection for the relay
 	if use_oob {
