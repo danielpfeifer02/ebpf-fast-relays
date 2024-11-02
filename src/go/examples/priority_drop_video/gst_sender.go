@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
@@ -165,10 +166,14 @@ func createSendPipeline(flow *moqtransport.SendSubscription) (*gst.Pipeline, err
 			}
 			log.Printf("buffer len: %v, written: %v\n", len(samples), n)
 
-			err = stream.Close()
-			if err != nil {
-				return gst.FlowError
-			}
+			// err = stream.Close() // TODO: cannot close immediately due to possible retransmissions?
+			// if err != nil {
+			// 	return gst.FlowError
+			// }
+			go func() {
+				time.Sleep(2 * time.Second)
+				stream.Close()
+			}()
 			/*} else {
 				err := flow.NewObjectPreferDatagram(0, 0, 0, samples)
 				if err != nil {

@@ -115,7 +115,9 @@ func createReceivePipeline(flow *moqtransport.ReceiveSubscription) (*gst.Pipelin
 			if n == 0 {
 				continue
 			}
-			// fmt.Println("Received", n, "bytes")
+			if buf[n-1] == 0x69 {
+				fmt.Println("Received", n, "bytes", buf[n-5:n])
+			}
 			send_chan <- buf[:n]
 		}
 	}()
@@ -143,8 +145,10 @@ func createReceivePipelineFromChannel(recv_chan chan []byte) (*gst.Pipeline, err
 		  interlace-mode=(string)progressive, pixel-aspect-ratio=(fraction)1/1, 
 		  chroma-site=(string)mpeg2, colorimetry=(string)bt709, framerate=(fraction)25/1
 
+		! queue max-size-buffers=0 max-size-time=0 max-size-bytes=0 min-threshold-time=1000000000
 		! autovideosink
 	`
+	// TODO: add a queue to avoid case where retransmit is slower than sink? (! queue max-size-time=0 min-threshold-time=4000000000)
 
 	pipeline, err := gst.NewPipelineFromString(pstr)
 	if err != nil {

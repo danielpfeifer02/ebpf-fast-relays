@@ -427,6 +427,7 @@ func registerBPFPacket(conn quic.Connection) {
 				PacketNumber: int64(val.PacketNumber),
 				SentTime:     int64(val.SentTime),
 				Length:       int64(val.Length), // TODO: length needed if its in server_pack?
+				Offset:       int64(val.Offset),
 
 				RawData: server_pack.RawData,
 

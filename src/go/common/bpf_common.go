@@ -400,14 +400,14 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			}
 			// fmt.Println("Record:", len(record.RawSample))
 			val = &packet_register_struct{
-				PacketNumber:          binary.LittleEndian.Uint64(record.RawSample[0:8]),
-				SentTime:              binary.LittleEndian.Uint64(record.RawSample[8:16]),
-				Length:                binary.LittleEndian.Uint64(record.RawSample[16:24]),
-				Offset:                binary.LittleEndian.Uint64(record.RawSample[24:32]),
-				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[32:36]),
-				Valid:                 record.RawSample[36],
-				SpecialRetransmission: record.RawSample[37],
-				Padding:               [2]uint8{0, 0},
+				PacketNumber:    binary.LittleEndian.Uint64(record.RawSample[0:8]),
+				SentTime:        binary.LittleEndian.Uint64(record.RawSample[8:16]),
+				Length:          binary.LittleEndian.Uint64(record.RawSample[16:24]),
+				Offset:          binary.LittleEndian.Uint64(record.RawSample[24:32]),
+				ServerPN:        binary.LittleEndian.Uint32(record.RawSample[32:36]),
+				Valid:           record.RawSample[36],
+				ForwardedPacket: record.RawSample[37],
+				Padding:         [2]uint8{0, 0},
 			}
 
 			// if val.PacketNumber <= 39 && val.PacketNumber >= 30 {
@@ -436,9 +436,14 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 
 			// We only need to retrieve the server packet if it is indeed a packet from the server.
 			// Packets from the relay are handled normally.
-			if val.SpecialRetransmission == 1 || true { // TODO: turn back on (not sure what this is)
+			if true { // TODO: turn back on (not sure what this is)
 				for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
+					// if val.ForwardedPacket == 1 {
 					server_pack = RetreiveServerPacket(int64(val.ServerPN))
+					// } else if val.ForwardedPacket == 0 { // Userspace / retransmission packet
+					// 	fmt.Println("Try reading relay stored packet")
+					// 	server_pack = RetreiveRelayPacket(int64(val.ServerPN))
+					// }
 					if server_pack.Valid {
 						break
 					}
@@ -447,7 +452,8 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 				}
 				if !server_pack.Valid {
 					fmt.Println("No server packet found for packet number", val.ServerPN)
-					continue // panic("No server packet found")
+					// continue //
+					panic("No server packet found")
 				}
 			} else {
 				// In case the packet originated in the relay already we only need to update the packet number
@@ -484,7 +490,7 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 				panic("No raw data found")
 			}
 
-			fmt.Println("Offset be like:", val.Offset, "Packet number be like:", val.PacketNumber)
+			// fmt.Println("Offset be like:", val.Offset, "Packet number be like:", val.PacketNumber)
 
 			packet := packet_setting.PacketRegisterContainerBPF{
 				PacketNumber: int64(val.PacketNumber),

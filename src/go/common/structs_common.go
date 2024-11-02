@@ -43,9 +43,9 @@ type packet_register_struct struct {
 
 	ServerPN uint32 // TODO: rename into OldPacketNumber since its not necessarily the server's packet number
 
-	Valid                 uint8
-	SpecialRetransmission uint8
-	Padding               [2]uint8
+	Valid           uint8
+	ForwardedPacket uint8
+	Padding         [2]uint8
 }
 
 type index_key_struct struct {

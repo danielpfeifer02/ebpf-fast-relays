@@ -63,6 +63,7 @@ int tc_egress(struct __sk_buff *skb)
         if (udp->check != 0) {
                 bpf_printk("Checksum not 0 (%d)\n", udp->check);    
                 user_space = 1;
+                udp->check = 0;
         }
 
         // In case the packet was redirected from ingress the destination port is always
@@ -296,7 +297,7 @@ int tc_egress(struct __sk_buff *skb)
                                 .non_userspace = 0,
                         };
                         store_packet_to_register(pack_to_reg);
-                        bpf_printk("Old packet number: %d, New packet numbe: %d\n", old_pn, pn_key.packet_number);
+                        bpf_printk("Old packet number: %d, New packet number: %d\n", old_pn, pn_key.packet_number);
 
 
                         return TC_ACT_OK;
