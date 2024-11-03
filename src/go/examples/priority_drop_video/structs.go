@@ -43,9 +43,7 @@ type packet_register_struct struct {
 
 	ServerPN uint32
 
-	Valid                 uint8
-	SpecialRetransmission uint8
-	Padding               [2]uint8
+	Flags uint32
 }
 
 type packet_is_retransmission_struct struct {

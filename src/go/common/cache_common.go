@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
@@ -8,6 +9,9 @@ import (
 
 var storage_server_packets map[int64]packet_setting.RetransmissionPacketContainer
 var lock *sync.Mutex
+
+var debug_length = 20
+var debug_packet_storage = false
 
 var storage_relay_packets map[int64]packet_setting.RetransmissionPacketContainer
 var lock_relay *sync.Mutex
@@ -34,6 +38,14 @@ func StoreServerPacket(pn, ts int64, data []byte,
 		RawData:      data,
 		Valid:        true,
 	}
+
+	if debug_packet_storage {
+		fmt.Print("Storing (from common) server packet for pn ", pn, " and data:")
+		for i := 0; i < min(len(data), debug_length); i++ {
+			fmt.Printf(" %x", data[i])
+		}
+		fmt.Println()
+	}
 }
 
 func StoreRelayPacket(pn, ts int64, data []byte,
@@ -46,6 +58,14 @@ func StoreRelayPacket(pn, ts int64, data []byte,
 		Timestamp:    ts, // TODO: correct timestamp?
 		RawData:      data,
 		Valid:        true,
+	}
+
+	if debug_packet_storage {
+		fmt.Print("Storing (from common) relay packet for pn ", pn, " and data:")
+		for i := 0; i < min(len(data), debug_length); i++ {
+			fmt.Printf(" %x", data[i])
+		}
+		fmt.Println()
 	}
 }
 

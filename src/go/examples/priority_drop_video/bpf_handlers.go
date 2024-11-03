@@ -368,14 +368,12 @@ func registerBPFPacket(conn quic.Connection) {
 			}
 			// fmt.Println("Record:", len(record.RawSample))
 			val = &packet_register_struct{
-				PacketNumber:          binary.LittleEndian.Uint64(record.RawSample[0:8]),
-				SentTime:              binary.LittleEndian.Uint64(record.RawSample[8:16]),
-				Length:                binary.LittleEndian.Uint64(record.RawSample[16:24]),
-				Offset:                binary.LittleEndian.Uint64(record.RawSample[24:32]),
-				ServerPN:              binary.LittleEndian.Uint32(record.RawSample[32:36]),
-				Valid:                 record.RawSample[36],
-				SpecialRetransmission: record.RawSample[37],
-				Padding:               [2]uint8{0, 0},
+				PacketNumber: binary.LittleEndian.Uint64(record.RawSample[0:8]),
+				SentTime:     binary.LittleEndian.Uint64(record.RawSample[8:16]),
+				Length:       binary.LittleEndian.Uint64(record.RawSample[16:24]),
+				Offset:       binary.LittleEndian.Uint64(record.RawSample[24:32]),
+				ServerPN:     binary.LittleEndian.Uint32(record.RawSample[32:36]),
+				Flags:        binary.LittleEndian.Uint32(record.RawSample[36:40]),
 			}
 
 			// fmt.Printf("Loaded %d bytes from ringbuffer\n", len(record.RawSample))
@@ -386,7 +384,11 @@ func registerBPFPacket(conn quic.Connection) {
 			err = packets_to_register.Lookup(current_index, val)
 		}
 
-		if err == nil && val.Valid == 1 { // TODO: why not valid?
+		valid := val.Flags&packet_setting.VALID_FLAG > 0
+		userspace := val.Flags&packet_setting.USERSPACE_FLAG > 0
+		retransmission := val.Flags&packet_setting.RETRANSMISSION_FLAG > 0
+
+		if err == nil && valid { // TODO: why not valid?
 
 			// fmt.Println("Register packet number", val.PacketNumber, "at index", current_index.Index, "at time", time.Now().UnixNano())
 
@@ -403,7 +405,7 @@ func registerBPFPacket(conn quic.Connection) {
 				RawData: nil,
 			}
 
-			if val.SpecialRetransmission == 1 {
+			if retransmission || userspace { // ! TODO: this is obviously not correct but the whole class should be removed anyway
 				for i := 0; i < 1_000; i++ {
 					server_pack = RetreiveServerPacket(int64(val.ServerPN))
 					if server_pack.Valid {
@@ -440,7 +442,7 @@ func registerBPFPacket(conn quic.Connection) {
 
 			// Set valid to 0 to indicate that the packet has been registered
 			// TODO: not needed anymore
-			val.Valid = 0
+			val.Flags = val.Flags & ^packet_setting.VALID_FLAG
 			err = mp.Update(idx, val, ebpf.UpdateAny)
 			if err != nil {
 				fmt.Println("Error updating buffer map")

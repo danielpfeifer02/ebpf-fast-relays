@@ -380,6 +380,7 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 	use_lookup := false // TODO: for easy performance comparison
 	var record *ringbuf.Record = &ringbuf.Record{}
 
+skip_retrieval:
 	for {
 
 		// print size of ringbuffer
@@ -400,14 +401,12 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			}
 			// fmt.Println("Record:", len(record.RawSample))
 			val = &packet_register_struct{
-				PacketNumber:    binary.LittleEndian.Uint64(record.RawSample[0:8]),
-				SentTime:        binary.LittleEndian.Uint64(record.RawSample[8:16]),
-				Length:          binary.LittleEndian.Uint64(record.RawSample[16:24]),
-				Offset:          binary.LittleEndian.Uint64(record.RawSample[24:32]),
-				ServerPN:        binary.LittleEndian.Uint32(record.RawSample[32:36]),
-				Valid:           record.RawSample[36],
-				ForwardedPacket: record.RawSample[37],
-				Padding:         [2]uint8{0, 0},
+				PacketNumber: binary.LittleEndian.Uint64(record.RawSample[0:8]),
+				SentTime:     binary.LittleEndian.Uint64(record.RawSample[8:16]),
+				Length:       binary.LittleEndian.Uint64(record.RawSample[16:24]),
+				Offset:       binary.LittleEndian.Uint64(record.RawSample[24:32]),
+				ServerPN:     binary.LittleEndian.Uint32(record.RawSample[32:36]),
+				Flags:        binary.LittleEndian.Uint32(record.RawSample[36:40]),
 			}
 
 			// if val.PacketNumber <= 39 && val.PacketNumber >= 30 {
@@ -422,7 +421,11 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			err = Packets_to_register.Lookup(current_index, val)
 		}
 
-		if err == nil && val.Valid == 1 { // TODO: why not valid?
+		valid := val.Flags&packet_setting.VALID_FLAG > 0
+		userspace := val.Flags&packet_setting.USERSPACE_FLAG > 0
+		retransmission := val.Flags&packet_setting.RETRANSMISSION_FLAG > 0
+
+		if err == nil && valid { // TODO: why not valid?
 
 			// fmt.Println("Read into record: ", val.PacketNumber, val.SentTime, val.Length, val.ServerPN, val.Valid, val.SpecialRetransmission)
 
@@ -438,11 +441,15 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			// Packets from the relay are handled normally.
 			if true { // TODO: turn back on (not sure what this is)
 				for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
-					if true || val.ForwardedPacket == 1 {
+					if !userspace && !retransmission { // Server packet
 						server_pack = RetreiveServerPacket(int64(val.ServerPN))
-					} else if val.ForwardedPacket == 0 { // Userspace / retransmission packet
+					} else if retransmission { // Userspace / retransmission packet
 						fmt.Println("Try reading relay stored packet")
 						server_pack = RetreiveRelayPacket(int64(val.ServerPN))
+					} else {
+						fmt.Println("'Real' userspace packet")
+						// TODO: handle real userspace packets here as well?
+						goto skip_retrieval
 					}
 					if server_pack.Valid {
 						break
@@ -509,7 +516,7 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			// fmt.Println("Registered packet")
 
 			// Set valid to 0 to indicate that the packet has been registered
-			val.Valid = 0
+			val.Flags = val.Flags & ^packet_setting.VALID_FLAG
 			err = Packets_to_register.Update(current_index, val, ebpf.UpdateAny)
 			if err != nil {
 				fmt.Println("Error updating buffer map")

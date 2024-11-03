@@ -314,8 +314,7 @@ int tc_egress(struct __sk_buff *skb)
                                 .offset = data_offset,
                                 // .server_pn = -1, // -1 means that the packet is from userspace // TODO: how to handle?  
                                 .server_pn = old_pn,
-                                .valid = 1,
-                                .non_userspace = 0,
+                                .flags = VALID_FLAG | USERSPACE_FLAG | (is_retransmission ? RETRANSMISSION_FLAG : 0),
                         };
                         store_packet_to_register(pack_to_reg);
                         bpf_printk("Old packet number: %d, New packet number: %d\n", old_pn, pn_key.packet_number);
@@ -897,8 +896,7 @@ int tc_egress(struct __sk_buff *skb)
                         .length = payload_size,
                         .offset = data_offset,
                         .server_pn = old_pn,
-                        .valid = 1,
-                        .non_userspace = 1,
+                        .flags = VALID_FLAG,
                 };
                 store_packet_to_register(pack_to_reg);
 
@@ -973,8 +971,7 @@ int tc_egress(struct __sk_buff *skb)
                         .timestamp = time_ns,
                         .length = payload_size,
                         .server_pn = -1, // -1 -> we don't care right now // TODO: what to do with long headers?
-                        .valid = 1,
-                        .non_userspace = 0, // TODO: register_packet_t: long header can only be from userspace (verify)
+                        .flags = VALID_FLAG, // TODO: register_packet_t: long header can only be from userspace (verify)
                 };
                 // store_packet_to_register(pack_to_reg); // TODO: even needed for long headers?
 

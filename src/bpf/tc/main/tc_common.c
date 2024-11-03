@@ -221,10 +221,12 @@ struct register_packet_t { // TODO: what fields are necessary?
 
         uint32_t server_pn;
 
-        uint8_t valid;
-        uint8_t non_userspace;
-        uint8_t padding[2];
+        uint32_t flags;
 };
+
+#define VALID_FLAG 1<<0
+#define USERSPACE_FLAG 1<<1
+#define RETRANSMISSION_FLAG 1<<2
 
 // This struct represents an entry in the ring buffer storing
 // packet-number / timestamp pairs.
