@@ -170,6 +170,8 @@ func relayConfig() {
 
 	if bpf_enabled {
 
+		fmt.Println("BPF Setup")
+
 		// Load the BPF maps
 		common.LoadBPFMaps()
 		loadBPFMaps() // TODO: switch to only one setup (the common one)
@@ -178,6 +180,7 @@ func relayConfig() {
 		common.InitializeCacheSetup()
 
 		packet_setting.StoreServerPacket = common.StoreServerPacket
+		packet_setting.StoreRelayPacket = common.StoreRelayPacket
 
 		// TODO: check if those three functions are correctly implemented
 		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
@@ -192,6 +195,7 @@ func relayConfig() {
 		packet_setting.ConnectionGetLargestSentPacketNumber = getLargestSentPacketNumber
 
 		packet_setting.MarkStreamIdAsRetransmission = common.MarkStreamIdAsRetransmission
+		packet_setting.MarkPacketAsRetransmission = common.MarkPacketAsRetransmission
 
 		packet_setting.RELAY_CWND_DATA_PRINT = relay_printing_congestion_analysis
 		packet_setting.HandleCongestionMetricUpdate = common.HandleCongestionMetricUpdate

@@ -67,6 +67,13 @@ type pn_ts_struct struct {
 	Padding      [5]uint8
 }
 
+type packet_is_retransmission_struct struct {
+	StreamID     uint64
+	PacketNumber uint32
+	ConnectionID [16]uint8
+	Padding      [4]uint8
+}
+
 type unistream_id_retransmission_struct struct {
 	IpAddr   uint32
 	Port     uint16

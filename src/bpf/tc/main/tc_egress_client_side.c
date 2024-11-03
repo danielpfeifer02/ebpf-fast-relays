@@ -252,6 +252,8 @@ int tc_egress(struct __sk_buff *skb)
                         uint8_t frame_type;
                         uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
                         SAVE_BPF_PROBE_READ_KERNEL(&frame_type, sizeof(frame_type), payload + frame_off);
+
+                        uint8_t is_retransmission = 0; // if packet is stream frame it might be a retransmission
                         if (IS_STREAM_FRAME(frame_type)) {
                                 // Check if the stream is a unidirectional stream
                                 // Unidirectional streams are identified by the second
@@ -280,7 +282,26 @@ int tc_egress(struct __sk_buff *skb)
                                         read_var_int(payload + stream_offset_off, &stream_offset, VALUE_NEEDED);
                                         data_offset = stream_offset.value;
                                 }
+
+
+                                // Check if the packet is a retransmission
+                                struct packet_identification_t packet_id = {
+                                        .stream_id = stream_id.value,
+                                        .packet_number = old_pn,
+                                        .connection_id = {0},
+                                        .padding = {0},
+                                };
+                                void *conn_id_off = payload + 1 /* Short header flags */;
+                                SAVE_BPF_PROBE_READ_KERNEL(&packet_id.connection_id, sizeof(packet_id.connection_id), conn_id_off);
+                                
+                                uint8_t *pack_is_retr = bpf_map_lookup_elem(&packet_is_retransmission, &packet_id);
+                                if (pack_is_retr != NULL && *pack_is_retr == 1) {
+                                        bpf_printk("Retransmission detected for packet ( %d %d )\n", old_pn, stream_id.value);
+                                        is_retransmission = 1;
+                                }
+                                
                         }
+                        
 
                         // Userspace packets do not need to be registered (in theory).
                         // However somehow the userspace needs to know the translation of the

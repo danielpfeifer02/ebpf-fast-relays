@@ -185,6 +185,17 @@ struct client_unistream_id_pair_t {
         uint64_t unistream_id;
 };
 
+// Struct that represents an identifier for a retransmission based on pn and connection id.
+// TODO: technically this might not be completely unique in case multiple connections have
+// TODO: by chance the same pn, stream id and connection id. This is however very unlikely
+// TODO: given the extra time constraint of the usage.
+struct packet_identification_t {
+        uint64_t stream_id;
+        uint32_t packet_number;
+        uint8_t connection_id[CONN_ID_LEN];
+        uint8_t padding[4];
+};
+
 // Struct that represents the key for the map
 // containing the unistream id translations.
 struct client_unistream_id_lookup_key_t {
@@ -408,6 +419,16 @@ struct {
     __uint(max_entries, MAX_RETRANSMISSION_IDS_STORED);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } unistream_id_is_retransmission SEC(".maps");
+
+// This map is used to tell the ebpf code if a packet is a retransmission. 
+// It is based on the packet number and connection information (connection id and stream id).
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, struct packet_identification_t);
+    __type(value, uint8_t);
+    __uint(max_entries, MAX_RETRANSMISSION_IDS_STORED);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} packet_is_retransmission SEC(".maps");
 
 // This is used to signal events (mainly arrival of a new packet to register) to 
 // the userspace program.

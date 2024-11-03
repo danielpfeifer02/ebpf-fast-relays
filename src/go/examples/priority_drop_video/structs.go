@@ -48,6 +48,13 @@ type packet_register_struct struct {
 	Padding               [2]uint8
 }
 
+type packet_is_retransmission_struct struct {
+	StreamID     uint64
+	PacketNumber uint32
+	ConnectionID [16]uint8
+	Padding      [4]uint8
+}
+
 type index_key_struct struct {
 	Index uint32
 }

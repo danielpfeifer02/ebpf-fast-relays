@@ -438,12 +438,12 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 			// Packets from the relay are handled normally.
 			if true { // TODO: turn back on (not sure what this is)
 				for i := 0; i < 1_000; i++ { // TODO: whats a good limit?
-					// if val.ForwardedPacket == 1 {
-					server_pack = RetreiveServerPacket(int64(val.ServerPN))
-					// } else if val.ForwardedPacket == 0 { // Userspace / retransmission packet
-					// 	fmt.Println("Try reading relay stored packet")
-					// 	server_pack = RetreiveRelayPacket(int64(val.ServerPN))
-					// }
+					if true || val.ForwardedPacket == 1 {
+						server_pack = RetreiveServerPacket(int64(val.ServerPN))
+					} else if val.ForwardedPacket == 0 { // Userspace / retransmission packet
+						fmt.Println("Try reading relay stored packet")
+						server_pack = RetreiveRelayPacket(int64(val.ServerPN))
+					}
 					if server_pack.Valid {
 						break
 					}
@@ -549,7 +549,7 @@ func SetConnectionEstablished(ip net.IP, port uint16) error {
 	return nil
 }
 
-func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConnection) {
+func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConnection) { // TODO: stream id alone seems not enough - pn + connection id + stream id instead?
 
 	qconn := conn.(quic.Connection)
 
@@ -575,6 +575,32 @@ func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConn
 	}
 
 	// fmt.Println("Marked stream id as retransmission", key.IpAddr, key.Port, key.StreamId)
+
+}
+
+func MarkPacketAsRetransmission(packet_id packet_setting.PacketIdentifierStruct) {
+
+	if packet_id.ConnectionIDLen != 16 {
+		panic("Connection ID length not 16")
+	}
+	conn_id_bytes := [16]uint8(packet_id.ConnectionID[:16]) // TODO: why so cursed?
+
+	key := packet_is_retransmission_struct{
+		StreamID:     packet_id.StreamID,
+		PacketNumber: (uint32)(packet_id.PacketNumber),
+		ConnectionID: conn_id_bytes,
+		Padding:      [4]uint8{0, 0, 0, 0},
+	}
+
+	retrans := &retransmission_val_struct{
+		IsRetransmission: uint8(1),
+	}
+
+	err := Packet_is_retransmission.Update(key, retrans, ebpf.UpdateAny)
+	if err != nil {
+		fmt.Println("Error updating packet_is_retransmission")
+		panic(err)
+	}
 
 }
 
