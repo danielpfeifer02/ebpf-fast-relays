@@ -8,7 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"common.com/common"
+	"github.com/cilium/ebpf"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 )
@@ -42,7 +45,7 @@ func setupOOBConnectionRelaySide() {
 		sent_storage = make(map[[6]byte]map[uint64]uint64)
 	}
 
-	go readPnTsSent()
+	go ReadPnTsSent()
 
 	startOOBHandler()
 }
@@ -100,7 +103,7 @@ func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection)
 	// }
 
 	qconn := conn.(quic.Connection)
-	ipaddr, port := getIPAndPort(qconn, true)
+	ipaddr, port := common.GetIPAndPort(qconn, true)
 	ipv4 := ipaddr.To4()
 	if ipv4 == nil {
 		panic("Invalid IP address (non-IPv4)")
@@ -120,7 +123,7 @@ func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection)
 	port = uint16(tmp)
 	ipv4 = net.IPv4(192, 168, 11, 1) // TODO: For now just hardcode the IP address of the example
 
-	binary.LittleEndian.PutUint32(buf[16:], ipToInt32(ipv4))
+	binary.LittleEndian.PutUint32(buf[16:], common.IpToInt32(ipv4))
 	binary.LittleEndian.PutUint16(buf[20:], port)
 
 	oob_conn.SendDatagram(buf)
@@ -136,9 +139,9 @@ func handlePnTsRecv(pn, ts uint64, ip net.IP, port uint16, indices client_indice
 	if conn_storage, ok := sent_storage[key]; ok {
 		// sent_storage_lock.Unlock()
 		if sent_ts, ok := conn_storage[pn]; ok { // TODO: delete the entry from the map
-			packet_info := pn_ts_struct{
+			packet_info := common.Pn_ts_struct{
 				PacketNumber: uint32(pn),
-				IpAddr:       ipToInt32(ip),
+				IpAddr:       common.IpToInt32(ip),
 				Timestamp:    ts,
 				Port:         port,
 				Valid:        1,
@@ -150,7 +153,38 @@ func handlePnTsRecv(pn, ts uint64, ip net.IP, port uint16, indices client_indice
 
 }
 
-func storePnTsSent(pn, ts uint64, ip net.IP, port uint16) {
+func ReadPnTsSent() {
+
+	index_pn_ts_storage := 0
+
+	for {
+
+		pn_ts := &common.Pn_ts_struct{}
+		err := common.Pn_ts_storage.Lookup(uint32(index_pn_ts_storage), pn_ts)
+		if err == nil && pn_ts.Valid == 1 {
+			netIP := net.IPv4(byte(pn_ts.IpAddr), byte(pn_ts.IpAddr>>8), byte(pn_ts.IpAddr>>16), byte(pn_ts.IpAddr>>24))
+			netPort := ((pn_ts.Port & 0xff) << 8) | ((pn_ts.Port & 0xff00) >> 8)
+			StorePnTsSent(uint64(pn_ts.PacketNumber), pn_ts.Timestamp, netIP, netPort)
+
+			pn_ts.Valid = 0
+			err = common.Pn_ts_storage.Update(uint32(index_pn_ts_storage), pn_ts, ebpf.UpdateAny)
+			if err != nil {
+				fmt.Println("Error updating pn_ts_storage")
+				panic(err)
+			}
+
+			index_pn_ts_storage++
+			if index_pn_ts_storage == 2048 { // TODO: save as const once final size is known
+				index_pn_ts_storage = 0
+			}
+		} else {
+			// fmt.Println(err)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func StorePnTsSent(pn, ts uint64, ip net.IP, port uint16) {
 
 	// fmt.Println("Store pn:", pn, ", ts:", ts, ", ip:", ip, ", port:", port)
 

@@ -5,6 +5,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"common.com/common"
 )
 
 /*
@@ -171,7 +173,7 @@ func register_hist(max_hist_size uint64) uint64 {
 	return hist_storage_index - 1
 }
 
-func ca_ts_handler(sent_ts, recv_ts uint64, packet_info pn_ts_struct, indices client_indices) {
+func ca_ts_handler(sent_ts, recv_ts uint64, packet_info common.Pn_ts_struct, indices client_indices) {
 	delay := recv_ts - sent_ts
 
 	// fmt.Println("Client received packet with pn", packet_info.PacketNumber, "after", delay, "ns")

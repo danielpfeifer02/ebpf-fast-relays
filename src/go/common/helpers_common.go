@@ -41,7 +41,7 @@ func GetIPAndPort(conn quic.Connection, remote bool) (net.IP, uint16) {
 	return ipaddr, uint16(port)
 }
 
-func ipToInt32(ip net.IP) uint32 {
+func IpToInt32(ip net.IP) uint32 {
 	// Convert to IPv4
 	ip = ip.To4()
 	if ip == nil {
@@ -62,11 +62,10 @@ func swapEndianness32(val uint32) uint32 {
 func debugPrint(p ...interface{}) {
 	if false {
 		fmt.Println(p...)
-		fmt.Println("Not really debugprint")
 	}
 }
 
-func getElementByName(pipeline *gst.Pipeline, name string) *gst.Element {
+func GetElementByName(pipeline *gst.Pipeline, name string) *gst.Element {
 	elements, err := pipeline.GetElements()
 	if err != nil {
 		panic(err)
@@ -79,7 +78,7 @@ func getElementByName(pipeline *gst.Pipeline, name string) *gst.Element {
 	return nil
 }
 
-func startSignalHandler() chan struct{} {
+func StartSignalHandler() chan struct{} {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 	done := make(chan struct{}, 1)

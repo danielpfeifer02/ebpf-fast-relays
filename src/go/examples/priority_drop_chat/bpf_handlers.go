@@ -20,7 +20,7 @@ func publishConnectionEstablished(conn quic.Connection) {
 		}
 
 		ipaddr, port := getIPAndPort(conn)
-		ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+		ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 		port_key := swapEndianness16(port)
 
 		key := client_key_struct{
@@ -49,7 +49,7 @@ func packetNumberHandler(conn quic.Connection) {
 	}
 
 	ipaddr, port := getIPAndPort(conn)
-	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 	port_key := swapEndianness16(port)
 	key := client_key_struct{
 		Ipaddr:  ipaddr_key,
@@ -119,7 +119,7 @@ func keepConnectionsUpToDate(relay *RelayServer) {
 		for _, client_conn := range relay.client_list {
 
 			ipaddr, port := getIPAndPort(client_conn.conn)
-			ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+			ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 			port_key := swapEndianness16(port)
 
 			key := client_key_struct{
@@ -274,7 +274,7 @@ func updateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 
 func setBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	ipaddr, port := getIPAndPort(qconn)
-	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 	port_key := swapEndianness16(port)
 
 	key := client_key_struct{
@@ -340,7 +340,7 @@ func incrementPacketNumber(pn int64, conn packet_setting.QuicConnection) {
 
 	ipaddr, port := getIPAndPort(qconn)
 	key := client_key_struct{
-		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+		Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
 		Port:    swapEndianness16(uint16(port)),
 		Padding: [2]uint8{0, 0},
 	}
@@ -373,7 +373,7 @@ func translateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 
 	ipaddr, port := getIPAndPort(qconn)
 	client_key := client_key_struct{
-		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+		Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
 		Port:    swapEndianness16(uint16(port)),
 		Padding: [2]uint8{0, 0},
 	}

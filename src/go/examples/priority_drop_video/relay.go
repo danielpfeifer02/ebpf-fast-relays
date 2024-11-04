@@ -28,15 +28,15 @@ func relay() error {
 	var err error
 	if bpf_enabled {
 
-		clearBPFMaps()
+		common.ClearBPFMaps()
 
 		client_ctr := uint32(0)
-		err = number_of_clients.Update(uint32(0), client_ctr, 0)
+		err = common.Number_of_clients.Update(uint32(0), client_ctr, 0)
 		if err != nil {
 			panic(err)
 		}
 
-		err = id_counter.Update(uint32(0), uint32(0), 0)
+		err = common.Id_counter.Update(uint32(0), uint32(0), 0)
 		if err != nil {
 			panic(err)
 		}
@@ -173,8 +173,8 @@ func relay() error {
 	}
 
 	// Now we set the connection to be established
-	ip, port := getIPAndPort(conn, true)
-	err = setConnectionEstablished(ip, port)
+	ip, port := common.GetIPAndPort(conn, true)
+	err = common.SetConnectionEstablished(ip, port)
 	if err != nil {
 		return err
 	}
@@ -263,12 +263,12 @@ func relay() error {
 		// Increment client counter
 		if bpf_enabled {
 			client_ctr := uint32(0)
-			err = number_of_clients.Lookup(uint32(0), &client_ctr)
+			err = common.Number_of_clients.Lookup(uint32(0), &client_ctr)
 			if err != nil {
 				panic(err)
 			}
 			client_ctr++
-			err = number_of_clients.Update(uint32(0), client_ctr, 0)
+			err = common.Number_of_clients.Update(uint32(0), client_ctr, 0)
 			if err != nil {
 				panic(err)
 			}

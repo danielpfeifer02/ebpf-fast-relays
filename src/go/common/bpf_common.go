@@ -45,11 +45,13 @@ func ClearBPFMaps() {
 		"connection_unistream_id_counter",
 		"connection_unistream_id_translation",
 		"client_stream_offset",
-		"unistream_id_is_retransmission"}
+		"unistream_id_is_retransmission",
+		// "packet_is_retransmission" // TODO: needed?
+	}
 	map_location := "/sys/fs/bpf/tc/globals/"
 
 	for _, path := range paths {
-		cmd := exec.Command("../../utils/build/clear_bpf_map", map_location+path)
+		cmd := exec.Command("../../../utils/build/clear_bpf_map", map_location+path)
 		stdout, err := cmd.Output()
 		if err != nil {
 			fmt.Println(string(stdout))
@@ -186,15 +188,15 @@ func UpdateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 // TODO: mabye split up into a "get client data" function
 func SetBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	ipaddr, port := GetIPAndPort(qconn, true)
-	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 	port_key := swapEndianness16(port)
 
-	key := client_key_struct{
+	key := Client_key_struct{
 		Ipaddr:  ipaddr_key,
 		Port:    port_key,
 		Padding: [2]uint8{0, 0},
 	}
-	id := &id_struct{}
+	id := &Id_struct{}
 
 	// This should not occur since the function pointers should only be set if
 	// bpf is enabled.
@@ -212,7 +214,7 @@ func SetBPFMapConnectionID(qconn quic.Connection, v []byte) {
 		panic(err)
 	}
 
-	client_info := &client_data_struct{}
+	client_info := &Client_data_struct{}
 	err = Client_data.Lookup(id, client_info)
 	if err != nil {
 		fmt.Println("Error looking up client_data")
@@ -245,17 +247,17 @@ func TranslateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 	debugPrint("Translated packet number", qconn.RemoteAddr().String())
 
 	ipaddr, port := GetIPAndPort(qconn, true)
-	client_key := client_key_struct{
-		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+	client_key := Client_key_struct{
+		Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
 		Port:    swapEndianness16(uint16(port)),
 		Padding: [2]uint8{0, 0},
 	}
-	key := client_pn_map_key{
+	key := Client_pn_map_key{
 		Key: client_key,
 		Pn:  uint32(pn),
 	}
 
-	val := &connnection_pn_stuct{}
+	val := &Connnection_pn_stuct{}
 	err := Connection_pn_translation.Lookup(key, val)
 	if err != nil {
 		debugPrint("No entry for ", pn)
@@ -289,12 +291,12 @@ func DeleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnecti
 	debugPrint("Deleted translation for packet from", qconn.RemoteAddr().String())
 
 	ipaddr, port := GetIPAndPort(qconn, true)
-	client_key := client_key_struct{
-		Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+	client_key := Client_key_struct{
+		Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
 		Port:    swapEndianness16(uint16(port)),
 		Padding: [2]uint8{0, 0},
 	}
-	key := client_pn_map_key{
+	key := Client_pn_map_key{
 		Key: client_key,
 		Pn:  uint32(pn),
 	}
@@ -312,16 +314,16 @@ func GetLargestSentPacketNumber(conn packet_setting.QuicConnection) int64 {
 	qconn := conn.(quic.Connection)
 
 	ipaddr, port := GetIPAndPort(qconn, true)
-	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 	port_key := swapEndianness16(port)
 
-	key := client_key_struct{
+	key := Client_key_struct{
 		Ipaddr:  ipaddr_key,
 		Port:    port_key,
 		Padding: [2]uint8{0, 0},
 	}
 
-	current_pn := &connnection_pn_stuct{}
+	current_pn := &Connnection_pn_stuct{}
 	err := Connection_current_pn.Lookup(key, current_pn)
 	if err != nil {
 		fmt.Println("Error looking up connection_current_pn")
@@ -338,13 +340,13 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 	go func() {
 
 		ipaddr, port := GetIPAndPort(conn, true)
-		key := client_key_struct{
-			Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+		key := Client_key_struct{
+			Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
 			Port:    swapEndianness16(port),
 			Padding: [2]uint8{0, 0},
 		}
 
-		current_pn := &connnection_pn_stuct{}
+		current_pn := &Connnection_pn_stuct{}
 		for {
 
 			err := Connection_current_pn.Lookup(key, current_pn)
@@ -357,8 +359,8 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 	}()
 
 	max_register_queue_size := 1 << 11 // 2048
-	val := &packet_register_struct{}
-	current_index := index_key_struct{
+	val := &Packet_register_struct{}
+	current_index := Index_key_struct{
 		Index: 0,
 	}
 
@@ -400,7 +402,7 @@ skip_retrieval:
 				panic("Record too short")
 			}
 			// fmt.Println("Record:", len(record.RawSample))
-			val = &packet_register_struct{
+			val = &Packet_register_struct{
 				PacketNumber: binary.LittleEndian.Uint64(record.RawSample[0:8]),
 				SentTime:     binary.LittleEndian.Uint64(record.RawSample[8:16]),
 				Length:       binary.LittleEndian.Uint64(record.RawSample[16:24]),
@@ -430,7 +432,7 @@ skip_retrieval:
 			// fmt.Println("Read into record: ", val.PacketNumber, val.SentTime, val.Length, val.ServerPN, val.Valid, val.SpecialRetransmission)
 
 			// TODO: this as go routine causes A LOT of go routines. is there any benefit?
-			// go func(val packet_register_struct, idx index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
+			// go func(val Packet_register_struct, idx Index_key_struct, mp *ebpf.Map) { // TODO: speed up when using goroutines?
 
 			var server_pack packet_setting.RetransmissionPacketContainer = packet_setting.RetransmissionPacketContainer{
 				Valid:   true,
@@ -444,17 +446,15 @@ skip_retrieval:
 					if !userspace && !retransmission { // Server packet
 						server_pack = RetreiveServerPacket(int64(val.ServerPN))
 					} else if retransmission { // Userspace / retransmission packet
-						fmt.Println("Try reading relay stored packet")
 						server_pack = RetreiveRelayPacket(int64(val.ServerPN))
 					} else {
-						fmt.Println("'Real' userspace packet")
+						// fmt.Println("'Real' userspace packet")
 						// TODO: handle real userspace packets here as well?
 						goto skip_retrieval
 					}
 					if server_pack.Valid {
 						break
 					}
-					// <-time.After(1 * time.Millisecond) // TODO: optimal?
 					time.Sleep(10 * time.Microsecond) // TODO: Sleep or After?
 				}
 				if !server_pack.Valid {
@@ -536,13 +536,13 @@ skip_retrieval:
 
 func SetConnectionEstablished(ip net.IP, port uint16) error {
 
-	key := client_key_struct{
-		Ipaddr:  swapEndianness32(ipToInt32(ip)),
+	key := Client_key_struct{
+		Ipaddr:  swapEndianness32(IpToInt32(ip)),
 		Port:    swapEndianness16(uint16(port)),
 		Padding: [2]uint8{0, 0},
 	}
 
-	est := &established_val_struct{
+	est := &Established_val_struct{
 		Established: uint8(1),
 	}
 
@@ -561,17 +561,17 @@ func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConn
 	qconn := conn.(quic.Connection)
 
 	ipaddr, port := GetIPAndPort(qconn, true)
-	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 	port_key := swapEndianness16(port)
 
-	key := unistream_id_retransmission_struct{
+	key := Unistream_id_retransmission_struct{
 		IpAddr:   ipaddr_key,
 		Port:     port_key,
 		Padding:  [2]uint8{0, 0},
 		StreamId: stream_id,
 	}
 
-	retrans := &retransmission_val_struct{
+	retrans := &Retransmission_val_struct{
 		IsRetransmission: uint8(1),
 	}
 
@@ -592,14 +592,14 @@ func MarkPacketAsRetransmission(packet_id packet_setting.PacketIdentifierStruct)
 	}
 	conn_id_bytes := [16]uint8(packet_id.ConnectionID[:16]) // TODO: why so cursed?
 
-	key := packet_is_retransmission_struct{
+	key := Packet_is_retransmission_struct{
 		StreamID:     packet_id.StreamID,
 		PacketNumber: (uint32)(packet_id.PacketNumber),
 		ConnectionID: conn_id_bytes,
 		Padding:      [4]uint8{0, 0, 0, 0},
 	}
 
-	retrans := &retransmission_val_struct{
+	retrans := &Retransmission_val_struct{
 		IsRetransmission: uint8(1),
 	}
 
@@ -628,10 +628,10 @@ func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn
 	}
 
 	ipaddr, port := GetIPAndPort(qconn, true)
-	ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 	port_key := swapEndianness16(port)
 
-	key := client_key_struct{
+	key := Client_key_struct{
 		Ipaddr:  ipaddr_key,
 		Port:    port_key,
 		Padding: [2]uint8{0, 0},
@@ -645,7 +645,7 @@ func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn
 		already_started_printing = true
 	}
 
-	client_id := &id_struct{}
+	client_id := &Id_struct{}
 	err := Client_id.Lookup(key, client_id)
 	if err != nil {
 		fmt.Println("Error looking up client_id")
@@ -653,7 +653,7 @@ func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn
 		return
 	}
 
-	client_data := &client_data_struct{}
+	client_data := &Client_data_struct{}
 	err = Client_data.Lookup(client_id, client_data)
 	if err != nil {
 		fmt.Println("Error looking up client_data")
@@ -669,7 +669,7 @@ func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn
 
 }
 
-func calculateNeededChangeOfPriorityDropLimit(data packet_setting.CongestionWindowData, client_data *client_data_struct) int {
+func calculateNeededChangeOfPriorityDropLimit(data packet_setting.CongestionWindowData, client_data *Client_data_struct) int {
 
 	// TODO: add logic to determine if change is needed
 	return NO_CHANGE
@@ -678,11 +678,11 @@ func calculateNeededChangeOfPriorityDropLimit(data packet_setting.CongestionWind
 
 func UnitChangePriorityDropLimit(c_id uint32, increment bool) error {
 
-	id := &id_struct{
+	id := &Id_struct{
 		Id: c_id,
 	}
 
-	client_info := &client_data_struct{}
+	client_info := &Client_data_struct{}
 	err := Client_data.Lookup(id, client_info)
 	if err != nil {
 		fmt.Println("Error looking up client_data")
@@ -711,11 +711,11 @@ func UnitChangePriorityDropLimit(c_id uint32, increment bool) error {
 
 func ChangePriorityDropLimit(c_id uint32, limit uint8) error {
 
-	id := &id_struct{
+	id := &Id_struct{
 		Id: c_id,
 	}
 
-	client_info := &client_data_struct{}
+	client_info := &Client_data_struct{}
 	err := Client_data.Lookup(id, client_info)
 	if err != nil {
 		fmt.Println("Error looking up client_data")
@@ -754,4 +754,26 @@ func startPrintCongestionWindowDataThread() {
 		last_data_mutex.Unlock()
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func GetClientID(ipaddr net.IP, port uint16) (uint32, error) {
+
+	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
+	port_key := swapEndianness16(port)
+
+	key := Client_key_struct{
+		Ipaddr:  ipaddr_key,
+		Port:    port_key,
+		Padding: [2]uint8{0, 0},
+	}
+
+	id := &Id_struct{}
+
+	err := Client_id.Lookup(key, id)
+	if err != nil {
+		fmt.Println("Error looking up client_id")
+		return 0, err
+	}
+
+	return id.Id, nil
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log"
+
+	"common.com/common"
 )
 
 func client() error {
@@ -11,7 +13,7 @@ func client() error {
 
 	defer cancel()
 
-	done := startSignalHandler()
+	done := common.StartSignalHandler()
 
 	go func() {
 		receiver, err := newReceiver(ctx, relay_server_address)

@@ -31,7 +31,7 @@ func getIPAndPort(conn quic.Connection) (net.IP, uint16) {
 	return ipaddr, uint16(port)
 }
 
-func ipToInt32(ip net.IP) uint32 {
+func IpToInt32(ip net.IP) uint32 {
 	ip = ip.To4() // Convert to IPv4
 	if ip == nil {
 		panic("Trying to convert an invalid IPv4 address")

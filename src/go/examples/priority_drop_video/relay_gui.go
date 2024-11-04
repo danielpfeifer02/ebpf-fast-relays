@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 
+	"common.com/common"
 	fyne "fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -136,7 +137,7 @@ func setPriorityForAllConnections(prioVal uint8) error {
 	number_of_clients := 1 // TODO: get dynamically
 
 	for i := 1; i <= number_of_clients; i++ {
-		err := changePriorityDropLimit(uint32(i), uint8(prioVal))
+		err := common.ChangePriorityDropLimit(uint32(i), uint8(prioVal))
 		if err != nil {
 			return err
 		}
@@ -160,10 +161,10 @@ func setPriorityForConnection(ip_in, port_in string, prioVal uint8) error {
 		return errors.New(" Port number out of range ")
 	}
 
-	client_id, err := getClientID(ip, uint16(port))
+	client_id, err := common.GetClientID(ip, uint16(port))
 	if err != nil {
 		return err
 	}
 
-	return changePriorityDropLimit(client_id, uint8(prioVal))
+	return common.ChangePriorityDropLimit(client_id, uint8(prioVal))
 }

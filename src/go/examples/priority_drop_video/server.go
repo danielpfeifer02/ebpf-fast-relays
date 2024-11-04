@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+
+	"common.com/common"
 )
 
 // TODO: error as return value not needed?
@@ -13,7 +15,7 @@ func server() error {
 
 	defer cancel()
 
-	done := startSignalHandler()
+	done := common.StartSignalHandler()
 
 	go func(ctx context.Context) {
 		sender, err := newSender(ctx, video_server_address)

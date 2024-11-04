@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"common.com/common"
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
@@ -155,7 +156,7 @@ func createReceivePipelineFromChannel(recv_chan chan []byte) (*gst.Pipeline, err
 		return nil, err
 	}
 
-	src := app.SrcFromElement(getElementByName(pipeline, "src"))
+	src := app.SrcFromElement(common.GetElementByName(pipeline, "src"))
 
 	src.SetCallbacks(&app.SourceCallbacks{
 		NeedDataFunc: func(self *app.Source, length uint) {

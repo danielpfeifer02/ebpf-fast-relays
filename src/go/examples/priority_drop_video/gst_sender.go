@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"common.com/common"
 	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
 	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
@@ -131,7 +132,7 @@ func createSendPipeline(flow *moqtransport.SendSubscription) (*gst.Pipeline, err
 		return nil, err
 	}
 
-	sink := app.SinkFromElement(getElementByName(pipeline, "appsink"))
+	sink := app.SinkFromElement(common.GetElementByName(pipeline, "appsink"))
 
 	sink.SetCallbacks(&app.SinkCallbacks{
 		NewSampleFunc: func(sink *app.Sink) gst.FlowReturn {

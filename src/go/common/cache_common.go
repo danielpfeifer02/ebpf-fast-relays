@@ -27,7 +27,6 @@ func InitializeCacheSetup() {
 func StoreServerPacket(pn, ts int64, data []byte,
 	conn packet_setting.QuicConnection) {
 
-	// fmt.Println("Storing (from common) server packet for pn", pn)
 	lock.Lock()
 	defer lock.Unlock()
 

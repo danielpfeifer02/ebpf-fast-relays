@@ -169,7 +169,7 @@ func (s *RelayServer) run() error {
 					// 	Padding: [3]uint8{0, 0, 0},
 					// }
 					// key := client_key_struct{
-					// 	Ipaddr:  swapEndianness32(ipToInt32(ipaddr)),
+					// 	Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
 					// 	Port:    swapEndianness16(uint16(port)),
 					// 	Padding: [2]uint8{0, 0},
 					// }
@@ -255,7 +255,7 @@ func (s *RelayServer) changePriorityDropThreshold() {
 
 	for _, conn := range s.connection_list {
 		ipaddr, port := getIPAndPort(conn)
-		ipaddr_key := swapEndianness32(ipToInt32(ipaddr))
+		ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
 		port_key := swapEndianness16(port)
 
 		key := client_key_struct{

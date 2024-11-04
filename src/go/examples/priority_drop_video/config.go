@@ -79,7 +79,7 @@ const DEBUG_PRINT = false
 const video_config_window = false
 
 // Sepcifications for a sender of video data.
-var sender_specs = sender_spec_struct{
+var sender_specs = common.Sender_spec_struct{
 	// The filepath of the video file that should be sent.
 	FilePath: "../../../video/example.mp4",
 	// The maximum interval between key-frames (i-frames) in the video.
@@ -174,25 +174,24 @@ func relayConfig() {
 
 		// Load the BPF maps
 		common.LoadBPFMaps()
-		loadBPFMaps() // TODO: switch to only one setup (the common one)
 
-		InitializeCacheSetup()
+		common.InitializeCacheSetup()
 		common.InitializeCacheSetup()
 
 		packet_setting.StoreServerPacket = common.StoreServerPacket
 		packet_setting.StoreRelayPacket = common.StoreRelayPacket
 
 		// TODO: check if those three functions are correctly implemented
-		packet_setting.ConnectionInitiationBPFHandler = initConnectionId
-		packet_setting.ConnectionRetirementBPFHandler = retireConnectionId
-		packet_setting.ConnectionUpdateBPFHandler = updateConnectionId
+		packet_setting.ConnectionInitiationBPFHandler = common.InitConnectionId
+		packet_setting.ConnectionRetirementBPFHandler = common.RetireConnectionId
+		packet_setting.ConnectionUpdateBPFHandler = common.UpdateConnectionId
 
 		// This is for the packet number translation
-		packet_setting.AckTranslationBPFHandler = translateAckPacketNumber
-		packet_setting.AckTranslationDeletionBPFHandler = deleteAckPacketNumberTranslation
+		packet_setting.AckTranslationBPFHandler = common.TranslateAckPacketNumber
+		packet_setting.AckTranslationDeletionBPFHandler = common.DeleteAckPacketNumberTranslation
 
 		// This is to get the highest packet number of a connection that was sent
-		packet_setting.ConnectionGetLargestSentPacketNumber = getLargestSentPacketNumber
+		packet_setting.ConnectionGetLargestSentPacketNumber = common.GetLargestSentPacketNumber
 
 		packet_setting.MarkStreamIdAsRetransmission = common.MarkStreamIdAsRetransmission
 		packet_setting.MarkPacketAsRetransmission = common.MarkPacketAsRetransmission
