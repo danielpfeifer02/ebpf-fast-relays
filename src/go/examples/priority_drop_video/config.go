@@ -112,8 +112,21 @@ const oob_addr_server = "192.168.11.2:12345"
 // timestamp data from the client.
 var oob_conn quic.Connection
 
-// Specify if oob communication should be used.
-const use_oob = false
+// Specify if the oob connection should be used for data transmission
+// between the client and the relay
+const oob_data_transmission = false
+
+// Specify if the packet-timestamp handler should log the info (for debugging).
+const log_packet_timestamps = true
+
+// Specify the file where the packet-timestamp should be saved to.
+const packet_timestamp_file = "log/packet_timestamps.txt"
+
+// Channel where the packet-timestamps are sent to to be processed more efficiently.
+var packet_timestamp_chan chan common.Timestamp_struct
+
+// Specify the number of packets that should be written to the log file aggregated.
+const ts_aggregation_window = 30
 
 // Defaut alpha value for exponential weighted moving average.
 const default_ewma_alpha = 0.01
@@ -156,6 +169,7 @@ func mainConfig() {
 	log.SetOutput(f)
 	// This currently seems to be not working
 	// os.Setenv("QUIC_GO_LOG_LEVEL", "DEBUG")
+
 }
 
 func serverConfig() {
@@ -215,9 +229,31 @@ func relayConfig() {
 	packet_setting.IS_RELAY = true
 
 	// Setup an out of band connection for the relay
-	if use_oob {
+	if oob_data_transmission {
 		setupOOBConnectionRelaySide()
 	}
+
+	// ! TODO: make all below conditional
+	packet_setting.RetransmissionPacketNumberTranslationHandler = common.RetransmissionPacketNumberTranslationHandler
+	common.Retransmission_translation_chan = make(chan common.Retransmission_translation_struct, 1000)
+
+	if _, err := os.Stat(common.Retransmission_translation_file); err == nil {
+		err = os.Remove(common.Retransmission_translation_file)
+		if err != nil {
+			panic(err)
+		}
+	}
+	file, err := os.OpenFile(common.Retransmission_translation_file, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	_, err = file.WriteString("OldPacketNumber NewPacketNumber\n")
+	if err != nil {
+		panic(err)
+	}
+	file.Close()
+
+	go common.StartInternalRetransmissionPacketNumberTranslationHandler(common.Retransmission_translation_chan)
 }
 
 func clientConfig() {
@@ -240,8 +276,33 @@ func clientConfig() {
 	// stored in the bpf map (for RTT analysis).
 	packet_setting.ReceivedPacketAtTimestampHandler = receivedPacketAtTimestamp
 
-	if use_oob {
+	if oob_data_transmission {
 		setupOOBConnectionClientSide()
+	}
+
+	if log_packet_timestamps {
+		// Clear the old log file if it exists
+		if _, err := os.Stat(packet_timestamp_file); err == nil {
+			err = os.Remove(packet_timestamp_file)
+			if err != nil {
+				panic(err)
+			}
+		}
+		file, err := os.OpenFile(packet_timestamp_file, os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			panic(err)
+		}
+		_, err = file.WriteString("PacketNumber Timestamp\n")
+		if err != nil {
+			panic(err)
+		}
+		file.Close()
+
+		// Create the channel for the packet-timestamps
+		packet_timestamp_chan = make(chan common.Timestamp_struct, 1000)
+
+		// Start the packet-timestamp handler
+		go StartTimestampHandler(packet_timestamp_chan)
 	}
 }
 

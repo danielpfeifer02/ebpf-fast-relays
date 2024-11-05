@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -89,44 +90,86 @@ func startOOBHandler() {
 	}()
 }
 
+func StartTimestampHandler(recv_chan chan common.Timestamp_struct) {
+
+	aggregation_list := make([]common.Timestamp_struct, ts_aggregation_window)
+	aggregation_index := 0
+	for {
+		ts_aggregate := <-recv_chan
+		if aggregation_index == ts_aggregation_window {
+			aggregation_index = 0
+
+			// Open log file
+			file, err := os.OpenFile(packet_timestamp_file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				panic(err)
+			}
+
+			for _, val := range aggregation_list {
+				_, err = file.WriteString(fmt.Sprintf("%d %d\n", val.PacketNumber, val.Timestamp))
+				if err != nil {
+					panic(err)
+				}
+			}
+
+			// Close log file
+			err = file.Close()
+			if err != nil {
+				panic(err)
+			}
+		}
+		aggregation_list[aggregation_index] = ts_aggregate
+		aggregation_index++
+	}
+}
+
 func receivedPacketAtTimestamp(pn, ts int64, conn packet_setting.QuicConnection) {
-	if oob_conn == nil {
-		// fmt.Println("Out of band connection not initialized")
-		return
-	}
-	buf := make([]byte, 22) // 8 bytes for pn, 8 bytes for ts, 4 bytes for IP, 2 bytes for port
-	binary.LittleEndian.PutUint64(buf, uint64(pn))
-	binary.LittleEndian.PutUint64(buf[8:], uint64(ts))
 
-	// if conn.RemoteAddr().String() == relay_server_address {
-	// 	fmt.Println("Received packet with pn", pn, "at timestamp", ts)
-	// }
+	if log_packet_timestamps {
 
-	qconn := conn.(quic.Connection)
-	ipaddr, port := common.GetIPAndPort(qconn, true)
-	ipv4 := ipaddr.To4()
-	if ipv4 == nil {
-		panic("Invalid IP address (non-IPv4)")
+		// Send to log channel
+		packet_timestamp_chan <- common.Timestamp_struct{
+			PacketNumber: pn,
+			Timestamp:    ts,
+		}
+
 	}
 
-	if port != 4242 {
-		return
+	if oob_data_transmission && oob_conn != nil {
+		buf := make([]byte, 22) // 8 bytes for pn, 8 bytes for ts, 4 bytes for IP, 2 bytes for port
+		binary.LittleEndian.PutUint64(buf, uint64(pn))
+		binary.LittleEndian.PutUint64(buf[8:], uint64(ts))
+
+		// if conn.RemoteAddr().String() == relay_server_address {
+		// 	fmt.Println("Received packet with pn", pn, "at timestamp", ts)
+		// }
+
+		qconn := conn.(quic.Connection)
+		ipaddr, port := common.GetIPAndPort(qconn, true)
+		ipv4 := ipaddr.To4()
+		if ipv4 == nil {
+			panic("Invalid IP address (non-IPv4)")
+		}
+
+		if port != 4242 {
+			return
+		}
+
+		// fmt.Println("Local:", qconn.LocalAddr().String(), "\nRemote:", qconn.RemoteAddr().String())
+
+		// TODO: This still poses a problem since the quic connection has the zero address
+		// TODO: as "LocalAddr" which means any address is ok. But we need to know the local
+		// TODO: address so that the relay can have a correct key for looking up.
+		// TODO: Figure out how to solve this.
+		tmp, _ := strconv.Atoi(strings.Split(qconn.LocalAddr().String(), ":")[3])
+		port = uint16(tmp)
+		ipv4 = net.IPv4(192, 168, 11, 1) // TODO: For now just hardcode the IP address of the example
+
+		binary.LittleEndian.PutUint32(buf[16:], common.IpToInt32(ipv4))
+		binary.LittleEndian.PutUint16(buf[20:], port)
+
+		oob_conn.SendDatagram(buf)
 	}
-
-	// fmt.Println("Local:", qconn.LocalAddr().String(), "\nRemote:", qconn.RemoteAddr().String())
-
-	// TODO: This still poses a problem since the quic connection has the zero address
-	// TODO: as "LocalAddr" which means any address is ok. But we need to know the local
-	// TODO: address so that the relay can have a correct key for looking up.
-	// TODO: Figure out how to solve this.
-	tmp, _ := strconv.Atoi(strings.Split(qconn.LocalAddr().String(), ":")[3])
-	port = uint16(tmp)
-	ipv4 = net.IPv4(192, 168, 11, 1) // TODO: For now just hardcode the IP address of the example
-
-	binary.LittleEndian.PutUint32(buf[16:], common.IpToInt32(ipv4))
-	binary.LittleEndian.PutUint16(buf[20:], port)
-
-	oob_conn.SendDatagram(buf)
 }
 
 func handlePnTsRecv(pn, ts uint64, ip net.IP, port uint16, indices client_indices) {

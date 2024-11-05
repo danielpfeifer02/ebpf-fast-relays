@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"runtime"
 	"sync"
@@ -776,4 +777,63 @@ func GetClientID(ipaddr net.IP, port uint16) (uint32, error) {
 	}
 
 	return id.Id, nil
+}
+
+// TODO: put into config?
+
+// Channel where the retransmission translation of the relay (retransmission function) is sent to.
+// Together with the translation information of the ebpf program this can be used to analyse how long the
+// retransmission took.
+var Retransmission_translation_chan chan Retransmission_translation_struct
+
+// Specify the file of the retrnasmission translation data of the relay.
+const Retransmission_translation_file = "log/retransmission_mapping_go.txt" // TODO: not used because not accessible from common package???
+
+// Specify the number of retransmission translation that should be written to the log file aggregated.
+const Retransmission_aggregation_window = 30 // TODO: not used because not accessible from common package???
+
+func RetransmissionPacketNumberTranslationHandler(old_pn, new_pn int64, conn packet_setting.QuicConnection) {
+	fmt.Println("RetransmissionHandler: ", old_pn, " -> ", new_pn)
+	Retransmission_translation_chan <- Retransmission_translation_struct{
+		OldPacketNumber: old_pn,
+		NewPacketNumber: new_pn,
+	}
+}
+
+func StartInternalRetransmissionPacketNumberTranslationHandler(recv_chan chan Retransmission_translation_struct) {
+
+	aggregation_list := make([]Retransmission_translation_struct, Retransmission_aggregation_window)
+	aggregate_index := 0
+
+	for {
+		val := <-recv_chan
+
+		if aggregate_index == Retransmission_aggregation_window {
+			aggregate_index = 0
+
+			// Open log file
+			file, err := os.OpenFile(Retransmission_translation_file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				panic(err)
+			}
+
+			for _, val := range aggregation_list {
+				_, err = file.WriteString(fmt.Sprintf("%d %d\n", val.OldPacketNumber, val.NewPacketNumber))
+				if err != nil {
+					panic(err)
+				}
+			}
+
+			// Close log file
+			err = file.Close()
+			if err != nil {
+				panic(err)
+			}
+
+		}
+
+		aggregation_list[aggregate_index] = val
+		aggregate_index++
+
+	}
 }

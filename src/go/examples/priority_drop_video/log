@@ -1,6 +1,0 @@
-not a tty
-    PID    PGID     SID TTY          TIME CMD
-  13521   13521   13521 ?        00:00:00 sh
-+ clear
-[H[2J[3J+ sudo ip netns exec server_ns sh -c export PATH=$PATH:/usr/local/go/bin && exec bash
-

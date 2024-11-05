@@ -82,3 +82,13 @@ type Unistream_id_retransmission_struct struct {
 type Retransmission_val_struct struct {
 	IsRetransmission uint8
 }
+
+type Timestamp_struct struct {
+	PacketNumber int64
+	Timestamp    int64
+}
+
+type Retransmission_translation_struct struct {
+	OldPacketNumber int64
+	NewPacketNumber int64
+}
