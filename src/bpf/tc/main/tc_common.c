@@ -686,6 +686,42 @@ __attribute__((always_inline)) int read_var_int(void *start, struct var_int *res
         return 0;
 }
 
+// This function reads the packet number of a QUIC packet.
+// This function is a little different from the variable length integer
+// reading function since the packet number is 1 to 4 bytes long but a 
+// variable integer is 1, 2, 4 or 8 bytes long.
+__attribute__((always_inline)) int read_packet_number(void *payload, uint8_t pn_len, uint32_t pn_off_from_quic) {
+
+        uint32_t pn;
+        uint8_t byte;
+
+        // For some reason the bpf verifier does not like this
+        // whole thing being put into a loop.
+        if (pn_len >= 1) {
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic);
+                pn = byte;
+        }
+        if (pn_len >= 2) {
+                pn = pn << 8;
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 1);
+                pn = pn | byte;
+        }
+        if (pn_len >= 3) {
+                pn = pn << 8;
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 2);
+                pn = pn | byte;
+        }
+        if (pn_len == 4) {
+                pn = pn << 8;
+                SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + pn_off_from_quic + 3);
+                pn = pn | byte;
+        }
+
+        bpf_printk("Packet number: %d\n", pn);
+
+        return pn;
+}
+
 // This function determines the minimal number of bytes needed to encode
 // a variable length integer as described in RFC9000:
 // https://datatracker.ietf.org/doc/html/rfc9000#name-variable-length-integer-enc
