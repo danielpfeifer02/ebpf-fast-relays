@@ -20,8 +20,6 @@ func clearScreen() {
 // TODO: fix timeout issues when there is nothing happening
 func main() {
 
-	panic("Next TODO (analyse data) should not run the code (would overwrite data)") // TODO just to avoid overwriting data
-
 	mainConfig()
 	os.Remove("tls.keylog")
 
