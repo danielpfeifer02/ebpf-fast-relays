@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"common.com/common"
@@ -15,6 +16,8 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
+
+	"github.com/x1m3/priorityQueue"
 )
 
 type receiver struct {
@@ -158,9 +161,26 @@ func createReceivePipelineFromChannel(recv_chan chan []byte) (*gst.Pipeline, err
 
 	src := app.SrcFromElement(common.GetElementByName(pipeline, "src"))
 
-	src.SetCallbacks(&app.SourceCallbacks{
-		NeedDataFunc: func(self *app.Source, length uint) {
-			buf := <-recv_chan
+	// TODO: for now this is for debugging
+	last_ts := uint64(0)
+	pq := priorityQueue.New()
+	pq_mutex := &sync.Mutex{}
+
+	go func(pq *priorityQueue.Queue, src *app.Source) {
+
+		for {
+			time.Sleep(10 * time.Millisecond) // Wait for potential late packets?
+
+			pq_mutex.Lock()
+			item := pq.Pop()
+			pq_mutex.Unlock()
+			if item == nil {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			frame := item.(*Item)
+
+			buf := frame.value
 
 			// Here we retrieve the presentation timestamp from the beginning of the buffer.
 			ts_bytes := buf[:8]
@@ -178,8 +198,42 @@ func createReceivePipelineFromChannel(recv_chan chan []byte) (*gst.Pipeline, err
 			buffer.Map(gst.MapWrite).WriteData(buf[:n])
 			buffer.Unmap()
 
-			self.PushBuffer(buffer)
+			fmt.Println(src.PushBuffer(buffer))
+		}
+
+	}(pq, src)
+
+	src.SetCallbacks(&app.SourceCallbacks{
+		NeedDataFunc: func(self *app.Source, length uint) {
+			buf := <-recv_chan
+
+			// Here we retrieve the presentation timestamp from the beginning of the buffer.
+			ts_bytes := buf[:8]
+			ts_i64 := uint64(binary.BigEndian.Uint64(ts_bytes))
+
+			fmt.Println("timestamp increment", ts_i64-last_ts)
+			if last_ts > ts_i64 {
+				panic("timestamp out of order")
+			}
+			last_ts = ts_i64
+			item := &Item{
+				value:    buf,
+				priority: int(ts_i64),
+			}
+			pq_mutex.Lock()
+			pq.Push(item)
+			pq_mutex.Unlock()
+
 		},
 	})
 	return pipeline, nil
+}
+
+type Item struct {
+	value    []byte
+	priority int
+}
+
+func (i *Item) HigherPriorityThan(other priorityQueue.Interface) bool {
+	return i.priority < other.(*Item).priority
 }

@@ -11,6 +11,7 @@ require (
 	github.com/go-gst/go-gst v1.0.0
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/mengelbart/gst-go v0.0.4
+	github.com/x1m3/priorityQueue v0.0.0-20180318192439-29f82ba34a27
 )
 
 replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio-moq-app/priority-moqtransport
