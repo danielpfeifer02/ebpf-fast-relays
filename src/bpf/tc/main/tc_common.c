@@ -114,6 +114,10 @@
 #define VP8_VIDEO_PAYLOAD 1
 #define SINGLE_STREAM_USAGE 0
 
+// Definitions for config of client side program for timestamp handling.
+#define WRITE_TS_TO_PACKET 0
+#define PRINT_ARRIVAL_TS 1
+
 // A definition to avoid having to check the return value of a probe read
 // manually all the time. This cannot be a wrapper since in case of an error
 // we want to return TC_ACT_OK.

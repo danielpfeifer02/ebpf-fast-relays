@@ -244,8 +244,9 @@ int tc_egress(struct __sk_buff *skb)
                                 SAVE_BPF_PROBE_READ_KERNEL(&packet_id.connection_id, sizeof(packet_id.connection_id), conn_id_off);
                                 
                                 uint8_t *pack_is_retr = bpf_map_lookup_elem(&packet_is_retransmission, &packet_id);
+                                
                                 if (pack_is_retr != NULL && *pack_is_retr == 1) {
-                                        bpf_printk("Retransmission detected for packet ( %d %d )\n", old_pn, stream_id.value);
+                                        bpf_printk("Retransmission detected for packet (%u -> %u) at %lu\n", old_pn, pn_key.packet_number, time_ns);
                                         is_retransmission = 1;
                                 }
                                 
