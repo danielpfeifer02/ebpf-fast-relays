@@ -43,6 +43,15 @@ BPF_TC_OBJ_TS_ING = ${TC_TS_PATH}/tc_ts_handling_ingress.o
 BPF_TC_OBJ_TS_EG = ${TC_TS_PATH}/tc_ts_handling_egress.o
 
 
+# This is for the proof of concept that the relay can en- and decrypt on the ebpf level.
+# Devices are the same as for the main tc program.
+CRYPTO_DEV_IN := veth1
+CRYPTO_DEV_EG := veth2
+TC_CRYPTO_PATH := tc/crypto
+BPF_TC_OBJ_CRYPTO_ING_SERVER := ${TC_CRYPTO_PATH}/tc_ingress_server_side_crypto.o
+BPF_TC_OBJ_CRYPTO_EG_CLIENT := ${TC_CRYPTO_PATH}/tc_egress_client_side_crypto.o
+
+
 CUR_NS := $(shell ip netns identify)
 
 # TODO: other way to export PATH
@@ -96,6 +105,18 @@ tc_ts_eg: $(BPF_TC_OBJ_TS_EG)
 	tc filter add dev ${TS_DEV_EG} egress bpf da obj ${BPF_TC_OBJ_TS_EG} sec ts_egress
 	tc filter show dev ${TS_DEV_EG} egress
 
+tc_crypto_ig: $(BPF_TC_OBJ_CRYPTO_ING_SERVER)
+	tc qdisc add dev ${CRYPTO_DEV_IN} clsact
+	tc filter add dev ${CRYPTO_DEV_IN} ingress bpf da obj ${BPF_TC_OBJ_CRYPTO_ING_SERVER} sec crypto_ingress
+	tc filter show dev ${CRYPTO_DEV_IN} ingress
+	@echo "Added ingress crypto ebpf program"
+
+tc_crypto_eg: $(BPF_TC_OBJ_CRYPTO_EG_CLIENT)
+	tc qdisc add dev ${CRYPTO_DEV_EG} clsact
+	tc filter add dev ${CRYPTO_DEV_EG} egress bpf da obj ${BPF_TC_OBJ_CRYPTO_EG_CLIENT} sec crypto_egress
+	tc filter show dev ${CRYPTO_DEV_EG} egress
+	@echo "Added egress crypto ebpf program"
+
 # Main tc program compilation
 # TODO add -Werror flag 
 $(BPF_TC_OBJ): ${TC_PATH}/%.o: ${TC_PATH}/%.c
@@ -143,6 +164,27 @@ $(BPF_TC_OBJ_TS_EG): ${TC_TS_PATH}/%.o: ${TC_TS_PATH}/%.c
 		-O2 -emit-llvm -c -o ${@:.o=.ll} $<
 	llc -march=bpf -filetype=obj -O2 -o $@ ${@:.o=.ll}
 
+# Crypto programs compilation
+$(BPF_TC_OBJ_CRYPTO_ING_SERVER): ${TC_CRYPTO_PATH}/%.o: ${TC_CRYPTO_PATH}/%.c
+	clang -S \
+		-g \
+		-target bpf \
+	  -I../../libbpf/src\
+	  -I../../iproute2/include\
+		-Wall \
+		-O2 -emit-llvm -c -o ${@:.o=.ll} $<
+	llc -march=bpf -filetype=obj -O2 -o $@ ${@:.o=.ll}
+
+$(BPF_TC_OBJ_CRYPTO_EG_CLIENT): ${TC_CRYPTO_PATH}/%.o: ${TC_CRYPTO_PATH}/%.c
+	clang -S \
+		-g \
+		-target bpf \
+	  -I../../libbpf/src\
+	  -I../../iproute2/include\
+		-Wall \
+		-O2 -emit-llvm -c -o ${@:.o=.ll} $<
+	llc -march=bpf -filetype=obj -O2 -o $@ ${@:.o=.ll}
+
 clean:
 
 	@echo $(CUR_NS)
@@ -177,6 +219,22 @@ clean:
 			tc qdisc del dev ${DEV_IN} clsact; \
 		fi; \
 		sudo rm -f $(BPF_TC_IN_TO_EG_PINNED_PATH); \
+		if [ -e "$(BPF_TC_OBJ_CRYPTO_ING_SERVER)" ]; then \
+			echo "Deleting TC filters for crypto"; \
+			rm -f $(BPF_TC_OBJ_CRYPTO_ING_SERVER); \
+			rm -f ${BPF_TC_OBJ_CRYPTO_ING_SERVER:.o=.ll}; \
+			rm -f /sys/fs/bpf/tc/globals/*; \
+			tc filter del dev ${CRYPTO_DEV_IN} ingress; \
+			tc qdisc del dev ${CRYPTO_DEV_IN} clsact; \
+		fi; \
+		if [ -e "$(BPF_TC_OBJ_CRYPTO_EG_CLIENT)" ]; then \
+			echo "Deleting TC filters for crypto"; \
+			rm -f $(BPF_TC_OBJ_CRYPTO_EG_CLIENT); \
+			rm -f ${BPF_TC_OBJ_CRYPTO_EG_CLIENT:.o=.ll}; \
+			rm -f /sys/fs/bpf/tc/globals/*; \
+			tc filter del dev ${CRYPTO_DEV_EG} egress; \
+			tc qdisc del dev ${CRYPTO_DEV_EG} clsact; \
+		fi; \
 	fi
 
 	@if [ "$(CUR_NS)" = "relay_ns" ]; then \

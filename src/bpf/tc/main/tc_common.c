@@ -52,26 +52,26 @@
 #define MAX_STREAMS_PER_CLIENT 1024
 // Since the packet number translations are deleted by the userspace program
 // 1024 might not even be necessary and this could be lowered.
-#define MAX_PN_TRANSLATIONS 1 << 15 // 32768 // TODO: what size is sufficient?
+#define MAX_PN_TRANSLATIONS (1<<15) // 32768 // TODO: what size is sufficient?
 // The same goes for the unistream id translations.
 // This is necessary since the IDs also have to be unique even if
 // the relay and the forwarding mechanism open streams at the same time.
 // Therefore translate in the relay.
-#define MAX_UNISTREAM_ID_TRANSLATIONS 1<<15 // 32768 // TODO: what size is sufficient?
+#define MAX_UNISTREAM_ID_TRANSLATIONS (1<<15) // 32768 // TODO: what size is sufficient?
 // This stores the maximum number of ids stores at the same
 // time to identify them as being part of a retransmission.
-#define MAX_RETRANSMISSION_IDS_STORED 1<<15 // 32768 // TODO: what size is sufficient? (why are the entries not properly deleted?)
+#define MAX_RETRANSMISSION_IDS_STORED (1<<15) // 32768 // TODO: what size is sufficient? (why are the entries not properly deleted?)
 // The maximum number of frames that are expected to be in a packet.
 // For now this is just an arbitrary number and can be adjusted.
 // Not sure if there is any limit defined in the QUIC standard.
 #define MAX_FRAMES_PER_PACKET 16
 // The maximum number of packets in the queue that have to be registered
-#define MAX_REGISTER_QUEUE_SIZE 1<<15 // 32768 // TODO: what size is sufficient?
+#define MAX_REGISTER_QUEUE_SIZE (1<<15) // 32768 // TODO: what size is sufficient?
 // The maximum number of pairs of packet number and timestamp that can be stored
 // for RTT calculations.
-#define MAX_PN_TS_PAIRS 1<<15 // 32768 // TODO: what size is sufficient?
+#define MAX_PN_TS_PAIRS (1<<15) // 32768 // TODO: what size is sufficient?
 // Defines the size of the rinbuffer used for packet events
-#define MAX_PACKET_EVENTS 1<<15 // 32768 // TODO: what size is sufficient?
+#define MAX_PACKET_EVENTS (1<<15) // 32768 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
 // which is also used in the userspace program (i.e. should be changed with care).
@@ -535,7 +535,11 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
                 }
 
                 // TODO: this map needs to be cleaned at some point?
-                int unistr_ret = bpf_map_update_elem(&connection_unistream_id_translation, &unistream_key, new_stream_id, BPF_ANY); 
+                int unistr_ret = bpf_map_update_elem(&connection_unistream_id_translation, &unistream_key, new_stream_id, BPF_ANY);
+                if (unistr_ret != 0) {
+                        bpf_printk("Failed to update unidirectional stream id translation\n");
+                        return 1;
+                } 
                 // TODO: In case the map update is actually to slow -> maybe use the return value + BPF_NOEXIST to avoid the problem?
 
                 // Do not touch the two least significant bits since they inicate stream type.

@@ -14,11 +14,15 @@ require (
 	github.com/x1m3/priorityQueue v0.0.0-20180318192439-29f82ba34a27
 )
 
+require golang.org/x/crypto v0.23.0 // indirect
+
 replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio-moq-app/priority-moqtransport
 
 replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28 => ../quic-go-prio-packs
 
 replace common.com/common v0.0.0 => ./src/go/common
+
+replace golang.com/x/crypto v0.23.0 => ../crypto
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
@@ -48,8 +52,7 @@ require (
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/tevino/abool v1.2.0 // indirect
 	github.com/yuin/goldmark v1.5.5 // indirect
-	go.uber.org/mock v0.4.0 // indirect
-	golang.org/x/crypto v0.23.0 // indirect
+	go.uber.org/mock v0.4.0 // indirect; indirect// indirect
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
 	golang.org/x/image v0.11.0 // indirect
 	golang.org/x/mobile v0.0.0-20230531173138-3c911d8e3eda // indirect
