@@ -13,20 +13,21 @@
 
 #define SECRET_QUEUE_SIZE (1<<15)
 
-struct tls_chacha20_poly1305_secret_t {
-    uint64_t secret; // TODO
+struct tls_chacha20_poly1305_bitstream_t {
+    uint8_t bitstream_bytes[64]; // TODO
+    uint32_t offset; // gives the offset in the bitstream for the 64 byte block.
 };
  
 // This map will be used to hand down the tls secrets from the userspace to the eBPF program.
 // This map is used for the server-relay connection.
 struct {
     __uint(type, BPF_MAP_TYPE_QUEUE);
-    __type(value, struct tls_chacha20_poly1305_secret_t);
+    __type(value, struct tls_chacha20_poly1305_bitstream_t);
     __uint(max_entries, SECRET_QUEUE_SIZE);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
-} tls_chacha20_poly1305_secret_server SEC(".maps");
+} tls_chacha20_poly1305_bitstream_server SEC(".maps");
 
 // This function will read the tls secrets from the ring buffer and store them in the eBPF program.
-__attribute__((always_inline)) int32_t retreive_tls_chacha20_poly1305_secret(struct tls_chacha20_poly1305_secret_t *secret) {
-    return bpf_map_pop_elem(&tls_chacha20_poly1305_secret_server, secret);     
+__attribute__((always_inline)) int32_t retreive_tls_chacha20_poly1305_bitstream(struct tls_chacha20_poly1305_bitstream_t *secret) {
+    return bpf_map_pop_elem(&tls_chacha20_poly1305_bitstream_server, secret);     
 }

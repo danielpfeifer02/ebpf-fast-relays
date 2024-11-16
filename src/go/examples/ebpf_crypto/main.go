@@ -32,6 +32,7 @@ func main() {
 	if arguemnts[1] == "server" {
 		startServer()
 	} else if arguemnts[1] == "relay" {
+		// crypto_turnoff.CRYPTO_TURNED_OFF = true // TODO: this will show that the relay is able to decrypt the packet
 		err := startClient()
 		if err != nil {
 			log.Fatal(err)
