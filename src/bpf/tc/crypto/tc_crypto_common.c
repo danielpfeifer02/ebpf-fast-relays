@@ -30,7 +30,7 @@ struct {
 } tls_chacha20_poly1305_bitstream_server SEC(".maps");
 
 // This function will read the tls secrets from the ring buffer and store them in the eBPF program.
-__attribute__((always_inline)) int32_t retreive_tls_chacha20_poly1305_bitstream(struct tls_chacha20_poly1305_bitstream_t *secret) {
+__attribute__((always_inline)) int32_t retreive_tls_chacha20_poly1305_bitstream(uint64_t pn, struct tls_chacha20_poly1305_bitstream_t *secret) {
     // return bpf_map_pop_elem(&tls_chacha20_poly1305_bitstream_server, secret);  // TODO: this would be for a queue
 
     return 0;   
