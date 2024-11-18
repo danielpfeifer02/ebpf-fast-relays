@@ -70,8 +70,6 @@ int tc_egress(struct __sk_buff *skb)
         // expected to handle supported frames with separate packets.
         uint8_t pn_len = (quic_flags & 0x03) + 1;
         uint32_t old_pn = read_packet_number(payload, pn_len, 1 /* Short header bits */ + CONN_ID_LEN);
-        bpf_printk("Received packet with pn: %u\n", old_pn);
-
         
         // TODO: decrypt here
         struct tls_chacha20_poly1305_bitstream_t bitstream;

@@ -12,7 +12,7 @@
 #include <linux/icmp.h>
 
 #define SECRET_QUEUE_SIZE (1<<15)
-#define BITSTREAM_LENGTH (64 * 3)
+#define BITSTREAM_LENGTH (64 * 1)
 
 struct tls_chacha20_poly1305_bitstream_t {
     uint8_t bitstream_bytes[BITSTREAM_LENGTH]; // TODO
@@ -25,7 +25,7 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, uint64_t);
     __type(value, struct tls_chacha20_poly1305_bitstream_t);
-    __uint(max_entries, SECRET_QUEUE_SIZE);
+    __uint(max_entries, 20);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } tls_chacha20_poly1305_bitstream_server SEC(".maps");
 
@@ -33,5 +33,12 @@ struct {
 __attribute__((always_inline)) int32_t retreive_tls_chacha20_poly1305_bitstream(uint64_t pn, struct tls_chacha20_poly1305_bitstream_t *secret) {
     // return bpf_map_pop_elem(&tls_chacha20_poly1305_bitstream_server, secret);  // TODO: this would be for a queue
 
+    struct tls_chacha20_poly1305_bitstream_t *value = bpf_map_lookup_elem(&tls_chacha20_poly1305_bitstream_server, &pn);
+    if (value == NULL) {
+        bpf_printk("No tls secrets found for packet number %llu\n", pn);
+        return 1;
+    }
+    *secret = *value;
+    
     return 0;   
 }
