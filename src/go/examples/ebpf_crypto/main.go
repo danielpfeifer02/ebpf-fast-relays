@@ -16,6 +16,8 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
+
+	crypto_settings "golang.org/x/crypto"
 )
 
 func main() {
@@ -61,6 +63,8 @@ func handleSession(sess quic.Connection) {
 	}
 	defer stream.Close()
 
+	fmt.Println("Waiting for client to send a message")
+
 	buf := make([]byte, 1024)
 	n, err := stream.Read(buf)
 	if err != nil {
@@ -78,11 +82,20 @@ func handleSession(sess quic.Connection) {
 }
 
 func startClient() error {
+
+	// Load the eBPF maps
+	loadEBPFCryptoMaps()
+
 	tlsConf := &tls.Config{InsecureSkipVerify: true}
 	session, err := quic.DialAddr(context.Background(), packet_setting.SERVER_ADDR, tlsConf, getQUICConfig())
 	if err != nil {
 		return err
 	}
+
+	crypto_settings.EBPFXOrBitstreamRegister = eBPFXOrBitstreamRegister
+
+	go session.Start1RTTCryptoBitstreamStorage() // TODO: this call will be the core of the ebpf crypto handling
+
 	stream, err := session.OpenStreamSync(context.Background())
 	if err != nil {
 		return err

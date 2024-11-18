@@ -29,26 +29,26 @@ var Packet_is_retransmission *ebpf.Map = nil
 func LoadBPFMaps() {
 	base_dir := "/sys/fs/bpf/tc/globals/"
 
-	Id_counter = loadMap(base_dir + "id_counter")
-	Client_data = loadMap(base_dir + "client_data")
-	Number_of_clients = loadMap(base_dir + "number_of_clients")
-	Client_id = loadMap(base_dir + "client_id")
-	Connection_established = loadMap(base_dir + "connection_established")
-	Client_pn = loadMap(base_dir + "client_pn")
-	Connection_current_pn = loadMap(base_dir + "connection_current_pn")
-	Connection_pn_translation = loadMap(base_dir + "connection_pn_translation")
-	Connection_unistream_id_counter = loadMap(base_dir + "connection_unistream_id_counter")
-	Connection_unistream_id_translation = loadMap(base_dir + "connection_unistream_id_translation")
-	Client_stream_offset = loadMap(base_dir + "client_stream_offset")
-	Packets_to_register = loadMap(base_dir + "packets_to_register")
-	Index_packets_to_register = loadMap(base_dir + "index_packets_to_register")
-	Pn_ts_storage = loadMap(base_dir + "pn_ts_storage")
-	Index_pn_ts_storage = loadMap(base_dir + "index_pn_ts_storage")
-	Unistream_id_is_retransmission = loadMap(base_dir + "unistream_id_is_retransmission")
-	Packet_is_retransmission = loadMap(base_dir + "packet_is_retransmission")
+	Id_counter = LoadMap(base_dir + "id_counter")
+	Client_data = LoadMap(base_dir + "client_data")
+	Number_of_clients = LoadMap(base_dir + "number_of_clients")
+	Client_id = LoadMap(base_dir + "client_id")
+	Connection_established = LoadMap(base_dir + "connection_established")
+	Client_pn = LoadMap(base_dir + "client_pn")
+	Connection_current_pn = LoadMap(base_dir + "connection_current_pn")
+	Connection_pn_translation = LoadMap(base_dir + "connection_pn_translation")
+	Connection_unistream_id_counter = LoadMap(base_dir + "connection_unistream_id_counter")
+	Connection_unistream_id_translation = LoadMap(base_dir + "connection_unistream_id_translation")
+	Client_stream_offset = LoadMap(base_dir + "client_stream_offset")
+	Packets_to_register = LoadMap(base_dir + "packets_to_register")
+	Index_packets_to_register = LoadMap(base_dir + "index_packets_to_register")
+	Pn_ts_storage = LoadMap(base_dir + "pn_ts_storage")
+	Index_pn_ts_storage = LoadMap(base_dir + "index_pn_ts_storage")
+	Unistream_id_is_retransmission = LoadMap(base_dir + "unistream_id_is_retransmission")
+	Packet_is_retransmission = LoadMap(base_dir + "packet_is_retransmission")
 }
 
-func loadMap(path string) *ebpf.Map {
+func LoadMap(path string) *ebpf.Map {
 	m, err := ebpf.LoadPinnedMap(path, &ebpf.LoadPinOptions{})
 	if err != nil {
 		panic("Failed to load map: " + path + "(" + err.Error() + ")")

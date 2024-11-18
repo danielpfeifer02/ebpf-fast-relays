@@ -14,7 +14,7 @@ require (
 	github.com/x1m3/priorityQueue v0.0.0-20180318192439-29f82ba34a27
 )
 
-require golang.org/x/crypto v0.23.0 // indirect
+require golang.org/x/crypto v0.23.0
 
 replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio-moq-app/priority-moqtransport
 
