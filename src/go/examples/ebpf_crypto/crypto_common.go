@@ -14,9 +14,11 @@ var tls_chacha20_poly1305_bitstream_server *ebpf.Map = nil
 
 type tls_chacha20_poly1305_bitstream_access_key struct {
 	PacketNumber uint64
+	BlockIndex   uint8
+	Padding      [7]uint8
 }
 
-func eBPFXOrBitstreamRegister(pn uint64, bitstream []byte) {
+func eBPFXOrBitstreamRegister(pn uint64, blockindex uint8, bitstream []byte) {
 
 	if writeToFile {
 		tmpfilepath := fmt.Sprintf("/tmp/ebpf_crypto_%d", pn)
@@ -40,10 +42,10 @@ func eBPFXOrBitstreamRegister(pn uint64, bitstream []byte) {
 	}
 
 	// Write bitstream to map
-	key := tls_chacha20_poly1305_bitstream_access_key{PacketNumber: pn}
-	err := tls_chacha20_poly1305_bitstream_server.Put(key, bitstream)
+	key := tls_chacha20_poly1305_bitstream_access_key{PacketNumber: pn, BlockIndex: blockindex, Padding: [7]uint8{0, 0, 0, 0, 0, 0, 0}}
+	err := tls_chacha20_poly1305_bitstream_server.Put(key, bitstream) // TODO: sizing should always be 64 byte so no worries here?
 	if err != nil {
-		fmt.Println("Error writing to map", err)
+		panic(err)
 	}
 }
 

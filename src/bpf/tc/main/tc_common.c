@@ -126,8 +126,16 @@
 #define UNQ_NAME(name) LINE_EXPAND(name, __LINE__)
 
 #define SAVE_BPF_PROBE_READ_KERNEL(dest, size, ptr)                     \
-        long UNQ_NAME(unq_) = bpf_probe_read_kernel(dest, size, ptr);   \
-        if (UNQ_NAME(unq_) < 0) {                                       \
+        long UNQ_NAME(unq_read_) = bpf_probe_read_kernel(dest, size, ptr);   \
+        if (UNQ_NAME(unq_read_) < 0) {                                       \
+                bpf_printk("Failed to read memory!\n");                 \
+                return TC_ACT_OK;                                       \
+        }                                                           
+
+
+#define SAVE_BPF_PROBE_WRITE_KERNEL(skb, offset, from, len, flags)                     \
+        long UNQ_NAME(unq_write_) = bpf_skb_store_bytes(skb, offset, from, len, flags);   \
+        if (UNQ_NAME(unq_write_) < 0) {                                       \
                 bpf_printk("Failed to read memory!\n");                 \
                 return TC_ACT_OK;                                       \
         }                                                           

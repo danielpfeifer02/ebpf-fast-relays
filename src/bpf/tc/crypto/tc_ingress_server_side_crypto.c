@@ -69,20 +69,10 @@ int tc_egress(struct __sk_buff *skb)
         // We only need to look at the first frame since the underlying QUIC library is
         // expected to handle supported frames with separate packets.
         uint8_t pn_len = (quic_flags & 0x03) + 1;
-        uint32_t old_pn = read_packet_number(payload, pn_len, 1 /* Short header bits */ + CONN_ID_LEN);
-        
-        // TODO: decrypt here
-        struct tls_chacha20_poly1305_bitstream_t bitstream;
-        retreive_tls_chacha20_poly1305_bitstream(old_pn, &bitstream);
+        uint32_t old_pn = read_packet_number(payload, pn_len, 1 /* Short header bits */ + CONN_ID_LEN); 
 
         // Decrypt the payload
-        // uint32_t length = data_end - (payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len); // Length of the encrypted payload
-        uint8_t enc_payload[20];
-        SAVE_BPF_PROBE_READ_KERNEL(enc_payload, 20, payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len);
-
-        for (int i=0; i<20; i++) {
-            bpf_printk("%02x ^ %02x = %02x\n", enc_payload[i], bitstream.bitstream_bytes[i], enc_payload[i]^bitstream.bitstream_bytes[i]);
-        }        
+        decrypt_packet_payload(skb, payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len, data_end, old_pn);      
         
         uint8_t frame_type;
 

@@ -35,6 +35,7 @@ func main() {
 		startServer()
 	} else if arguemnts[1] == "relay" {
 		// crypto_turnoff.CRYPTO_TURNED_OFF = true // TODO: this will show that the relay is able to decrypt the packet
+		crypto_turnoff.INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = true
 		err := startClient()
 		if err != nil {
 			log.Fatal(err)
@@ -95,6 +96,7 @@ func startClient() error {
 	crypto_settings.EBPFXOrBitstreamRegister = eBPFXOrBitstreamRegister
 
 	go session.Start1RTTCryptoBitstreamStorage() // TODO: this call will be the core of the ebpf crypto handling
+	time.Sleep(time.Second)
 
 	stream, err := session.OpenStreamSync(context.Background())
 	if err != nil {
