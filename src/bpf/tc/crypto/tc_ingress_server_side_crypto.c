@@ -89,6 +89,8 @@ int tc_egress(struct __sk_buff *skb)
             return TC_ACT_OK;
         }
 
+        bpf_printk("Frame type: %02x\n", frame_type);
+
         
     
     }

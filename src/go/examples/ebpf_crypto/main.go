@@ -35,7 +35,6 @@ func main() {
 		startServer()
 	} else if arguemnts[1] == "relay" {
 		// crypto_turnoff.CRYPTO_TURNED_OFF = true // TODO: this will show that the relay is able to decrypt the packet
-		crypto_turnoff.INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = true
 		err := startClient()
 		if err != nil {
 			log.Fatal(err)
@@ -86,6 +85,7 @@ func startClient() error {
 
 	// Load the eBPF maps
 	loadEBPFCryptoMaps()
+	crypto_turnoff.INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = false // TODO: this should be on since the ebpf prog is doing the decryption
 
 	tlsConf := &tls.Config{InsecureSkipVerify: true}
 	session, err := quic.DialAddr(context.Background(), packet_setting.SERVER_ADDR, tlsConf, getQUICConfig())

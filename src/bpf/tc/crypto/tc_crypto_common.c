@@ -63,7 +63,7 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
 
     uint8_t byte;
     struct tls_chacha20_poly1305_bitstream_block_t bitstream;
-    uint8_t cur_block_index = 0;
+    uint8_t cur_block_index = 1; // TODO: delibarately start at 1 to skip the 0th block (bc of some tls poly thing?)
     uint32_t ret = retreive_tls_chacha20_poly1305_bitstream(pn, cur_block_index, &bitstream);
     if (ret != 0) {
         return 1;
@@ -81,7 +81,7 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
         byte = byte ^ bitstream.bitstream_bytes[index];
         write_offset = ((size_t)payload - (size_t)data) + i; // TODO: correct ptr arithmetic? void * artihmetic allone is not allowed
         
-        SAVE_BPF_PROBE_WRITE_KERNEL(skb, write_offset, &byte, sizeof(byte), 0);
+        // SAVE_BPF_PROBE_WRITE_KERNEL(skb, write_offset, &byte, sizeof(byte), 0);
 
         SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload + i);
         bpf_printk("Byte after: %02x\n", byte);
