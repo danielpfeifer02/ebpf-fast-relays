@@ -20,10 +20,16 @@ import (
 	crypto_settings "golang.org/x/crypto"
 )
 
+// ! TODO: turn off the header protection again
+// ! TODO: set to correct states
+const WHOLE_CRYPTO_TURNED_OFF = false
+const HEADER_PROTECTION_TURNED_OFF = true
+const INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = false
+
 func main() {
 
-	crypto_turnoff.CRYPTO_TURNED_OFF = false
-	crypto_turnoff.HEADER_PROTECTION_TURNED_OFF = true
+	crypto_turnoff.CRYPTO_TURNED_OFF = WHOLE_CRYPTO_TURNED_OFF
+	crypto_turnoff.HEADER_PROTECTION_TURNED_OFF = HEADER_PROTECTION_TURNED_OFF
 
 	arguemnts := os.Args
 	if len(arguemnts) != 2 {
@@ -45,7 +51,7 @@ func main() {
 }
 
 func startServer() {
-	listener, err := quic.ListenAddr(packet_setting.SERVER_ADDR, generateTLSConfig(), getQUICConfig())
+	listener, err := quic.ListenAddr(packet_setting.SERVER_ADDR, generateTLSConfig(true), getQUICConfig())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,10 +91,9 @@ func startClient() error {
 
 	// Load the eBPF maps
 	loadEBPFCryptoMaps()
-	crypto_turnoff.INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = false // TODO: this should be on since the ebpf prog is doing the decryption
+	crypto_turnoff.INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF // TODO: this should be on since the ebpf prog is doing the decryption
 
-	tlsConf := &tls.Config{InsecureSkipVerify: true}
-	session, err := quic.DialAddr(context.Background(), packet_setting.SERVER_ADDR, tlsConf, getQUICConfig())
+	session, err := quic.DialAddr(context.Background(), packet_setting.SERVER_ADDR, generateTLSConfig(false), getQUICConfig())
 	if err != nil {
 		return err
 	}
@@ -120,7 +125,7 @@ func startClient() error {
 	return nil
 }
 
-func generateTLSConfig() *tls.Config {
+func generateTLSConfig(generate_keylog bool) *tls.Config {
 	key, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		panic(err)
@@ -136,6 +141,14 @@ func generateTLSConfig() *tls.Config {
 	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		panic(err)
+	}
+
+	if !generate_keylog {
+		return &tls.Config{
+			Certificates:       []tls.Certificate{tlsCert},
+			InsecureSkipVerify: true,
+			CipherSuites:       []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
+		}
 	}
 
 	// Keylog file
@@ -155,5 +168,8 @@ func generateTLSConfig() *tls.Config {
 }
 
 func getQUICConfig() *quic.Config {
-	return &quic.Config{}
+	return &quic.Config{
+		Allow0RTT:               false,
+		DisablePathMTUDiscovery: true,
+	}
 }

@@ -167,6 +167,7 @@ $(BPF_TC_OBJ_TS_EG): ${TC_TS_PATH}/%.o: ${TC_TS_PATH}/%.c
 # Crypto programs compilation
 $(BPF_TC_OBJ_CRYPTO_ING_SERVER): ${TC_CRYPTO_PATH}/%.o: ${TC_CRYPTO_PATH}/%.c
 	clang -S \
+		-Dveth2_egress_ifindex=${DEV_EG_INDEX} \
 		-g \
 		-target bpf \
 	  -I../../libbpf/src\

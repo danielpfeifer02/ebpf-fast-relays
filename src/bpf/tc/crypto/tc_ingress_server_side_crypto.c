@@ -4,6 +4,7 @@
 __section("crypto_ingress")
 int tc_egress(struct __sk_buff *skb)
 {
+    return TC_ACT_OK; // TODO: remove
     // Get data pointers from the buffer.
     void *data = (void *)(long)skb->data;
     void *data_end = (void *)(long)skb->data_end;
@@ -65,6 +66,7 @@ int tc_egress(struct __sk_buff *skb)
 
     // We only consider short header packets here.
     if (header_form == 0) {
+        bpf_printk("Short header packet\n");
         // We need to check that the packet actually contains a supported frame.
         // We only need to look at the first frame since the underlying QUIC library is
         // expected to handle supported frames with separate packets.
@@ -86,13 +88,19 @@ int tc_egress(struct __sk_buff *skb)
         // Checking that the frame is supported.
         if (!SUPPORTED_FRAME(frame_type)) {
             bpf_printk("Not a stream or datagram frame (%02x)\n", frame_type);
-            return TC_ACT_OK;
+            // return TC_ACT_OK;
         }
 
         bpf_printk("Frame type: %02x\n", frame_type);
-
+        
+        
+        // TODO: for now just for debugging
+        bpf_printk("Redirecting to crypto_egress");
+        bpf_clone_redirect(skb, veth2_egress_ifindex, 0);
         
     
+    } else {
+        bpf_printk("Long header packet\n");
     }
     
     return TC_ACT_OK;
