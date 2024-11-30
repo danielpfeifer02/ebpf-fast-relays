@@ -15,6 +15,7 @@
 #define BITSTREAM_BLOCK_SIZE 64
 #define MAX_BLOCKS_PER_PACKET 24 // 24 * 64 = 1536 bytes which is large enough for a whole packet
 #define BITSTREAM_BLOCK_MAP_SIZE 20 // TODO: make enough for continuous decryption
+#define POLY1305_TAG_SIZE 16
 
 struct tls_chacha20_poly1305_bitstream_block_t {
     uint8_t bitstream_bytes[BITSTREAM_BLOCK_SIZE]; // TODO
@@ -68,7 +69,7 @@ __attribute__((always_inline)) int32_t retreive_tls_chacha20_poly1305_bitstream(
 }
 
 // This function will decrypt the packet using the tls bitsream.
-__attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *skb, void *payload, void *data_end, uint64_t pn) { // ! TODO: fix the problem that multiple frames in same packet
+__attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *skb, void *payload, void *data_end, uint64_t pn, uint32_t decryption_size) { // ! TODO: fix the problem that multiple frames in same packet
 
     // // Get decryption indicator
     // uint32_t key = 0;
@@ -95,21 +96,21 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
 
     // Decrypt the payload
     uint32_t index = 0;
-    uint32_t write_offset;
-    for (int i=0; i<1000; i++) { // TODO: make large enough to iterate over the whole payload
+    uint32_t write_offset = 0;
+    for (int i=0; i<decryption_size; i++) { // TODO: make large enough to iterate over the whole payload
         SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload);
-        bpf_printk("Byte before: %02x\n", byte);
-        bpf_printk("%02x (%d) ^ %02x (%d) = %02x\n", byte, byte, bitstream.bitstream_bytes[index], bitstream.bitstream_bytes[index], byte^bitstream.bitstream_bytes[index]);
+        // bpf_printk("Byte before: %02x\n", byte);
+        // bpf_printk("%02x (%d) ^ %02x (%d) = %02x\n", byte, byte, bitstream.bitstream_bytes[index], bitstream.bitstream_bytes[index], byte^bitstream.bitstream_bytes[index]);
         
         // Decrypt the payload
         byte = byte ^ bitstream.bitstream_bytes[index];
-        write_offset = ((size_t)payload - (size_t)data); // TODO: correct ptr arithmetic? void * artihmetic allone is not allowed
-        bpf_printk("Writing %02x to offset %d\n", byte, write_offset);
+        write_offset = payload >= data ? ((size_t)payload - (size_t)data) : 0; // TODO: correct ptr arithmetic? void * artihmetic allone is not allowed
+        // bpf_printk("Writing %02x to offset %d\n", byte, write_offset);
         
         SAVE_BPF_PROBE_WRITE_KERNEL(skb, write_offset, &byte, sizeof(byte), 0); // ! TODO: in the end this should be turned on 
 
         SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload);
-        bpf_printk("Byte after: %02x\n", byte);
+        // bpf_printk("Byte after: %02x\n", byte);
         
         payload++;
         index++;
@@ -123,7 +124,7 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
             if (ret != 0) {
                 return 1;
             }
-            bpf_printk("Now using block %d of bitstream\n", cur_block_index);
+            // bpf_printk("Now using block %d of bitstream\n", cur_block_index);
         }
     }
 

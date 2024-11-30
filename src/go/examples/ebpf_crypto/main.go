@@ -24,7 +24,7 @@ import (
 // ! TODO: set to correct states
 const WHOLE_CRYPTO_TURNED_OFF = false
 const HEADER_PROTECTION_TURNED_OFF = true
-const INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = false
+const INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = true
 
 func main() {
 
@@ -63,27 +63,28 @@ func startServer() {
 }
 
 func handleSession(sess quic.Connection) {
-	stream, err := sess.AcceptStream(context.Background())
+	stream, err := sess.OpenStreamSync(context.Background()) // TODO: change to AcceptStream if the code below is uncommented
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer stream.Close()
 
-	fmt.Println("Waiting for client to send a message")
+	// fmt.Println("Waiting for client to send a message")
 
-	buf := make([]byte, 1024)
-	n, err := stream.Read(buf)
-	if err != nil {
-		fmt.Println("Error reading from stream (server)")
-		log.Fatal(err)
-	}
-	fmt.Printf("Server: Got '%s'\n", string(buf[:n]))
+	// buf := make([]byte, 1024)
+	// n, err := stream.Read(buf)
+	// if err != nil {
+	// 	fmt.Println("Error reading from stream (server)")
+	// 	log.Fatal(err)
+	// }
+	// fmt.Printf("Server: Got '%s'\n", string(buf[:n]))
 
 	_, err = stream.Write([]byte("Hello from server"))
 	if err != nil {
 		fmt.Println("Error writing to stream (server)")
 		log.Fatal(err)
 	}
+	fmt.Println("Server: Sent 'Hello from server'")
 	time.Sleep(100 * time.Millisecond) // Wait before closing the stream
 }
 
@@ -103,17 +104,17 @@ func startClient() error {
 	go session.Start1RTTCryptoBitstreamStorage() // TODO: this call will be the core of the ebpf crypto handling
 	time.Sleep(time.Second)
 
-	stream, err := session.OpenStreamSync(context.Background())
+	stream, err := session.AcceptStream(context.Background()) // TODO: change to OpenStreamSync if the code below is uncommented
 	if err != nil {
 		return err
 	}
 	defer stream.Close()
 
-	_, err = stream.Write([]byte("Hello from client"))
-	if err != nil {
-		fmt.Println("Error writing to stream (client)")
-		return err
-	}
+	// _, err = stream.Write([]byte("Hello from client"))
+	// if err != nil {
+	// 	fmt.Println("Error writing to stream (client)")
+	// 	return err
+	// }
 
 	buf := make([]byte, 1024)
 	n, err := stream.Read(buf)

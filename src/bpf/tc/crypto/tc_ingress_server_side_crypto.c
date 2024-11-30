@@ -4,7 +4,7 @@
 __section("crypto_ingress")
 int tc_egress(struct __sk_buff *skb)
 {
-    return TC_ACT_OK; // TODO: remove
+    // return TC_ACT_OK; // TODO: remove
     // Get data pointers from the buffer.
     void *data = (void *)(long)skb->data;
     void *data_end = (void *)(long)skb->data_end;
@@ -73,8 +73,13 @@ int tc_egress(struct __sk_buff *skb)
         uint8_t pn_len = (quic_flags & 0x03) + 1;
         uint32_t old_pn = read_packet_number(payload, pn_len, 1 /* Short header bits */ + CONN_ID_LEN); 
 
+        void *quic_payload_start = payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len; 
+        void *quic_payload_end = data_end;
+        uint32_t decryption_size = quic_payload_end - quic_payload_start - POLY1305_TAG_SIZE;
+        bpf_printk("Decryption size: %d\n", decryption_size);
+
         // Decrypt the payload
-        decrypt_packet_payload(skb, payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len, data_end, old_pn);      
+        decrypt_packet_payload(skb, payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len, data_end, old_pn, decryption_size);              
         
         uint8_t frame_type;
 
@@ -93,11 +98,22 @@ int tc_egress(struct __sk_buff *skb)
 
         bpf_printk("Frame type: %02x\n", frame_type);
         
-        
         // TODO: for now just for debugging
         bpf_printk("Redirecting to crypto_egress");
         bpf_clone_redirect(skb, veth2_egress_ifindex, 0);
-        
+
+        if (0) {
+        // After a clone redirect all the pointers are invalid
+        data_end = (void *)(long)skb->data_end;
+        data = (void *)(long)skb->data;
+        eth = (struct ethhdr *)data;
+        ip = (struct iphdr *)(eth + 1);
+        udp = (struct udphdr *)(ip + 1);
+        payload = (void *)(udp + 1);
+
+        // Undo decryption for now (debugging)
+        decrypt_packet_payload(skb, payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len, data_end, old_pn, decryption_size); // xor again to undo decryption
+        }
     
     } else {
         bpf_printk("Long header packet\n");
