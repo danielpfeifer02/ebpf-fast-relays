@@ -102,7 +102,7 @@ int tc_egress(struct __sk_buff *skb)
         bpf_printk("Redirecting to crypto_egress");
         bpf_clone_redirect(skb, veth2_egress_ifindex, 0);
 
-        if (0) {
+        if (0) { // TODO: remove
         // After a clone redirect all the pointers are invalid
         data_end = (void *)(long)skb->data_end;
         data = (void *)(long)skb->data;

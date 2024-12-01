@@ -26,6 +26,9 @@ const WHOLE_CRYPTO_TURNED_OFF = false
 const HEADER_PROTECTION_TURNED_OFF = true
 const INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = true
 
+const MSG_NUM = 3
+const MSG_SIZE = len("Hello from server xxx")
+
 func main() {
 
 	crypto_turnoff.CRYPTO_TURNED_OFF = WHOLE_CRYPTO_TURNED_OFF
@@ -79,12 +82,15 @@ func handleSession(sess quic.Connection) {
 	// }
 	// fmt.Printf("Server: Got '%s'\n", string(buf[:n]))
 
-	_, err = stream.Write([]byte("Hello from server"))
-	if err != nil {
-		fmt.Println("Error writing to stream (server)")
-		log.Fatal(err)
+	for i := 0; i < MSG_NUM; i++ {
+		_, err = stream.Write([]byte("Hello from server " + fmt.Sprintf("%03d", i)))
+		if err != nil {
+			fmt.Println("Error writing to stream (server)")
+			log.Fatal(err)
+		}
+		fmt.Printf("Server: Sent 'Hello from server %d'\n", i)
+		time.Sleep(time.Millisecond)
 	}
-	fmt.Println("Server: Sent 'Hello from server'")
 	time.Sleep(100 * time.Millisecond) // Wait before closing the stream
 }
 
@@ -116,13 +122,16 @@ func startClient() error {
 	// 	return err
 	// }
 
-	buf := make([]byte, 1024)
-	n, err := stream.Read(buf)
-	if err != nil {
-		fmt.Println("Error reading from stream (client)")
-		return err
+	buf := make([]byte, MSG_SIZE)
+
+	for i := 0; i < MSG_NUM; i++ {
+		n, err := stream.Read(buf)
+		if err != nil {
+			fmt.Println("Error reading from stream (client)")
+			return err
+		}
+		fmt.Printf("Client: Got '%s'\n", string(buf[:n]))
 	}
-	fmt.Printf("Client: Got '%s'\n", string(buf[:n]))
 	return nil
 }
 
