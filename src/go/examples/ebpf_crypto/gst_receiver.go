@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"common.com/common"
-	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
-	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 	"github.com/go-gst/go-gst/gst"
@@ -22,7 +20,6 @@ import (
 
 type receiver struct {
 	pipeline  *gst.Pipeline
-	session   *moqtransport.Session
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 }
@@ -32,7 +29,6 @@ func newReceiver(ctx context.Context, addr string) (*receiver, error) {
 	c, err := quic.DialAddr(ctx, addr,
 		&tls.Config{
 			InsecureSkipVerify: true,
-			NextProtos:         []string{"moq-00"},
 		}, &quic.Config{
 			Tracer:                     qlog.DefaultTracer,
 			EnableDatagrams:            true,
@@ -46,32 +42,40 @@ func newReceiver(ctx context.Context, addr string) (*receiver, error) {
 		panic(err)
 	}
 
-	client_sess, err := moqtransport.NewClientSession(quicmoq.New(c), moqtransport.DeliveryRole, true)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("moq peer connected")
-	a, err := client_sess.ReadAnnouncement(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("got announcement of namespace %v", a.Namespace())
+	// client_sess, err := moqtransport.NewClientSession(quicmoq.New(c), moqtransport.DeliveryRole, true)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// fmt.Println("moq peer connected")
+	// a, err := client_sess.ReadAnnouncement(context.Background())
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// log.Printf("got announcement of namespace %v", a.Namespace())
 
-	// subscriptionList := make([]*moqtransport.SendSubscription, 0)
-	a.Accept()
+	// // subscriptionList := make([]*moqtransport.SendSubscription, 0)
+	// a.Accept()
 
-	client_sub, err := client_sess.Subscribe(context.Background(), 0, 0, a.Namespace(), "video", "")
+	// client_sub, err := client_sess.Subscribe(context.Background(), 0, 0, a.Namespace(), "video", "")
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// pipeline, err := createReceivePipeline(client_sub)
+
+	stream, err := c.AcceptStream(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	pipeline, err := createReceivePipeline(client_sub)
+
+	fmt.Println("Accepted stream")
+
+	pipeline, err := createReceivePipeline(stream)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	r := &receiver{
 		pipeline:  pipeline,
-		session:   client_sess,
 		ctx:       ctx,
 		cancelCtx: cancelCtx,
 	}
@@ -102,7 +106,7 @@ func (r *receiver) Close() error {
 	return nil
 }
 
-func createReceivePipeline(flow *moqtransport.ReceiveSubscription) (*gst.Pipeline, error) {
+func createReceivePipeline(stream quic.Stream) (*gst.Pipeline, error) {
 
 	send_chan := make(chan []byte)
 	pipeline, err := createReceivePipelineFromChannel(send_chan)
@@ -112,15 +116,12 @@ func createReceivePipeline(flow *moqtransport.ReceiveSubscription) (*gst.Pipelin
 	go func() { // TODO: graceful shutdown of this goroutine?
 		for {
 			buf := make([]byte, 64_000)
-			n, err := flow.Read(buf)
+			n, err := stream.Read(buf)
 			if err != nil {
 				panic(err)
 			}
 			if n == 0 {
 				continue
-			}
-			if buf[n-1] == 0x69 {
-				fmt.Println("Received", n, "bytes", buf[n-5:n])
 			}
 			send_chan <- buf[:n]
 		}
@@ -162,7 +163,7 @@ func createReceivePipelineFromChannel(recv_chan chan []byte) (*gst.Pipeline, err
 	src := app.SrcFromElement(common.GetElementByName(pipeline, "src"))
 
 	// TODO: for now this is for debugging
-	last_ts := uint64(0)
+	// last_ts := uint64(0)
 	pq := priorityQueue.New()
 	pq_mutex := &sync.Mutex{}
 
@@ -211,11 +212,11 @@ func createReceivePipelineFromChannel(recv_chan chan []byte) (*gst.Pipeline, err
 			ts_bytes := buf[:8]
 			ts_i64 := uint64(binary.BigEndian.Uint64(ts_bytes))
 
-			fmt.Println("timestamp increment", ts_i64-last_ts)
-			if last_ts > ts_i64 {
-				panic("timestamp out of order")
-			}
-			last_ts = ts_i64
+			// fmt.Println("timestamp increment", ts_i64-last_ts)
+			// if last_ts > ts_i64 {
+			// 	panic("timestamp out of order")
+			// }
+			// last_ts = ts_i64
 			item := &Item{
 				value:    buf,
 				priority: int(ts_i64),

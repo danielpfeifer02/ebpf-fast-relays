@@ -38,6 +38,10 @@ func main() {
 }
 
 func main_video() {
+
+	gst.Init(nil)
+	// defer gst.Deinit() // TODO: why C^ not working with this on?
+
 	crypto_turnoff.CRYPTO_TURNED_OFF = WHOLE_CRYPTO_TURNED_OFF
 	crypto_turnoff.HEADER_PROTECTION_TURNED_OFF = HEADER_PROTECTION_TURNED_OFF
 
