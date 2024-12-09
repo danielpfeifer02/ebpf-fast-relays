@@ -38,6 +38,14 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } tls_chacha20_poly1305_bitstream_server SEC(".maps");
 
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, uint32_t);
+    __type(value, uint64_t);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} last_decrypted_pn SEC(".maps");
+
 // This map is to tell the eBPF program that it should decrypt the payload of a packet.
 // TODO: potential race conditions if the userspace tells this to late and an undecrypted packet is sent up to userspace
 // TODO: or forwarded to the client? Potentially use different way of finding out what packets to decrypt.
@@ -94,6 +102,9 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
         return 1;
     }
 
+    // Key for updating the last decrypted pn
+    uint32_t last_decrypt_key = 0;
+
     // Decrypt the payload
     uint32_t index = 0;
     uint32_t write_offset = 0;
@@ -108,6 +119,8 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
         // bpf_printk("Writing %02x to offset %d\n", byte, write_offset);
         
         SAVE_BPF_PROBE_WRITE_KERNEL(skb, write_offset, &byte, sizeof(byte), 0); // ! TODO: in the end this should be turned on 
+        bpf_map_update_elem(&last_decrypted_pn, &last_decrypt_key, &pn, BPF_ANY);
+
 
         SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), payload);
         // bpf_printk("Byte after: %02x\n", byte);

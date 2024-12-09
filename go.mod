@@ -16,6 +16,8 @@ require (
 
 require golang.org/x/crypto v0.23.0
 
+require github.com/deckarep/golang-set/v2 v2.7.0
+
 replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio-moq-app/priority-moqtransport
 
 replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28 => ../quic-go-prio-packs

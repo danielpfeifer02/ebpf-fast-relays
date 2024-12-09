@@ -13,9 +13,12 @@ import (
 	"os"
 	"time"
 
+	"common.com/common"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
+	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/gst/app"
 
 	crypto_settings "golang.org/x/crypto"
 )
@@ -30,6 +33,77 @@ const MSG_NUM = 3
 const MSG_SIZE = len("Hello from server xxx")
 
 func main() {
+	// main_message()
+	main_video()
+}
+
+func main_video() {
+	crypto_turnoff.CRYPTO_TURNED_OFF = WHOLE_CRYPTO_TURNED_OFF
+	crypto_turnoff.HEADER_PROTECTION_TURNED_OFF = HEADER_PROTECTION_TURNED_OFF
+
+	arguemnts := os.Args
+	if len(arguemnts) != 2 {
+		fmt.Println("Usage: go run *.go (server|client) [1]")
+		return
+	}
+
+	if arguemnts[1] == "server" {
+		server_start_video()
+	} else if arguemnts[1] == "relay" {
+		client_start_video()
+	} else {
+		fmt.Println("Usage: go run *.go (server|client) [2]")
+	}
+}
+
+func server_start_video() {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer cancel()
+
+	done := common.StartSignalHandler()
+
+	go func(ctx context.Context) {
+		sender, err := newSender(ctx, packet_setting.SERVER_ADDR)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("Starting sender")
+		sender.start()
+		<-ctx.Done()
+		err = sender.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(ctx)
+
+	<-done
+}
+
+func client_start_video() {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer cancel()
+
+	done := common.StartSignalHandler()
+
+	go func() {
+		receiver, err := newReceiver(ctx, packet_setting.SERVER_ADDR)
+		if err != nil {
+			log.Fatal(err)
+		}
+		receiver.start()
+		<-ctx.Done()
+		err = receiver.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	<-done
+}
+
+func main_message() {
 
 	crypto_turnoff.CRYPTO_TURNED_OFF = WHOLE_CRYPTO_TURNED_OFF
 	crypto_turnoff.HEADER_PROTECTION_TURNED_OFF = HEADER_PROTECTION_TURNED_OFF
@@ -41,10 +115,10 @@ func main() {
 	}
 
 	if arguemnts[1] == "server" {
-		startServer()
+		server_start_message()
 	} else if arguemnts[1] == "relay" {
 		// crypto_turnoff.CRYPTO_TURNED_OFF = true // TODO: this will show that the relay is able to decrypt the packet
-		err := startClient()
+		err := server_client_message()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -53,7 +127,7 @@ func main() {
 	}
 }
 
-func startServer() {
+func server_start_message() {
 	listener, err := quic.ListenAddr(packet_setting.SERVER_ADDR, generateTLSConfig(true), getQUICConfig())
 	if err != nil {
 		log.Fatal(err)
@@ -94,7 +168,7 @@ func handleSession(sess quic.Connection) {
 	time.Sleep(100 * time.Millisecond) // Wait before closing the stream
 }
 
-func startClient() error {
+func server_client_message() error {
 
 	// Load the eBPF maps
 	loadEBPFCryptoMaps()
@@ -106,9 +180,11 @@ func startClient() error {
 	}
 
 	crypto_settings.EBPFXOrBitstreamRegister = eBPFXOrBitstreamRegister
+	crypto_settings.PotentiallTriggerCryptoGarbageCollector = potentiallTriggerCryptoGarbageCollector
+	crypto_settings.RegisterFullyReceivedPacket = registerFullyReceivedPacket
 
 	go session.Start1RTTCryptoBitstreamStorage() // TODO: this call will be the core of the ebpf crypto handling
-	time.Sleep(time.Second)
+	time.Sleep(20 * time.Microsecond)            // TODO: necessary for preloading?
 
 	stream, err := session.AcceptStream(context.Background()) // TODO: change to OpenStreamSync if the code below is uncommented
 	if err != nil {
@@ -182,4 +258,14 @@ func getQUICConfig() *quic.Config {
 		Allow0RTT:               false,
 		DisablePathMTUDiscovery: true,
 	}
+}
+
+func handleMessage(msg *gst.Message) error {
+	switch msg.Type() {
+	case gst.MessageEOS:
+		return app.ErrEOS
+	case gst.MessageError:
+		return msg.ParseError()
+	}
+	return nil
 }
