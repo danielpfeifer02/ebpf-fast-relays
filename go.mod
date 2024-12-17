@@ -8,15 +8,14 @@ require (
 	github.com/cilium/ebpf v0.15.0
 	github.com/danielpfeifer02/priority-moqtransport v0.1.1-6
 	github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28
+	github.com/deckarep/golang-set/v2 v2.7.0
 	github.com/go-gst/go-gst v1.0.0
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/mengelbart/gst-go v0.0.4
+	github.com/quic-go/quic-go v0.41.0
 	github.com/x1m3/priorityQueue v0.0.0-20180318192439-29f82ba34a27
+	golang.org/x/crypto v0.31.0
 )
-
-require golang.org/x/crypto v0.23.0
-
-require github.com/deckarep/golang-set/v2 v2.7.0
 
 replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio-moq-app/priority-moqtransport
 
@@ -25,6 +24,10 @@ replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28 => ../quic-go-p
 replace common.com/common v0.0.0 => ./src/go/common
 
 replace golang.org/x/crypto v0.23.0 => ../crypto
+
+replace golang.org/x/crypto v0.31.0 => ../crypto
+
+replace github.com/quic-go/quic-go v0.41.0 => ../plain-quic-go-lib/quic-go
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
@@ -51,7 +54,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
-	github.com/stretchr/testify v1.8.4 // indirect
+	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/tevino/abool v1.2.0 // indirect
 	github.com/yuin/goldmark v1.5.5 // indirect
 	go.uber.org/mock v0.4.0 // indirect; indirect// indirect
@@ -59,7 +62,7 @@ require (
 	golang.org/x/image v0.11.0 // indirect
 	golang.org/x/mobile v0.0.0-20230531173138-3c911d8e3eda // indirect
 	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.25.0 // indirect
+	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sys v0.27.0 // indirect
 	golang.org/x/text v0.20.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect

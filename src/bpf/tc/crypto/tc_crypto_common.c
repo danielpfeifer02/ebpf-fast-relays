@@ -14,7 +14,7 @@
 #define SECRET_QUEUE_SIZE (1<<15)
 #define BITSTREAM_BLOCK_SIZE 64
 #define MAX_BLOCKS_PER_PACKET 24 // 24 * 64 = 1536 bytes which is large enough for a whole packet
-#define BITSTREAM_BLOCK_MAP_SIZE 20 // TODO: make enough for continuous decryption
+#define BITSTREAM_BLOCK_MAP_SIZE (1<<15) // TODO: make enough for continuous decryption
 #define POLY1305_TAG_SIZE 16
 
 struct tls_chacha20_poly1305_bitstream_block_t {
@@ -99,6 +99,7 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
     uint8_t cur_block_index = 1; // TODO: delibarately start at 1 to skip the 0th block (bc of some tls poly thing?)
     uint32_t ret = retreive_tls_chacha20_poly1305_bitstream(pn, cur_block_index, &bitstream);
     if (ret != 0) {
+        bpf_printk("Error: Could not retrieve tls secrets for packet number %llu and block %d\n", pn, cur_block_index);
         return 1;
     }
 
@@ -135,6 +136,7 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
             cur_block_index++;
             ret = retreive_tls_chacha20_poly1305_bitstream(pn, cur_block_index, &bitstream);
             if (ret != 0) {
+                bpf_printk("Error: Could not retrieve tls secrets for packet number %llu and block %d\n", pn, cur_block_index);
                 return 1;
             }
             // bpf_printk("Now using block %d of bitstream\n", cur_block_index);

@@ -4,10 +4,13 @@
 __section("crypto_ingress")
 int tc_egress(struct __sk_buff *skb)
 {
-    // return TC_ACT_OK; // TODO: remove
+    // bpf_printk("Ingress\n");
     // Get data pointers from the buffer.
     void *data = (void *)(long)skb->data;
     void *data_end = (void *)(long)skb->data_end;
+
+    // bpf_printk("Data length: %d\n", skb->len);
+    // return TC_ACT_OK; // TODO: remove
 
     // If the packet is too small to contain the headers we expect
     // we can directly pass it through.
@@ -94,6 +97,8 @@ int tc_egress(struct __sk_buff *skb)
         if (!SUPPORTED_FRAME(frame_type)) {
             bpf_printk("Not a stream or datagram frame (%02x)\n", frame_type);
             // return TC_ACT_OK;
+        } else {
+            bpf_printk("Valid frame type: %02x\n", frame_type);
         }
 
         bpf_printk("Frame type: %02x\n", frame_type);
@@ -102,18 +107,18 @@ int tc_egress(struct __sk_buff *skb)
         bpf_printk("Redirecting to crypto_egress");
         bpf_clone_redirect(skb, veth2_egress_ifindex, 0);
 
-        if (0) { // TODO: remove
-        // After a clone redirect all the pointers are invalid
-        data_end = (void *)(long)skb->data_end;
-        data = (void *)(long)skb->data;
-        eth = (struct ethhdr *)data;
-        ip = (struct iphdr *)(eth + 1);
-        udp = (struct udphdr *)(ip + 1);
-        payload = (void *)(udp + 1);
+        // if (0) { // TODO: remove
+        // // After a clone redirect all the pointers are invalid
+        // data_end = (void *)(long)skb->data_end;
+        // data = (void *)(long)skb->data;
+        // eth = (struct ethhdr *)data;
+        // ip = (struct iphdr *)(eth + 1);
+        // udp = (struct udphdr *)(ip + 1);
+        // payload = (void *)(udp + 1);
 
-        // Undo decryption for now (debugging)
-        decrypt_packet_payload(skb, payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len, data_end, old_pn, decryption_size); // xor again to undo decryption
-        }
+        // // Undo decryption for now (debugging)
+        // decrypt_packet_payload(skb, payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len, data_end, old_pn, decryption_size); // xor again to undo decryption
+        // }
     
     } else {
         bpf_printk("Long header packet\n");

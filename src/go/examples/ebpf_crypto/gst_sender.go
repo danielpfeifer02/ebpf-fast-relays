@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"common.com/common"
+	moqtransport "github.com/danielpfeifer02/priority-moqtransport"
+	"github.com/danielpfeifer02/priority-moqtransport/quicmoq"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
@@ -15,14 +18,15 @@ import (
 
 type sender struct {
 	pipeline  *gst.Pipeline
+	session   *moqtransport.Session
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 }
 
 func newSender(ctx context.Context, addr string) (*sender, error) {
 
-	tlsConfig := generateTLSConfig(false)
-	listener, err := quic.ListenAddr(addr, tlsConfig, getQUICConfig())
+	tlsConfig := generateTLSConfig(true)
+	listener, err := quic.ListenAddr(addr, tlsConfig, generateQUICConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -31,59 +35,49 @@ func newSender(ctx context.Context, addr string) (*sender, error) {
 	if err != nil {
 		return nil, err
 	}
-	// session, err := moqtransport.NewServerSession(quicmoq.New(conn), true)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// log.Printf("handling new peer")
-	// go func() {
-	// 	var a *moqtransport.Announcement
-	// 	a, err = session.ReadAnnouncement(ctx)
-	// 	if err != nil {
-	// 		return
-	// 	}
-	// 	log.Printf("got announcement: %v", a.Namespace())
-	// 	a.Reject(0, "server does not accept announcements")
-	// }()
-
-	// go func() {
-	// 	if err = session.Announce(ctx, "video"); err != nil {
-	// 		return
-	// 	}
-	// 	log.Printf("announced video namespace")
-	// }()
-
-	// sub, err := session.ReadSubscription(ctx)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// log.Printf("handling subscription to track %s/%s", sub.Namespace(), sub.Trackname())
-	// if sub.Trackname() != "video" {
-	// 	err = errors.New("unknown trackname")
-	// 	sub.Reject(0, err.Error())
-	// 	return nil, err
-	// }
-	// sub.Accept()
-	// log.Printf("subscription accepted")
-	// pipeline, err := createSendPipeline(sub)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	stream, err := conn.OpenStreamSync(ctx)
+	session, err := moqtransport.NewServerSession(quicmoq.New(conn), true)
 	if err != nil {
 		return nil, err
 	}
 
-	pipeline, err := createSendPipeline(stream)
+	log.Printf("handling new peer")
+	go func() {
+		var a *moqtransport.Announcement
+		a, err = session.ReadAnnouncement(ctx)
+		if err != nil {
+			return
+		}
+		log.Printf("got announcement: %v", a.Namespace())
+		a.Reject(0, "server does not accept announcements")
+	}()
+
+	go func() {
+		if err = session.Announce(ctx, "video"); err != nil {
+			return
+		}
+		log.Printf("announced video namespace")
+	}()
+
+	sub, err := session.ReadSubscription(ctx)
 	if err != nil {
 		return nil, err
 	}
-
+	log.Printf("handling subscription to track %s/%s", sub.Namespace(), sub.Trackname())
+	if sub.Trackname() != "video" {
+		err = errors.New("unknown trackname")
+		sub.Reject(0, err.Error())
+		return nil, err
+	}
+	sub.Accept()
+	log.Printf("subscription accepted")
+	pipeline, err := createSendPipeline(sub)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	s := &sender{
 		pipeline:  pipeline,
+		session:   session,
 		ctx:       ctx,
 		cancelCtx: cancelCtx,
 	}
@@ -115,7 +109,7 @@ func (s *sender) Close() error {
 	return nil
 }
 
-func createSendPipeline(stream quic.Stream) (*gst.Pipeline, error) {
+func createSendPipeline(flow *moqtransport.SendSubscription) (*gst.Pipeline, error) {
 	// gst.Init(nil)
 
 	fmt.Println("Getting sender specifications")
@@ -163,10 +157,10 @@ func createSendPipeline(stream quic.Stream) (*gst.Pipeline, error) {
 			samples := buffer.Map(gst.MapRead).AsUint8Slice()
 			defer buffer.Unmap()
 
-			// stream, err := flow.NewObjectStream(0, 0, 0)
-			// if err != nil {
-			// 	return gst.FlowError
-			// }
+			stream, err := flow.NewObjectStream(0, 0, 0)
+			if err != nil {
+				return gst.FlowError
+			}
 
 			// Here we add the presentation timestamp to the beginning of the buffer.
 			// This is a little hacky but needed at the sink side to be able to

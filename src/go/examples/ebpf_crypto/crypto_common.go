@@ -48,11 +48,13 @@ func eBPFXOrBitstreamRegister(pn uint64, blockindex uint8, bitstream []byte) {
 	}
 
 	// Write bitstream to map
-	key := tls_chacha20_poly1305_bitstream_access_key{PacketNumber: pn, BlockIndex: blockindex, Padding: [7]uint8{0, 0, 0, 0, 0, 0, 0}}
-	err := tls_chacha20_poly1305_bitstream_server.Put(key, bitstream) // TODO: sizing should always be 64 byte so no worries here?
-	if err != nil {
-		panic(err)
-	}
+	go func() {
+		key := tls_chacha20_poly1305_bitstream_access_key{PacketNumber: pn, BlockIndex: blockindex, Padding: [7]uint8{0, 0, 0, 0, 0, 0, 0}}
+		err := tls_chacha20_poly1305_bitstream_server.Put(key, bitstream) // TODO: sizing should always be 64 byte so no worries here?
+		if err != nil {
+			panic(err)
+		}
+	}()
 }
 
 func potentiallTriggerCryptoGarbageCollector() {

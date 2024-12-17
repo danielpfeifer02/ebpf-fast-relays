@@ -17,6 +17,7 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
+	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
 
@@ -29,12 +30,17 @@ const WHOLE_CRYPTO_TURNED_OFF = false
 const HEADER_PROTECTION_TURNED_OFF = true
 const INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = true
 
-const MSG_NUM = 3
-const MSG_SIZE = len("Hello from server xxx")
+const MSG_NUM = 10000
+const MSG_SIZE = len("Hello from server xxxxx")
+
+const MESSAGE_TEXT = 1 == 10
 
 func main() {
-	// main_message()
-	main_video()
+	if MESSAGE_TEXT {
+		main_message()
+	} else {
+		main_video()
+	}
 }
 
 func main_video() {
@@ -89,6 +95,12 @@ func client_start_video() {
 
 	defer cancel()
 
+	crypto_turnoff.INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF
+	loadEBPFCryptoMaps()
+	crypto_settings.EBPFXOrBitstreamRegister = eBPFXOrBitstreamRegister
+	crypto_settings.PotentiallTriggerCryptoGarbageCollector = potentiallTriggerCryptoGarbageCollector
+	crypto_settings.RegisterFullyReceivedPacket = registerFullyReceivedPacket
+
 	done := common.StartSignalHandler()
 
 	go func() {
@@ -122,7 +134,7 @@ func main_message() {
 		server_start_message()
 	} else if arguemnts[1] == "relay" {
 		// crypto_turnoff.CRYPTO_TURNED_OFF = true // TODO: this will show that the relay is able to decrypt the packet
-		err := server_client_message()
+		err := client_start_message()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -132,7 +144,7 @@ func main_message() {
 }
 
 func server_start_message() {
-	listener, err := quic.ListenAddr(packet_setting.SERVER_ADDR, generateTLSConfig(true), getQUICConfig())
+	listener, err := quic.ListenAddr(packet_setting.SERVER_ADDR, generateTLSConfig(true), generateQUICConfig())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -144,11 +156,11 @@ func server_start_message() {
 }
 
 func handleSession(sess quic.Connection) {
-	stream, err := sess.OpenStreamSync(context.Background()) // TODO: change to AcceptStream if the code below is uncommented
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer stream.Close()
+	// stream, err := sess.OpenStreamSync(context.Background()) // TODO: change to AcceptStream if the code below is uncommented
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer stream.Close()
 
 	// fmt.Println("Waiting for client to send a message")
 
@@ -161,24 +173,36 @@ func handleSession(sess quic.Connection) {
 	// fmt.Printf("Server: Got '%s'\n", string(buf[:n]))
 
 	for i := 0; i < MSG_NUM; i++ {
-		_, err = stream.Write([]byte("Hello from server " + fmt.Sprintf("%03d", i)))
+
+		stream, err := sess.OpenStreamSync(context.Background()) // TODO: change to AcceptStream if the code below is uncommented
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer stream.Close()
+
+		_, err = stream.Write([]byte("Hello from server " + fmt.Sprintf("%05d", i)))
 		if err != nil {
 			fmt.Println("Error writing to stream (server)")
 			log.Fatal(err)
 		}
 		fmt.Printf("Server: Sent 'Hello from server %d'\n", i)
 		time.Sleep(time.Millisecond)
+
+		// go func(stream quic.Stream) {
+		// 	time.Sleep(100 * time.Millisecond) // Wait before closing the stream
+		// 	stream.Close()
+		// }(stream)
 	}
 	time.Sleep(100 * time.Millisecond) // Wait before closing the stream
 }
 
-func server_client_message() error {
+func client_start_message() error {
 
 	// Load the eBPF maps
 	loadEBPFCryptoMaps()
 	crypto_turnoff.INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF = INCOMING_SHORT_HEADER_CRYPTO_TURNED_OFF // TODO: this should be on since the ebpf prog is doing the decryption
 
-	session, err := quic.DialAddr(context.Background(), packet_setting.SERVER_ADDR, generateTLSConfig(false), getQUICConfig())
+	session, err := quic.DialAddr(context.Background(), packet_setting.SERVER_ADDR, generateTLSConfig(false), generateQUICConfig())
 	if err != nil {
 		return err
 	}
@@ -188,13 +212,13 @@ func server_client_message() error {
 	crypto_settings.RegisterFullyReceivedPacket = registerFullyReceivedPacket
 
 	go session.Start1RTTCryptoBitstreamStorage() // TODO: this call will be the core of the ebpf crypto handling
-	time.Sleep(20 * time.Microsecond)            // TODO: necessary for preloading?
+	time.Sleep(1 * time.Second)                  // TODO: necessary for preloading?
 
-	stream, err := session.AcceptStream(context.Background()) // TODO: change to OpenStreamSync if the code below is uncommented
-	if err != nil {
-		return err
-	}
-	defer stream.Close()
+	// stream, err := session.AcceptStream(context.Background()) // TODO: change to OpenStreamSync if the code below is uncommented
+	// if err != nil {
+	// 	return err
+	// }
+	// defer stream.Close()
 
 	// _, err = stream.Write([]byte("Hello from client"))
 	// if err != nil {
@@ -205,12 +229,24 @@ func server_client_message() error {
 	buf := make([]byte, MSG_SIZE)
 
 	for i := 0; i < MSG_NUM; i++ {
+
+		stream, err := session.AcceptStream(context.Background())
+		if err != nil {
+			return err
+		}
+		defer stream.Close()
+
 		n, err := stream.Read(buf)
 		if err != nil {
 			fmt.Println("Error reading from stream (client)")
 			return err
 		}
 		fmt.Printf("Client: Got '%s'\n", string(buf[:n]))
+
+		// go func(stream quic.Stream) {
+		// 	time.Sleep(100 * time.Millisecond) // Wait before closing the stream
+		// 	stream.Close()
+		// }(stream)
 	}
 	return nil
 }
@@ -257,10 +293,13 @@ func generateTLSConfig(generate_keylog bool) *tls.Config {
 	}
 }
 
-func getQUICConfig() *quic.Config {
+func generateQUICConfig() *quic.Config {
 	return &quic.Config{
+		Tracer:                  qlog.DefaultTracer,
 		Allow0RTT:               false,
 		DisablePathMTUDiscovery: true,
+		EnableDatagrams:         true,
+		MaxIncomingStreams:      1 << 60,
 	}
 }
 
