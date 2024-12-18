@@ -11,22 +11,10 @@
 #include <linux/udp.h>
 #include <linux/icmp.h>
 
-#define SECRET_QUEUE_SIZE (1<<15)
-#define BITSTREAM_BLOCK_SIZE 64
-#define MAX_BLOCKS_PER_PACKET 24 // 24 * 64 = 1536 bytes which is large enough for a whole packet
-#define BITSTREAM_BLOCK_MAP_SIZE (1<<15) // TODO: make enough for continuous decryption
-#define POLY1305_TAG_SIZE 16
+#include "tc_crypto_defines.c"
+#include "tc_crypto_structs.c"
+#include "tc_poly1305_mac.c"
 
-struct tls_chacha20_poly1305_bitstream_block_t {
-    uint8_t bitstream_bytes[BITSTREAM_BLOCK_SIZE]; // TODO
-    // uint32_t offset; // gives the offset in the bitstream for the 64 byte block.
-};
-
-struct tls_chacha20_poly1305_bitstream_map_key_t {
-    uint64_t pn;
-    uint8_t block_index;
-    uint8_t padding[7];
-};
  
 // This map will be used to hand down the tls secrets from the userspace to the eBPF program.
 // This map is used for the server-relay connection.
@@ -45,6 +33,16 @@ struct {
     __uint(max_entries, 1);
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } last_decrypted_pn SEC(".maps");
+
+// Since the stack size is limited to 512 bytes we need a separate ebpf map for generating the poly1305 tag.
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, uint32_t);
+    __type(value, struct poly1305buffer_t);
+    __uint(max_entries, 1);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} poly1305_tag_gen_buffer SEC(".maps");
 
 // This map is to tell the eBPF program that it should decrypt the payload of a packet.
 // TODO: potential race conditions if the userspace tells this to late and an undecrypted packet is sent up to userspace
@@ -77,27 +75,50 @@ __attribute__((always_inline)) int32_t retreive_tls_chacha20_poly1305_bitstream(
 }
 
 // This function will decrypt the packet using the tls bitsream.
-__attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *skb, void *payload, void *data_end, uint64_t pn, uint32_t decryption_size) { // ! TODO: fix the problem that multiple frames in same packet
+__attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *skb, struct decryption_bundle_t decryption_bundle, void *data_end, uint64_t pn) { // ! TODO: fix the problem that multiple frames in same packet
 
-    // // Get decryption indicator
-    // uint32_t key = 0;
-    // uint8_t *decrypt_indicator = bpf_map_lookup_elem(&decrypt_packet_payload_indicator, &key);
-    // if (decrypt_indicator == NULL) {
-    //     return 0;
-    // }
-    // if (*decrypt_indicator < 2) {
-    //     uint8_t new_val = *decrypt_indicator;
-    //     new_val++;
-    //     bpf_map_update_elem(&decrypt_packet_payload_indicator, &key, &new_val, BPF_ANY);
-    //     return 0;
-    // }
+    void *payload = decryption_bundle.payload;
+    void *additional_data = decryption_bundle.additional_data;
+    uint32_t decryption_size = decryption_bundle.decyption_size;
+    uint32_t additional_data_size = decryption_bundle.additional_data_size;
     
     void *data = (void *)(long)skb->data;
 
+
+    // Check poly1305 tag
+    struct tls_chacha20_poly1305_bitstream_block_t poly_key;
+    uint8_t block_index = 0;
+
+    // Get the poly1305 key
+    uint32_t ret = retreive_tls_chacha20_poly1305_bitstream(pn, block_index, &poly_key);
+    if (ret != 0) {
+        bpf_printk("Error: Could not retrieve tls secrets for packet number %llu and block %d\n", pn, block_index);
+        return 1;
+    }
+
+    // Get payload and additional data
+    struct poly1305buffer_t poly1305_buffer;
+    poly1305_buffer.payload_size = decryption_size;
+    poly1305_buffer.additional_data_size = additional_data_size;
+
+    struct mac_generic_t mac;
+    initialize_mac(&mac, poly_key.bitstream_bytes, data_end);
+
+    writeWithPadding(&mac, additional_data, additional_data_size);
+    writeWithPadding(&mac, payload, decryption_size); // TODO: ciphertext
+    writeUint64(&mac, additional_data_size);
+    writeUint64(&mac, decryption_size);
+
+    uint8_t tag_valid = verify(&mac, decryption_bundle.tag);
+    if (!tag_valid) {
+        return INVALID_TAG;
+    }
+
+
     uint8_t byte;
     struct tls_chacha20_poly1305_bitstream_block_t bitstream;
-    uint8_t cur_block_index = 1; // TODO: delibarately start at 1 to skip the 0th block (bc of some tls poly thing?)
-    uint32_t ret = retreive_tls_chacha20_poly1305_bitstream(pn, cur_block_index, &bitstream);
+    uint8_t cur_block_index = 1; // Start at 1 to skip the 0th block (poly1305 block)
+    ret = retreive_tls_chacha20_poly1305_bitstream(pn, cur_block_index, &bitstream);
     if (ret != 0) {
         bpf_printk("Error: Could not retrieve tls secrets for packet number %llu and block %d\n", pn, cur_block_index);
         return 1;
@@ -119,7 +140,7 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
         write_offset = payload >= data ? ((size_t)payload - (size_t)data) : 0; // TODO: correct ptr arithmetic? void * artihmetic allone is not allowed
         // bpf_printk("Writing %02x to offset %d\n", byte, write_offset);
         
-        SAVE_BPF_PROBE_WRITE_KERNEL(skb, write_offset, &byte, sizeof(byte), 0); // ! TODO: in the end this should be turned on 
+        SAVE_BPF_PROBE_WRITE_KERNEL(skb, write_offset, &byte, sizeof(byte), 0); 
         bpf_map_update_elem(&last_decrypted_pn, &last_decrypt_key, &pn, BPF_ANY);
 
 

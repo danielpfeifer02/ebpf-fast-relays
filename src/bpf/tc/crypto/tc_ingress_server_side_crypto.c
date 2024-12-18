@@ -82,7 +82,18 @@ int tc_egress(struct __sk_buff *skb)
         bpf_printk("Decryption size: %d\n", decryption_size);
 
         // Decrypt the payload
-        decrypt_packet_payload(skb, payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len, data_end, old_pn, decryption_size);              
+        struct decryption_bundle_t decryption_bundle = {
+            .payload = payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len,
+            .additional_data = payload,
+            .tag = payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len + decryption_size,
+            .decyption_size = decryption_size,
+            .additional_data_size = 1 /* Short header bits */ + CONN_ID_LEN + pn_len, 
+        };
+        uint32_t ret = decrypt_packet_payload(skb, decryption_bundle, data_end, old_pn);
+        if (ret == INVALID_TAG) {
+            bpf_printk("Invalid tag\n");
+            return TC_ACT_OK;
+        }              
         
         uint8_t frame_type;
 
