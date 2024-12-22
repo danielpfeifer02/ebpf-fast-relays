@@ -83,6 +83,7 @@ int tc_egress(struct __sk_buff *skb)
 
         // Decrypt the payload
         struct decryption_bundle_t decryption_bundle = {
+            .key = NULL, // Key will be added in the decryption function
             .payload = payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len,
             .additional_data = payload,
             .tag = payload + 1 /* Short header bits */ + CONN_ID_LEN + pn_len + decryption_size,

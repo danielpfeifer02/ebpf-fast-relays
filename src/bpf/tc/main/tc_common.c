@@ -1,3 +1,5 @@
+#pragma once
+
 #include <linux/bpf.h>
 #include <bpf_helpers.h>
 #include <linux/pkt_cls.h>

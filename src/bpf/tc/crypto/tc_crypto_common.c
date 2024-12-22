@@ -84,7 +84,6 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
     
     void *data = (void *)(long)skb->data;
 
-
     // Check poly1305 tag
     struct tls_chacha20_poly1305_bitstream_block_t poly_key;
     uint8_t block_index = 0;
@@ -96,20 +95,23 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
         return 1;
     }
 
-    // Get payload and additional data
-    struct poly1305buffer_t poly1305_buffer;
-    poly1305_buffer.payload_size = decryption_size;
-    poly1305_buffer.additional_data_size = additional_data_size;
+    // // Get payload and additional data
+    // struct poly1305buffer_t poly1305_buffer;
+    // poly1305_buffer.payload_size = decryption_size;
+    // poly1305_buffer.additional_data_size = additional_data_size;
 
-    struct mac_generic_t mac;
-    initialize_mac(&mac, poly_key.bitstream_bytes, data_end);
+    // struct mac_generic_t mac;
+    // initialize_mac(&mac, poly_key.bitstream_bytes);
 
-    writeWithPadding(&mac, additional_data, additional_data_size);
-    writeWithPadding(&mac, payload, decryption_size); // TODO: ciphertext
-    writeUint64(&mac, additional_data_size);
-    writeUint64(&mac, decryption_size);
+    // writeWithPadding(&mac, additional_data, additional_data_size);
+    // writeWithPadding(&mac, payload, decryption_size); // TODO: ciphertext
+    // writeUint64(&mac, additional_data_size);
+    // writeUint64(&mac, decryption_size);
 
-    uint8_t tag_valid = verify(&mac, decryption_bundle.tag);
+    // uint8_t tag_valid = verify(&mac, decryption_bundle.tag);
+
+    decryption_bundle.key = poly_key.bitstream_bytes;
+    uint8_t tag_valid = validate_tag(decryption_bundle);
     if (!tag_valid) {
         return INVALID_TAG;
     }

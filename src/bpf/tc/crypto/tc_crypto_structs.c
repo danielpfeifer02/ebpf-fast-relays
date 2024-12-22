@@ -30,6 +30,7 @@ struct result_u128_t {
 };
 
 struct decryption_bundle_t {
+    void *key;
     void *payload;
     void *additional_data;
     void *tag;
