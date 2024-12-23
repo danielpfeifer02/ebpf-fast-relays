@@ -5,7 +5,15 @@
 #include "tc_mac_update_from_asm.c"
 #include "../main/tc_common.c"
 
-#define REPEAT_16(X) X X X X X X X X X X X X X X X X
+#define DETERMINE_ADD_CARRY_PRESENCE(A, B, C) (((A) & (B)) | (((A) | (B)) & ~(C))) >> 63
+
+// For debugging purposes
+#define REPEAT_1(X) X
+#define REPEAT_2(X) X X
+
+#define REPEAT_8(X) X X X X X X X X
+#define REPEAT_16(X) REPEAT_8(X) REPEAT_8(X)
+#define REPEAT_32(X) REPEAT_16(X) REPEAT_16(X)
 
 #define MAX_LINEARIZED_PADDED_DATA_SIZE (MAX_ADDITIONAL_DATA_SIZE + 15 + MAX_PAYLOAD_SIZE + 15 + 8 + 8)
 struct {
@@ -347,81 +355,144 @@ __attribute__((always_inline)) void mul_my_uint128(struct my_uint128_t *a, struc
     res.hi += second_hi;
 }
 
+uint32_t add_overflow(uint64_t a, uint64_t b, uint64_t *result) {
+    return __builtin_add_overflow(a, b, result);
+}
+
 __attribute__((always_inline)) void my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
 
-    uint64_t carry_mid_lo, carry_mid_hi, carry_hi;
+    uint64_t carry_mid_lo, carry_mid_hi, carry_hi, carry_tmp_1, carry_tmp_2;
     uint64_t res_hi = 0, res_mid_hi = 0, res_mid_lo = 0, res_lo = 0;
+    uint64_t hi_lut, mid_lut, lo_lut;
 
-    for (int i=0; i<64; i++) {
-        if (a->lo & (1 << i)) {
-            uint64_t hi_lut, mid_lut, lo_lut;
-            hi_lut = mod_lut[3*i];
-            mid_lut = mod_lut[3*i + 1];
-            lo_lut = mod_lut[3*i + 2];
-            
-            carry_mid_lo = res_lo + lo_lut < res_lo;
-            res_lo += lo_lut;
+    uint32_t i = 0;
+    for (int j=0; j<64/16; j++) { 
 
-            carry_mid_hi = res_mid_lo + mid_lut + carry_mid_lo < res_mid_lo;
-            res_mid_lo += mid_lut + carry_mid_lo;
+        REPEAT_16(
+            if (a->lo & (1 << i)) {
+                hi_lut = mod_lut[3*i];
+                mid_lut = mod_lut[3*i + 1];
+                lo_lut = mod_lut[3*i + 2];
+                
+                carry_tmp_1 = res_lo + lo_lut;
+                carry_mid_lo = DETERMINE_ADD_CARRY_PRESENCE(res_lo, lo_lut, carry_tmp_1); // res_lo + lo_lut < res_lo;
+                res_lo += lo_lut;
 
-            carry_hi = res_hi + hi_lut + carry_mid_hi < res_hi;
-            res_hi += hi_lut + carry_mid_hi;
-        }
+                // carry_tmp_1 = (mid_lut + carry_mid_lo); // this itself will never overflow since carry is at most 1
+                carry_tmp_2 = res_mid_lo + (mid_lut + carry_mid_lo);
+                carry_mid_hi = DETERMINE_ADD_CARRY_PRESENCE(res_mid_lo, mid_lut + carry_mid_lo, carry_tmp_2); // res_mid_lo + mid_lut + carry_mid_lo < res_mid_lo;
+                
+                // This alternative might be slightly better for verification but is incorrect if the carry causes overflow
+                // carry_tmp_1 = mid_lut + res_mid_lo;
+                // carry_mid_hi = ((mid_lut & res_mid_lo) | ((mid_lut | res_mid_lo) & ~carry_tmp_1)) >> 63;
+                res_mid_lo += mid_lut + carry_mid_lo;
+
+
+                carry_tmp_1 = res_mid_hi + (hi_lut + carry_mid_hi);
+                carry_hi = DETERMINE_ADD_CARRY_PRESENCE(res_mid_hi, hi_lut + carry_mid_hi, carry_tmp_1); // res_hi + hi_lut + carry_mid_hi < res_hi;
+                res_mid_hi += hi_lut + carry_mid_hi;
+
+                res_hi += carry_hi;
+            }
+            i++;
+        )
     }
 
-    for (int i=0; i<64; i++) {
-        if (a->mid_lo & (1 << i)) {
-            uint64_t hi_lut, mid_lut, lo_lut;
-            hi_lut = mod_lut[192 + 3*i];
-            mid_lut = mod_lut[192 + 3*i + 1];
-            lo_lut = mod_lut[192 + 3*i + 2];
-            
-            carry_mid_lo = res_lo + lo_lut < res_lo;
-            res_lo += lo_lut;
+    i = 0;
+    for (int j=0; j<64/16; j++) {
 
-            carry_mid_hi = res_mid_lo + mid_lut + carry_mid_lo < res_mid_lo;
-            res_mid_lo += mid_lut + carry_mid_lo;
+        REPEAT_16(
+            if (a->mid_lo & (1 << i)) {
+                hi_lut = mod_lut[192 + 3*i];
+                mid_lut = mod_lut[192 + 3*i + 1];
+                lo_lut = mod_lut[192 + 3*i + 2];
+                
+                carry_tmp_1 = res_lo + lo_lut;
+                carry_mid_lo = DETERMINE_ADD_CARRY_PRESENCE(res_lo, lo_lut, carry_tmp_1); // res_lo + lo_lut < res_lo;
+                res_lo += lo_lut;
 
-            carry_hi = res_hi + hi_lut + carry_mid_hi < res_hi;
-            res_hi += hi_lut + carry_mid_hi;
-        }
+                // carry_tmp_1 = (mid_lut + carry_mid_lo); // this itself will never overflow since carry is at most 1
+                carry_tmp_2 = res_mid_lo + (mid_lut + carry_mid_lo);
+                carry_mid_hi = DETERMINE_ADD_CARRY_PRESENCE(res_mid_lo, mid_lut + carry_mid_lo, carry_tmp_2); // res_mid_lo + mid_lut + carry_mid_lo < res_mid_lo;
+                
+                // This alternative might be slightly better for verification but is incorrect if the carry causes overflow
+                // carry_tmp_1 = mid_lut + res_mid_lo;
+                // carry_mid_hi = ((mid_lut & res_mid_lo) | ((mid_lut | res_mid_lo) & ~carry_tmp_1)) >> 63;
+                res_mid_lo += mid_lut + carry_mid_lo;
+
+
+                carry_tmp_1 = res_mid_hi + (hi_lut + carry_mid_hi);
+                carry_hi = DETERMINE_ADD_CARRY_PRESENCE(res_mid_hi, hi_lut + carry_mid_hi, carry_tmp_1); // res_hi + hi_lut + carry_mid_hi < res_hi;
+                res_mid_hi += hi_lut + carry_mid_hi;
+
+                res_hi += carry_hi;
+            }
+            i++;
+        )
     }
 
-    for (int i=0; i<64; i++) {
-        if (a->mid_hi & (1 << i)) {
-            uint64_t hi_lut, mid_lut, lo_lut;
-            hi_lut = mod_lut[384 + 3*i];
-            mid_lut = mod_lut[384 + 3*i + 1];
-            lo_lut = mod_lut[384 + 3*i + 2];
-            
-            carry_mid_lo = res_lo + lo_lut < res_lo;
-            res_lo += lo_lut;
+    i = 0;
+    for (int j=0; j<64/16; j++) {
+        REPEAT_16(
+            if (a->mid_hi & (1 << i)) {
+                hi_lut = mod_lut[384 + 3*i];
+                mid_lut = mod_lut[384 + 3*i + 1];
+                lo_lut = mod_lut[384 + 3*i + 2];
+                
+                carry_tmp_1 = res_lo + lo_lut;
+                carry_mid_lo = DETERMINE_ADD_CARRY_PRESENCE(res_lo, lo_lut, carry_tmp_1); // res_lo + lo_lut < res_lo;
+                res_lo += lo_lut;
 
-            carry_mid_hi = res_mid_lo + mid_lut + carry_mid_lo < res_mid_lo;
-            res_mid_lo += mid_lut + carry_mid_lo;
+                // carry_tmp_1 = (mid_lut + carry_mid_lo); // this itself will never overflow since carry is at most 1
+                carry_tmp_2 = res_mid_lo + (mid_lut + carry_mid_lo);
+                carry_mid_hi = DETERMINE_ADD_CARRY_PRESENCE(res_mid_lo, mid_lut + carry_mid_lo, carry_tmp_2); // res_mid_lo + mid_lut + carry_mid_lo < res_mid_lo;
+                
+                // This alternative might be slightly better for verification but is incorrect if the carry causes overflow
+                // carry_tmp_1 = mid_lut + res_mid_lo;
+                // carry_mid_hi = ((mid_lut & res_mid_lo) | ((mid_lut | res_mid_lo) & ~carry_tmp_1)) >> 63;
+                res_mid_lo += mid_lut + carry_mid_lo;
 
-            carry_hi = res_hi + hi_lut + carry_mid_hi < res_hi;
-            res_hi += hi_lut + carry_mid_hi;
-        }
+
+                carry_tmp_1 = res_mid_hi + (hi_lut + carry_mid_hi);
+                carry_hi = DETERMINE_ADD_CARRY_PRESENCE(res_mid_hi, hi_lut + carry_mid_hi, carry_tmp_1); // res_hi + hi_lut + carry_mid_hi < res_hi;
+                res_mid_hi += hi_lut + carry_mid_hi;
+
+                res_hi += carry_hi;
+            }
+            i++;
+        )
     }
 
-    for (int i=0; i<64; i++) {
-        if (a->hi & (1 << i)) {
-            uint64_t hi_lut, mid_lut, lo_lut;
-            hi_lut = mod_lut[576 + 3*i];
-            mid_lut = mod_lut[576 + 3*i + 1];
-            lo_lut = mod_lut[576 + 3*i + 2];
-            
-            carry_mid_lo = res_lo + lo_lut < res_lo;
-            res_lo += lo_lut;
+    i = 0;
+    for (int j=0; j<64/16; j++) {
+        REPEAT_16(
+            if (a->hi & (1 << i)) {
+                hi_lut = mod_lut[576 + 3*i];
+                mid_lut = mod_lut[576 + 3*i + 1];
+                lo_lut = mod_lut[576 + 3*i + 2];
+                
+                carry_tmp_1 = res_lo + lo_lut;
+                carry_mid_lo = DETERMINE_ADD_CARRY_PRESENCE(res_lo, lo_lut, carry_tmp_1); // res_lo + lo_lut < res_lo;
+                res_lo += lo_lut;
 
-            carry_mid_hi = res_mid_lo + mid_lut + carry_mid_lo < res_mid_lo;
-            res_mid_lo += mid_lut + carry_mid_lo;
+                // carry_tmp_1 = (mid_lut + carry_mid_lo); // this itself will never overflow since carry is at most 1
+                carry_tmp_2 = res_mid_lo + (mid_lut + carry_mid_lo);
+                carry_mid_hi = DETERMINE_ADD_CARRY_PRESENCE(res_mid_lo, mid_lut + carry_mid_lo, carry_tmp_2); // res_mid_lo + mid_lut + carry_mid_lo < res_mid_lo;
+                
+                // This alternative might be slightly better for verification but is incorrect if the carry causes overflow
+                // carry_tmp_1 = mid_lut + res_mid_lo;
+                // carry_mid_hi = ((mid_lut & res_mid_lo) | ((mid_lut | res_mid_lo) & ~carry_tmp_1)) >> 63;
+                res_mid_lo += mid_lut + carry_mid_lo;
 
-            carry_hi = res_hi + hi_lut + carry_mid_hi < res_hi;
-            res_hi += hi_lut + carry_mid_hi;
-        }
+
+                carry_tmp_1 = res_mid_hi + (hi_lut + carry_mid_hi);
+                carry_hi = DETERMINE_ADD_CARRY_PRESENCE(res_mid_hi, hi_lut + carry_mid_hi, carry_tmp_1); // res_hi + hi_lut + carry_mid_hi < res_hi;
+                res_mid_hi += hi_lut + carry_mid_hi;
+
+                res_hi += carry_hi;
+            }
+            i++;
+        )
     }
 
     result->lo = res_lo;
@@ -535,25 +606,6 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     for (uint32_t i=0; i<100; i++) {
 
         struct my_uint128_t block = {0, 0};
-        
-        // n = int.from_bytes(data[(i - 1) * 16:i * 16] + b"\x01", "little")
-        // TODO: maybe somehow write as bytes to map and read as uint64_t directly?
-        // for (int j=0; j<16; j++) {
-        //     int32_t byte_index = i*16+j;
-
-        //     uint8_t* value = bpf_map_lookup_elem(&linearized_padded_data, &byte_index);
-        //     if (value == NULL) {
-        //         return 1;
-        //     }
-        //     byte = *value;
-
-        //     uint8_t hi_lower = block.hi && 0xff;
-        //     block.hi = (block.hi >> 8) | (byte << 56);
-        //     block.lo = (block.lo >> 8) | (hi_lower << 56);
-        // }
-        // uint8_t hi_lower = block.hi && 0xff;
-        // block.hi = (block.hi >> 8) | (0x01 << 56);
-        // block.lo = (block.lo >> 8) | (hi_lower << 56);
 
         uint32_t index = i;
         uint64_t *hi = bpf_map_lookup_elem(&linearized_padded_data, &index);
@@ -589,6 +641,23 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
 
     // Now the 128 least significant bits of a should be equal to the tag
     // TODO: check this
+    uint64_t created_tag_lo = a.lo;
+    uint64_t created_tag_hi = a.hi;
+
+    uint32_t dbg_i = 0;
+    uint8_t expected_tag_byte;
+    uint8_t tag_byte;
+    REPEAT_8({
+        tag_byte = (created_tag_lo >> (dbg_i * 8)) & 0xff;
+        SAVE_BPF_PROBE_READ_KERNEL(&expected_tag_byte, sizeof(expected_tag_byte), decryption_bundle.tag + dbg_i);
+        bpf_printk("Tag byte %d: %d, %d\n", dbg_i++, tag_byte, expected_tag_byte);
+    });
+
+    REPEAT_8({
+        tag_byte = (created_tag_hi >> (dbg_i * 8)) & 0xff;
+        SAVE_BPF_PROBE_READ_KERNEL(&expected_tag_byte, sizeof(expected_tag_byte), decryption_bundle.tag + dbg_i);
+        bpf_printk("Tag byte %d: %d, %d\n", dbg_i++, tag_byte, expected_tag_byte);
+    });
         
     return 0;
 }
