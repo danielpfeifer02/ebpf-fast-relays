@@ -14,6 +14,7 @@
 #define REPEAT_8(X) X X X X X X X X
 #define REPEAT_16(X) REPEAT_8(X) REPEAT_8(X)
 #define REPEAT_32(X) REPEAT_16(X) REPEAT_16(X)
+#define REPEAT_64(X) REPEAT_32(X) REPEAT_32(X)
 
 #define MAX_LINEARIZED_PADDED_DATA_SIZE (MAX_ADDITIONAL_DATA_SIZE + 15 + MAX_PAYLOAD_SIZE + 15 + 8 + 8)
 struct {
@@ -301,6 +302,25 @@ const uint64_t mod_lut[768] = {
 0x0000000000000000, 0xa000000000000000, 0x0000000000000000, // for for k = 1 << 255
 };
 
+const uint64_t bit_lut[64] = {
+    0x0000000000000001, 0x0000000000000002, 0x0000000000000004, 0x0000000000000008,
+    0x0000000000000010, 0x0000000000000020, 0x0000000000000040, 0x0000000000000080,
+    0x0000000000000100, 0x0000000000000200, 0x0000000000000400, 0x0000000000000800,
+    0x0000000000001000, 0x0000000000002000, 0x0000000000004000, 0x0000000000008000,
+    0x0000000000010000, 0x0000000000020000, 0x0000000000040000, 0x0000000000080000,
+    0x0000000000100000, 0x0000000000200000, 0x0000000000400000, 0x0000000000800000,
+    0x0000000001000000, 0x0000000002000000, 0x0000000004000000, 0x0000000008000000,
+    0x0000000010000000, 0x0000000020000000, 0x0000000040000000, 0x0000000080000000,
+    0x0000000100000000, 0x0000000200000000, 0x0000000400000000, 0x0000000800000000,
+    0x0000001000000000, 0x0000002000000000, 0x0000004000000000, 0x0000008000000000,
+    0x0000010000000000, 0x0000020000000000, 0x0000040000000000, 0x0000080000000000,
+    0x0000100000000000, 0x0000200000000000, 0x0000400000000000, 0x0000800000000000,
+    0x0001000000000000, 0x0002000000000000, 0x0004000000000000, 0x0008000000000000,
+    0x0010000000000000, 0x0020000000000000, 0x0040000000000000, 0x0080000000000000,
+    0x0100000000000000, 0x0200000000000000, 0x0400000000000000, 0x0800000000000000,
+    0x1000000000000000, 0x2000000000000000, 0x4000000000000000, 0x8000000000000000
+};
+
 // clamp = 0x0ffffffc0ffffffc_0ffffffc0fffffff
 const static uint64_t clamp_lo = 0x0ffffffc0fffffff;
 const static uint64_t clamp_hi = 0x0ffffffc0ffffffc;
@@ -325,6 +345,15 @@ __attribute__((always_inline)) void add_my_uint128(struct my_uint128_t *a, struc
         .hi = a->hi + b->hi + (a->lo + b->lo < a->lo)
     };
     *result = res;
+}
+
+__attribute__((always_inline)) void add_my_uint256(struct my_uint256_t *a, struct my_uint256_t *b, struct my_uint256_t *result) {
+
+    result->lo = a->lo + b->lo;
+    result->mid_lo = a->mid_lo + b->mid_lo + (a->lo + b->lo < a->lo);
+    result->mid_hi = a->mid_hi + b->mid_hi + (a->mid_lo + b->mid_lo + (a->lo + b->lo < a->lo) < a->mid_lo);
+    result->hi = a->hi + b->hi + (a->mid_hi + b->mid_hi + (a->mid_lo + b->mid_lo + (a->lo + b->lo < a->lo) < a->mid_lo) < a->mid_hi);
+    
 }
 
 __attribute__((always_inline)) void mul_uint64(uint64_t a, uint64_t b, struct my_uint128_t *result) {
@@ -355,8 +384,35 @@ __attribute__((always_inline)) void mul_my_uint128(struct my_uint128_t *a, struc
     res.hi += second_hi;
 }
 
-uint32_t add_overflow(uint64_t a, uint64_t b, uint64_t *result) {
-    return __builtin_add_overflow(a, b, result);
+__attribute__((always_inline)) void mul_my_uint256_with_my_uint128(struct my_uint256_t *a, struct my_uint128_t *b, struct my_uint256_t *result) {
+
+    struct my_uint128_t af, be, bf, ce, cf, de, df;
+    uint64_t a_part, b_part, c_part, d_part, e_part, f_part;
+
+    a_part = a->hi;
+    b_part = a->mid_hi;
+    c_part = a->mid_lo;
+    d_part = a->lo;
+
+    e_part = b->hi;
+    f_part = b->lo;
+
+    mul_uint64(a_part, f_part, &af);
+    mul_uint64(b_part, e_part, &be);
+    mul_uint64(b_part, f_part, &bf);
+    mul_uint64(c_part, e_part, &ce);
+    mul_uint64(c_part, f_part, &cf);
+    mul_uint64(d_part, e_part, &de);
+    mul_uint64(d_part, f_part, &df);
+
+    result->lo = df.lo;
+    result->mid_lo = cf.lo + de.lo + df.hi;
+    result->mid_hi = bf.lo + ce.lo + cf.hi + de.hi;
+    result->hi = af.lo + be.lo + ce.hi + bf.hi;
+
+    result->mid_hi += DETERMINE_ADD_CARRY_PRESENCE(de.lo + cf.lo, df.hi, result->mid_lo);
+    result->hi += DETERMINE_ADD_CARRY_PRESENCE(ce.lo + bf.lo, de.hi + cf.hi, result->mid_hi);    
+
 }
 
 __attribute__((always_inline)) void my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
@@ -365,8 +421,10 @@ __attribute__((always_inline)) void my_mod_p(struct my_uint256_t *a, struct my_u
     uint64_t res_hi = 0, res_mid_hi = 0, res_mid_lo = 0, res_lo = 0;
     uint64_t hi_lut, mid_lut, lo_lut;
 
+    uint32_t unroll_factor = 16;
+
     uint32_t i = 0;
-    for (int j=0; j<64/16; j++) { 
+    for (int j=0; j<64/unroll_factor; j++) { 
 
         REPEAT_16(
             if (a->lo & (1 << i)) {
@@ -399,7 +457,7 @@ __attribute__((always_inline)) void my_mod_p(struct my_uint256_t *a, struct my_u
     }
 
     i = 0;
-    for (int j=0; j<64/16; j++) {
+    for (int j=0; j<64/unroll_factor; j++) {
 
         REPEAT_16(
             if (a->mid_lo & (1 << i)) {
@@ -432,7 +490,7 @@ __attribute__((always_inline)) void my_mod_p(struct my_uint256_t *a, struct my_u
     }
 
     i = 0;
-    for (int j=0; j<64/16; j++) {
+    for (int j=0; j<64/unroll_factor; j++) {
         REPEAT_16(
             if (a->mid_hi & (1 << i)) {
                 hi_lut = mod_lut[384 + 3*i];
@@ -464,7 +522,7 @@ __attribute__((always_inline)) void my_mod_p(struct my_uint256_t *a, struct my_u
     }
 
     i = 0;
-    for (int j=0; j<64/16; j++) {
+    for (int j=0; j<64/unroll_factor; j++) {
         REPEAT_16(
             if (a->hi & (1 << i)) {
                 hi_lut = mod_lut[576 + 3*i];
@@ -536,7 +594,8 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     }
 
     // a = 0
-    struct my_uint128_t a = {0, 0};
+    struct my_uint256_t a = {0, 0, 0, 0};
+    struct my_uint256_t a_old;
 
     // p = (1 << 130) - 5
     // p is static
@@ -605,7 +664,7 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     //*
     for (uint32_t i=0; i<100; i++) {
 
-        struct my_uint128_t block = {0, 0};
+        struct my_uint256_t block = {0, 0, 0, 0};
 
         uint32_t index = i;
         uint64_t *hi = bpf_map_lookup_elem(&linearized_padded_data, &index);
@@ -618,17 +677,19 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
             return 1;
         }
 
-        block.hi = *hi;
+        // block.hi = 0;
+        // block.mid_hi = 0;
+        block.mid_lo = *hi;
         block.lo = *lo;
 
         // a += n
-        struct my_uint128_t a_old = a;
-        add_my_uint128(&a_old, &block, &a);
+        a_old = a;
+        add_my_uint256(&a_old, &block, &a);
 
         // a = (r * a) % p
         // TODO
         a_old = a;
-        mul_my_uint128(&a_old, &r, &a);
+        mul_my_uint256_with_my_uint128(&a_old, &r, &a);
         a_old = a;
         my_mod_p(&a_old, &a); // https://electronics.stackexchange.com/questions/608840/verilog-modulus-operator-for-non-power-of-two-synthetizable/608854#608854
 
@@ -636,7 +697,7 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     //*/
 
     // a += s
-    struct my_uint128_t a_old = a;
+    a_old = a;
     add_my_uint128(&a_old, &s, &a);
 
     // Now the 128 least significant bits of a should be equal to the tag
