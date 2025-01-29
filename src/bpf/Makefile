@@ -51,6 +51,9 @@ TC_CRYPTO_PATH := tc/crypto
 BPF_TC_OBJ_CRYPTO_ING_SERVER := ${TC_CRYPTO_PATH}/tc_ingress_server_side_crypto.o
 BPF_TC_OBJ_CRYPTO_EG_CLIENT := ${TC_CRYPTO_PATH}/tc_egress_client_side_crypto.o
 
+XDP_CRYPTO_PATH := xdp
+BPF_XDP_OBJ_CRYPTO_ING_SERVER := ${XDP_CRYPTO_PATH}/xdp_ingress_server_side_crypto.o
+
 
 CUR_NS := $(shell ip netns identify)
 
@@ -117,6 +120,11 @@ tc_crypto_eg: $(BPF_TC_OBJ_CRYPTO_EG_CLIENT)
 	tc filter show dev ${CRYPTO_DEV_EG} egress
 	@echo "Added egress crypto ebpf program"
 
+xdp_tag_ig: $(BPF_XDP_OBJ_CRYPTO_ING_SERVER)
+	ip link set dev ${CRYPTO_DEV_IN} xdp off
+	ip link set dev ${CRYPTO_DEV_IN} xdp obj ${BPF_XDP_OBJ_CRYPTO_ING_SERVER} sec xdp_crypto	
+	@echo "Added ingress crypto ebpf program"
+
 # Main tc program compilation
 # TODO add -Werror flag 
 $(BPF_TC_OBJ): ${TC_PATH}/%.o: ${TC_PATH}/%.c
@@ -182,6 +190,19 @@ $(BPF_TC_OBJ_CRYPTO_EG_CLIENT): ${TC_CRYPTO_PATH}/%.o: ${TC_CRYPTO_PATH}/%.c
 		-target bpf \
 	  -I../../libbpf/src\
 	  -I../../iproute2/include\
+		-Wall \
+		-O2 -emit-llvm -c -o ${@:.o=.ll} $<
+	llc -march=bpf -filetype=obj -O2 -o $@ ${@:.o=.ll}
+
+# XDP version to see if that helps with verifier issues
+$(BPF_XDP_OBJ_CRYPTO_ING_SERVER): ${XDP_CRYPTO_PATH}/%.o: ${XDP_CRYPTO_PATH}/%.c
+	clang -H -S \
+		-Dveth2_egress_ifindex=${DEV_EG_INDEX} \
+		-g \
+		-target bpf \
+	  -I../../libbpf/src\
+	  -I../../iproute2/include\
+	  -I./vmlinux.h\
 		-Wall \
 		-O2 -emit-llvm -c -o ${@:.o=.ll} $<
 	llc -march=bpf -filetype=obj -O2 -o $@ ${@:.o=.ll}
@@ -284,3 +305,6 @@ clean:
 	rm -f ${PRIO_DROP_PATH_VIDEO}/build/main
 	rm -f ${PRIO_DROP_PATH_CHAT}/build/main
 	rm -f ${INGRESS_TO_EGRESS_PATH}/build/main
+
+	rm -f ${XDP_CRYPTO_PATH}/*.ll
+	rm -f ${XDP_CRYPTO_PATH}/*.o
