@@ -10,8 +10,8 @@
 // For debugging purposes
 #define REPEAT_1(X) X
 #define REPEAT_2(X) X X
-
-#define REPEAT_8(X) X X X X X X X X
+#define REPEAT_4(X) X X X X
+#define REPEAT_8(X) REPEAT_4(X) REPEAT_4(X)
 #define REPEAT_16(X) REPEAT_8(X) REPEAT_8(X)
 #define REPEAT_32(X) REPEAT_16(X) REPEAT_16(X)
 #define REPEAT_64(X) REPEAT_32(X) REPEAT_32(X)
@@ -627,7 +627,7 @@ __attribute__((always_inline))
                             8 + 8; // 8 bytes for additional_data_size and decryption_size as uint64_t each
 
 
-    // Write data into the linearized padded map
+    //! Write data into the linearized padded map
     uint32_t ctr = 0;
 
     uint32_t limit_add_data = decryption_bundle->additional_data_size;
@@ -687,7 +687,7 @@ __attribute__((always_inline))
             break;
         }
 
-        block.lo = 0;
+        block.lo = 1;
         block.mid_lo = 0;
         block.mid_hi = 0;
         block.hi = 0;
@@ -704,9 +704,9 @@ __attribute__((always_inline))
         }
 
         // block.hi = 0;
-        // block.mid_hi = 0;
-        block.mid_lo = *hi;
-        block.lo = *lo;
+        block.mid_hi = (*hi) >> 56;
+        block.mid_lo = ((*lo) >> 56) | ((*hi) << 8);
+        block.lo |= ((*lo) << 8); // The added 0x01 is already in the lo part
 
         // a += n
         a_old = a;
