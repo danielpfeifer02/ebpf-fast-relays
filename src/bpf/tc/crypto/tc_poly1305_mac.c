@@ -653,22 +653,23 @@ __attribute__((always_inline))
     // 7 bytes and less will be done implicitly because of uint64_t.
     // If we need more then we add one more qword.
     // The padding is never >= 16.
-    if (additional_data_padding > 7 && additional_data_padding < 16) { 
+    if (additional_data_padding > 7 && additional_data_padding < 16) { // TODO: fine like this or better do sthg with "even number of loop iterations"?
         qword = 0;
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
     }
 
     uint32_t limit_payload = decryption_bundle->decyption_size;
-    for (int i=0; i<MAX_PAYLOAD_SIZE/16; i+=8) {
+    for (int i=0; i<MAX_PAYLOAD_SIZE/16; i+=0) { // TODO: due to REPEAT_16 i+=0 should be needed since manual i+=8 is in the loop
         REPEAT_16({
         if (i >= limit_payload) {
             // TODO: potentially do semi read with padding
             break;
         }
-        bpf_probe_read_kernel(&qword, sizeof(qword), decryption_bundle->payload + i++);
+        bpf_probe_read_kernel(&qword, sizeof(qword), decryption_bundle->payload + i);
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
+        i += 8;
         });
     }
     // TODO: wrong
@@ -684,7 +685,7 @@ __attribute__((always_inline))
     // 7 bytes and less will be done implicitly because of uint64_t.
     // If we need more then we add one more qword.
     // The padding is never >= 16.
-    if (payload_padding > 7 && payload_padding < 16) { 
+    if (payload_padding > 7 && payload_padding < 16) { // TODO: fine like this or better do sthg with "even number of loop iterations"?
         qword = 0;
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
