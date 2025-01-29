@@ -111,7 +111,7 @@ __attribute__((always_inline)) int32_t decrypt_packet_payload(struct __sk_buff *
     // uint8_t tag_valid = verify(&mac, decryption_bundle.tag);
 
     decryption_bundle.key = poly_key.bitstream_bytes;
-    uint8_t tag_valid = validate_tag(decryption_bundle);
+    uint8_t tag_valid = validate_tag(&decryption_bundle);
     if (!tag_valid) {
         return INVALID_TAG;
     }

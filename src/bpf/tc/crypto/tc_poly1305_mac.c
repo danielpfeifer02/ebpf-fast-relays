@@ -568,33 +568,45 @@ __attribute__((always_inline)) clamp(struct my_uint128_t *x) {
     x->hi &= clamp_hi;
 }
 
-__attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decryption_bundle) {
+__attribute__((always_inline))
+ int validate_tag(struct decryption_bundle_t *decryption_bundle) {
+
+    if (!decryption_bundle) {
+        return -1;
+    }
 
     uint8_t byte;
     uint64_t qword;
 
+    uint8_t *read_address_key = (uint8_t *)(decryption_bundle->key); // TODO: handling correct / needed?
+
     // r = int.from_bytes(key[:16], "little")
     // r = clamp(r)
     struct my_uint128_t r = {0, 0};
-    for (int i=0; i<16; i++) { // TODO: correct endianess?
-        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), decryption_bundle.key + i);
+    for (int i=0; i<8; i++) { // TODO: correct endianess?
+        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), read_address_key + i);
         r.lo |= (uint64_t)byte << (i * 8);
+        read_address_key++;
     }
-    for (int i=0; i<16; i++) {
-        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), decryption_bundle.tag + i + 16);
-        r.hi |= (uint64_t)byte << (i * 8);        
+    for (int i=0; i<8; i++) {
+        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), read_address_key + i);
+        r.hi |= (uint64_t)byte << (i * 8);
+        read_address_key++;      
     }
     clamp(&r);
 
     // s = int.from_bytes(key[16:], "little")
     struct my_uint128_t s = {0, 0};
-    for (int i=0; i<16; i++) {
-        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), decryption_bundle.key + i + 16);
+
+    for (int i=0; i<8; i++) {
+        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), read_address_key + i);
         s.lo |= (uint64_t)byte << (i * 8);
+        read_address_key++;
     }
-    for (int i=0; i<16; i++) {
-        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), decryption_bundle.tag + i);
-        s.hi |= (uint64_t)byte << (i * 8);        
+    for (int i=0; i<8; i++) {
+        SAVE_BPF_PROBE_READ_KERNEL(&byte, sizeof(byte), read_address_key + i);
+        s.hi |= (uint64_t)byte << (i * 8);      
+        read_address_key++;  
     }
 
     // a = 0
@@ -604,27 +616,27 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     // p = (1 << 130) - 5
     // p is static
 
-    uint32_t additional_data_padding =  decryption_bundle.additional_data_size % 16 == 0 ?
-                                        0 : 16 - (decryption_bundle.additional_data_size % 16);
+    uint32_t additional_data_padding =  decryption_bundle->additional_data_size % 16 == 0 ?
+                                        0 : 16 - (decryption_bundle->additional_data_size % 16);
 
-    uint32_t payload_padding =  decryption_bundle.decyption_size % 16 == 0 ?
-                                0 : 16 - (decryption_bundle.decyption_size % 16);
+    uint32_t payload_padding =  decryption_bundle->decyption_size % 16 == 0 ?
+                                0 : 16 - (decryption_bundle->decyption_size % 16);
 
-    uint32_t total_length = decryption_bundle.additional_data_size + additional_data_padding +
-                            decryption_bundle.decyption_size + payload_padding +
+    uint32_t total_length = decryption_bundle->additional_data_size + additional_data_padding +
+                            decryption_bundle->decyption_size + payload_padding +
                             8 + 8; // 8 bytes for additional_data_size and decryption_size as uint64_t each
 
 
     // Write data into the linearized padded map
     uint32_t ctr = 0;
 
-    uint32_t limit_add_data = decryption_bundle.additional_data_size;
+    uint32_t limit_add_data = decryption_bundle->additional_data_size;
     for (int i=0; i<MAX_ADDITIONAL_DATA_SIZE; i+=8) {
         if (i >= limit_add_data) {
             // TODO: potentially do semi read with padding
             break;
         }
-        bpf_probe_read_kernel(&qword, sizeof(qword), decryption_bundle.additional_data + i);
+        bpf_probe_read_kernel(&qword, sizeof(qword), decryption_bundle->additional_data + i);
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
     }
@@ -633,14 +645,14 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     //     bpf_map_update_elem(&linearized_padded_data, &ctr, &byte, BPF_ANY);
     //     ctr++;
     // }
-    uint32_t limit_payload = decryption_bundle.decyption_size;
+    uint32_t limit_payload = decryption_bundle->decyption_size;
     for (int i=0; i<MAX_PAYLOAD_SIZE/16; i+=8) {
         REPEAT_16({
         if (i >= limit_payload) {
             // TODO: potentially do semi read with padding
             break;
         }
-        bpf_probe_read_kernel(&qword, sizeof(qword), decryption_bundle.payload + i++);
+        bpf_probe_read_kernel(&qword, sizeof(qword), decryption_bundle->payload + i++);
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
         });
@@ -651,12 +663,12 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     //     ctr++;
     // }
     for (int i=0; i<8; i++) {
-        qword = (decryption_bundle.additional_data_size >> (8 * i)) & 0xff;
+        qword = (decryption_bundle->additional_data_size >> (8 * i)) & 0xff;
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
     }
     for (int i=0; i<8; i++) {
-        qword = (decryption_bundle.decyption_size >> (8 * i)) & 0xff;
+        qword = (decryption_bundle->decyption_size >> (8 * i)) & 0xff;
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
     }
@@ -666,21 +678,27 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     // iterations is maximally (MAX_ADDITIONAL_DATA_SIZE + MAX_PAYLOAD_SIZE + POLY1305_TAG_SIZE + 16) / 16 = ceil((1500 + 21 + 16 + 16) / 16) = 98
     // TODO: do with max iterations
     //*
+    struct my_uint256_t block = {0, 0, 0, 0};
+    uint64_t *lo;
+    uint64_t*hi;
     for (uint32_t i=0; i<100; i++) {
 
         if (i >= iterations) {
             break;
         }
 
-        struct my_uint256_t block = {0, 0, 0, 0};
+        block.lo = 0;
+        block.mid_lo = 0;
+        block.mid_hi = 0;
+        block.hi = 0;
 
         uint32_t index = i;
-        uint64_t *hi = bpf_map_lookup_elem(&linearized_padded_data, &index);
+        *hi = bpf_map_lookup_elem(&linearized_padded_data, &index);
         if (hi == NULL) {
             return 1;
         }
         index = i + 1;
-        uint64_t *lo = bpf_map_lookup_elem(&linearized_padded_data, &index);
+        *lo = bpf_map_lookup_elem(&linearized_padded_data, &index);
         if (lo == NULL) {
             return 1;
         }
@@ -717,13 +735,13 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     uint8_t tag_byte;
     REPEAT_8({
         tag_byte = (created_tag_lo >> (dbg_i * 8)) & 0xff;
-        SAVE_BPF_PROBE_READ_KERNEL(&expected_tag_byte, sizeof(expected_tag_byte), decryption_bundle.tag + dbg_i);
+        SAVE_BPF_PROBE_READ_KERNEL(&expected_tag_byte, sizeof(expected_tag_byte), decryption_bundle->tag + dbg_i);
         bpf_printk("Tag byte %d: %d, %d\n", dbg_i++, tag_byte, expected_tag_byte);
     });
 
     REPEAT_8({
         tag_byte = (created_tag_hi >> (dbg_i * 8)) & 0xff;
-        SAVE_BPF_PROBE_READ_KERNEL(&expected_tag_byte, sizeof(expected_tag_byte), decryption_bundle.tag + dbg_i);
+        SAVE_BPF_PROBE_READ_KERNEL(&expected_tag_byte, sizeof(expected_tag_byte), decryption_bundle->tag + dbg_i);
         bpf_printk("Tag byte %d: %d, %d\n", dbg_i++, tag_byte, expected_tag_byte);
     });
         
