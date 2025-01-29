@@ -415,11 +415,14 @@ __attribute__((always_inline)) void mul_my_uint256_with_my_uint128(struct my_uin
 
 }
 
-__attribute__((always_inline)) void my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
+int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
+    if (!a || !result) {
+        return -1;
+    }
 
-    uint64_t carry_mid_lo, carry_mid_hi, carry_hi, carry_tmp_1, carry_tmp_2;
+    uint64_t carry_mid_lo = 0, carry_mid_hi = 0, carry_hi = 0, carry_tmp_1 = 0, carry_tmp_2 = 0;
     uint64_t res_hi = 0, res_mid_hi = 0, res_mid_lo = 0, res_lo = 0;
-    uint64_t hi_lut, mid_lut, lo_lut;
+    uint64_t hi_lut = 0, mid_lut = 0, lo_lut = 0;
 
     uint32_t unroll_factor = 16;
 
@@ -557,6 +560,7 @@ __attribute__((always_inline)) void my_mod_p(struct my_uint256_t *a, struct my_u
     result->mid_lo = res_mid_lo;
     result->mid_hi = res_mid_hi;
     result->hi = res_hi;    
+    return 0;
 }
 
 __attribute__((always_inline)) clamp(struct my_uint128_t *x) {
@@ -659,10 +663,14 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
     
 
     uint32_t iterations = (total_length / 16) + (total_length % 16 == 0 ? 0 : 1);
-
+    // iterations is maximally (MAX_ADDITIONAL_DATA_SIZE + MAX_PAYLOAD_SIZE + POLY1305_TAG_SIZE + 16) / 16 = ceil((1500 + 21 + 16 + 16) / 16) = 98
     // TODO: do with max iterations
     //*
     for (uint32_t i=0; i<100; i++) {
+
+        if (i >= iterations) {
+            break;
+        }
 
         struct my_uint256_t block = {0, 0, 0, 0};
 
@@ -692,7 +700,6 @@ __attribute__((always_inline)) int validate_tag(struct decryption_bundle_t decry
         mul_my_uint256_with_my_uint128(&a_old, &r, &a);
         a_old = a;
         my_mod_p(&a_old, &a); // https://electronics.stackexchange.com/questions/608840/verilog-modulus-operator-for-non-power-of-two-synthetizable/608854#608854
-
     }
     //*/
 
