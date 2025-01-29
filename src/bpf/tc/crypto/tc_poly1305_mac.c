@@ -640,11 +640,25 @@ __attribute__((always_inline))
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
     }
-    // for (int i=0; i<additional_data_padding; i++) { // Implicitly done since map has type uint64_t
+    // TODO: wrong
+    // for (int i=0; i<16; i++) { // Implicitly done since map has type uint64_t
+    //     if (i >= additional_data_padding) {
+    //         break;
+    //     }
     //     byte = 0;
     //     bpf_map_update_elem(&linearized_padded_data, &ctr, &byte, BPF_ANY);
     //     ctr++;
     // }
+    // TODO: right
+    // 7 bytes and less will be done implicitly because of uint64_t.
+    // If we need more then we add one more qword.
+    // The padding is never >= 16.
+    if (additional_data_padding > 7 && additional_data_padding < 16) { 
+        qword = 0;
+        bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
+        ctr++;
+    }
+
     uint32_t limit_payload = decryption_bundle->decyption_size;
     for (int i=0; i<MAX_PAYLOAD_SIZE/16; i+=8) {
         REPEAT_16({
@@ -657,12 +671,25 @@ __attribute__((always_inline))
         ctr++;
         });
     }
-    // for (int i=0; i<payload_padding; i++) { // Implicitly done since map has type uint64_t
+    // TODO: wrong
+    // for (int i=0; i<16; i++) { // Implicitly done since map has type uint64_t
+    //     if (i >= payload_padding) {
+    //         break;
+    //     }
     //     byte = 0;
     //     bpf_map_update_elem(&linearized_padded_data, &ctr, &byte, BPF_ANY);
     //     ctr++;
     // }
-    
+    // TODO: right
+    // 7 bytes and less will be done implicitly because of uint64_t.
+    // If we need more then we add one more qword.
+    // The padding is never >= 16.
+    if (payload_padding > 7 && payload_padding < 16) { 
+        qword = 0;
+        bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
+        ctr++;
+    }
+
 
     // TODO: wrong
     // for (int i=0; i<8; i++) {
