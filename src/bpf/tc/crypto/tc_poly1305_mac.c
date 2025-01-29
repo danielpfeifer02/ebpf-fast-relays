@@ -662,16 +662,36 @@ __attribute__((always_inline))
     //     bpf_map_update_elem(&linearized_padded_data, &ctr, &byte, BPF_ANY);
     //     ctr++;
     // }
-    for (int i=0; i<8; i++) {
-        qword = (decryption_bundle->additional_data_size >> (8 * i)) & 0xff;
-        bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
-        ctr++;
-    }
-    for (int i=0; i<8; i++) {
-        qword = (decryption_bundle->decyption_size >> (8 * i)) & 0xff;
-        bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
-        ctr++;
-    }
+    
+
+    // TODO: wrong
+    // for (int i=0; i<8; i++) {
+    //     qword = (decryption_bundle->additional_data_size >> (8 * i)) & 0xff;
+    //     bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
+    //     ctr++;
+    // }
+    // for (int i=0; i<8; i++) {
+    //     qword = (decryption_bundle->decyption_size >> (8 * i)) & 0xff;
+    //     bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
+    //     ctr++;
+    // }
+
+    // TODO: right
+    qword = 0;
+    qword |= (decryption_bundle->additional_data_size & 0x000000ff) << 56;
+    qword |= (decryption_bundle->additional_data_size & 0x0000ff00) << 48;
+    qword |= (decryption_bundle->additional_data_size & 0x00ff0000) << 40;
+    qword |= (decryption_bundle->additional_data_size & 0xff000000) << 32;
+    bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
+    ctr++;
+
+    qword = 0;
+    qword |= (decryption_bundle->decyption_size & 0x000000ff) << 56;
+    qword |= (decryption_bundle->decyption_size & 0x0000ff00) << 48;
+    qword |= (decryption_bundle->decyption_size & 0x00ff0000) << 40;
+    qword |= (decryption_bundle->decyption_size & 0xff000000) << 32;
+    bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
+    ctr++;
     
 
     uint32_t iterations = (total_length / 16) + (total_length % 16 == 0 ? 0 : 1);
