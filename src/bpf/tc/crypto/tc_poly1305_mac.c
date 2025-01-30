@@ -339,12 +339,17 @@ const struct my_uint192_t p = {
     .hi = p_hi
 };
 
-__attribute__((always_inline)) void add_my_uint128(struct my_uint128_t *a, struct my_uint128_t *b, struct my_uint128_t *result) {
+// __attribute__((always_inline)) 
+int add_my_uint128(struct my_uint128_t *a, struct my_uint128_t *b, struct my_uint128_t *result) {
     struct my_uint128_t res = {
         .lo = a->lo + b->lo,
         .hi = a->hi + b->hi + (a->lo + b->lo < a->lo)
     };
-    *result = res;
+    bpf_printk("Debug add: %llu\n", res.hi);
+    result->lo = res.lo;
+    result->hi = res.hi;
+
+    return 0;
 }
 
 __attribute__((always_inline)) void add_my_uint256(struct my_uint256_t *a, struct my_uint256_t *b, struct my_uint256_t *result) {
@@ -384,10 +389,16 @@ __attribute__((always_inline)) void mul_my_uint128(struct my_uint128_t *a, struc
     res.hi += second_hi;
 }
 
-__attribute__((always_inline)) void mul_my_uint256_with_my_uint128(struct my_uint256_t *a, struct my_uint128_t *b, struct my_uint256_t *result) {
+// __attribute__((always_inline)) 
+int mul_my_uint256_with_my_uint128(struct my_uint256_t *a, struct my_uint128_t *b, struct my_uint256_t *result) {
 
-    struct my_uint128_t af, be, bf, ce, cf, de, df;
-    uint64_t a_part, b_part, c_part, d_part, e_part, f_part;
+    if (!a || !b || !result) {
+        return -1;
+    }
+
+    // TODO: make sure static is handled correctly (if even needed)
+    static struct my_uint128_t af, be, bf, ce, cf, de, df;
+    static uint64_t a_part, b_part, c_part, d_part, e_part, f_part;
 
     a_part = a->hi;
     b_part = a->mid_hi;
@@ -411,7 +422,14 @@ __attribute__((always_inline)) void mul_my_uint256_with_my_uint128(struct my_uin
     result->hi = af.lo + be.lo + ce.hi + bf.hi;
 
     result->mid_hi += DETERMINE_ADD_CARRY_PRESENCE(de.lo + cf.lo, df.hi, result->mid_lo);
-    result->hi += DETERMINE_ADD_CARRY_PRESENCE(ce.lo + bf.lo, de.hi + cf.hi, result->mid_hi);    
+    result->hi += DETERMINE_ADD_CARRY_PRESENCE(ce.lo + bf.lo, de.hi + cf.hi, result->mid_hi);  
+
+
+    bpf_printk("debug in result->lo: %llu\n", result->lo);
+    bpf_printk("debug in result->mid_lo: %llu\n", result->mid_lo);
+    bpf_printk("debug in result->mid_hi: %llu\n", result->mid_hi);
+    bpf_printk("debug in result->hi: %llu\n", result->hi);  
+    return 0;
 
 }
 
@@ -420,13 +438,20 @@ int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
         return -1;
     }
 
-    uint64_t carry_mid_lo = 0, carry_mid_hi = 0, carry_hi = 0, carry_tmp_1 = 0, carry_tmp_2 = 0;
-    uint64_t res_hi = 0, res_mid_hi = 0, res_mid_lo = 0, res_lo = 0;
-    uint64_t hi_lut = 0, mid_lut = 0, lo_lut = 0;
+    // TODO: make sure static is handled correctly (if even needed)
+    static uint64_t carry_mid_lo = 0, carry_mid_hi = 0, carry_hi = 0, carry_tmp_1 = 0, carry_tmp_2 = 0;
+    static uint64_t res_hi = 0, res_mid_hi = 0, res_mid_lo = 0, res_lo = 0;
+    static uint64_t hi_lut = 0, mid_lut = 0, lo_lut = 0;
 
-    uint32_t unroll_factor = 16;
+    static uint32_t unroll_factor = 16;
 
-    uint32_t i = 0;
+    static uint32_t i = 0;
+
+    res_hi = 0; // TODO: sufficient? bc of static
+    res_mid_hi = 0;
+    res_mid_lo = 0;
+    res_lo = 0;
+
     for (int j=0; j<64/unroll_factor; j++) { 
 
         REPEAT_16(
@@ -660,14 +685,21 @@ __attribute__((always_inline))
     }
 
     uint32_t limit_payload = decryption_bundle->decyption_size;
+    uint32_t ret;
     for (int i=0; i<MAX_PAYLOAD_SIZE/16; i+=0) { // TODO: due to REPEAT_16 i+=0 should be needed since manual i+=8 is in the loop
         REPEAT_16({
         if (i >= limit_payload) {
             // TODO: potentially do semi read with padding
             break;
         }
-        bpf_probe_read_kernel(&qword, sizeof(qword), decryption_bundle->payload + i);
-        bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
+        ret = bpf_probe_read_kernel(&qword, sizeof(qword), decryption_bundle->payload + i);
+        if (ret != 0) {
+            bpf_printk("Error reading payload\n");
+        }
+        ret = bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
+        if (ret != 0) {
+            bpf_printk("Error storing payload in linear map\n");
+        }
         ctr++;
         i += 8;
         });
@@ -728,9 +760,11 @@ __attribute__((always_inline))
     //*
     struct my_uint256_t block = {0, 0, 0, 0};
     uint64_t *lo;
-    uint64_t*hi;
+    uint64_t *hi;
+    uint32_t index;
     for (uint32_t i=0; i<100; i++) {
 
+        bpf_printk("break debug: %d, %d\n", i >= iterations, i);
         if (i >= iterations) {
             break;
         }
@@ -740,14 +774,18 @@ __attribute__((always_inline))
         block.mid_hi = 0;
         block.hi = 0;
 
-        uint32_t index = i;
-        *hi = bpf_map_lookup_elem(&linearized_padded_data, &index);
+        index = i;
+        hi = bpf_map_lookup_elem(&linearized_padded_data, &index);
+        bpf_printk("debug hi: %p\n", hi);
         if (hi == NULL) {
+            bpf_printk("hi is NULL\n");
             return 1;
         }
         index = i + 1;
-        *lo = bpf_map_lookup_elem(&linearized_padded_data, &index);
+        lo = bpf_map_lookup_elem(&linearized_padded_data, &index);
+        bpf_printk("debug lo: %p\n", lo);
         if (lo == NULL) {
+            bpf_printk("lo is NULL\n");
             return 1;
         }
 
@@ -763,7 +801,12 @@ __attribute__((always_inline))
         // a = (r * a) % p
         // TODO
         a_old = a;
-        mul_my_uint256_with_my_uint128(&a_old, &r, &a);
+        mul_my_uint256_with_my_uint128(&a_old, &r, &a); // TODO: doesn't even reach here? - seems to be fixed?
+        bpf_printk("debug out a->lo: %llu\n", a.lo);
+        bpf_printk("debug out a->mid_lo: %llu\n", a.mid_lo);
+        bpf_printk("debug out a->mid_hi: %llu\n", a.mid_hi);
+        bpf_printk("debug out a->hi: %llu\n", a.hi);  
+
         a_old = a;
         my_mod_p(&a_old, &a); // https://electronics.stackexchange.com/questions/608840/verilog-modulus-operator-for-non-power-of-two-synthetizable/608854#608854
     }
@@ -771,7 +814,12 @@ __attribute__((always_inline))
 
     // a += s
     a_old = a;
-    add_my_uint128(&a_old, &s, &a);
+    // bpf_printk("Debug hi: %llu, %llu\n", a_old.hi, a.hi);
+    // bpf_printk("Debug lo: %llu, %llu\n", a_old.lo, a.lo);
+    // add_my_uint128(&a_old, &s, &a); // TODO: why add as function not working?
+    a.lo = a_old.lo + s.lo;
+    a.hi = a_old.hi + s.hi + (a_old.lo + s.lo < a_old.lo);
+
 
     // Now the 128 least significant bits of a should be equal to the tag
     // TODO: check this
@@ -788,7 +836,7 @@ __attribute__((always_inline))
     });
 
     REPEAT_8({
-        tag_byte = (created_tag_hi >> (dbg_i * 8)) & 0xff;
+        tag_byte = (created_tag_hi >> ((dbg_i-8) * 8)) & 0xff;
         SAVE_BPF_PROBE_READ_KERNEL(&expected_tag_byte, sizeof(expected_tag_byte), decryption_bundle->tag + dbg_i);
         bpf_printk("Tag byte %d: %d, %d\n", dbg_i++, tag_byte, expected_tag_byte);
     });
