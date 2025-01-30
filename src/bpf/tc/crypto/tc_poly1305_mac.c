@@ -397,8 +397,8 @@ int mul_my_uint256_with_my_uint128(struct my_uint256_t *a, struct my_uint128_t *
     }
 
     // TODO: make sure static is handled correctly (if even needed)
-    static struct my_uint128_t af, be, bf, ce, cf, de, df;
-    static uint64_t a_part, b_part, c_part, d_part, e_part, f_part;
+    static struct my_uint128_t af = {0, 0}, be = {0, 0}, bf = {0, 0}, ce = {0, 0}, cf = {0, 0}, de = {0, 0}, df = {0, 0};
+    static uint64_t a_part = 0, b_part = 0, c_part = 0, d_part = 0, e_part = 0, f_part = 0;
 
     a_part = a->hi;
     b_part = a->mid_hi;
@@ -434,6 +434,7 @@ int mul_my_uint256_with_my_uint128(struct my_uint256_t *a, struct my_uint128_t *
 }
 
 int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
+
     if (!a || !result) {
         return -1;
     }
@@ -443,7 +444,7 @@ int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
     static uint64_t res_hi = 0, res_mid_hi = 0, res_mid_lo = 0, res_lo = 0;
     static uint64_t hi_lut = 0, mid_lut = 0, lo_lut = 0;
 
-    static uint32_t unroll_factor = 16;
+    static const uint32_t unroll_factor = 16;
 
     static uint32_t i = 0;
 
