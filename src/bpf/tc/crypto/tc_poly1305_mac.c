@@ -17,6 +17,14 @@
 #define REPEAT_64(X) REPEAT_32(X) REPEAT_32(X)
 
 #define MAX_LINEARIZED_PADDED_DATA_SIZE (MAX_ADDITIONAL_DATA_SIZE + 15 + MAX_PAYLOAD_SIZE + 15 + 8 + 8)
+
+// Special defines for getting and setting values in a one element map.
+// This is to reduce the stack size.
+// The key is always expected to be 0.
+#define GET(map) NULL //! TODO
+#define SET(map, value) NULL //! TODO
+
+
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, uint32_t);
@@ -375,21 +383,27 @@ __attribute__((always_inline)) void mul_uint64(uint64_t a, uint64_t b, struct my
     result->hi = hi;
 }
 
-__attribute__((always_inline)) void mul_my_uint128(struct my_uint128_t *a, struct my_uint128_t *b, struct my_uint128_t *result) {
+// __attribute__((always_inline)) 
+int mul_my_uint128(struct my_uint128_t *a, struct my_uint128_t *b, struct my_uint128_t *result) {
     
-    struct my_uint128_t res = {0, 0};
+    static struct my_uint128_t res = {0, 0};
     mul_uint64(a->lo, b->lo, &res);
 
-    uint64_t first_hi = a->hi * b->lo;
-    uint64_t second_hi = a->lo * b->hi;
+    // uint64_t first_hi = a->hi * b->lo;
+    // uint64_t second_hi = a->lo * b->hi;
 
     // We can skip a->hi * b->hi since it would be multiplied by 2^128 i.e. 0
 
-    res.hi += first_hi;
-    res.hi += second_hi;
+    res.hi += a->hi * b->lo;
+    res.hi += a->lo * b->hi;
+
+    result->lo = res.lo;
+    result->hi = res.hi;
+
+    return 0;
 }
 
-// __attribute__((always_inline)) 
+__attribute__((always_inline)) 
 int mul_my_uint256_with_my_uint128(struct my_uint256_t *a, struct my_uint128_t *b, struct my_uint256_t *result) {
 
     if (!a || !b || !result) {
@@ -433,6 +447,7 @@ int mul_my_uint256_with_my_uint128(struct my_uint256_t *a, struct my_uint128_t *
 
 }
 
+__attribute__((always_inline))
 int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
 
     if (!a || !result) {
@@ -519,8 +534,9 @@ int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
     }
 
     i = 0;
-    for (int j=0; j<64/unroll_factor; j++) {
-        REPEAT_16(
+    #pragma unroll
+    for (int j=0; j<64/1; j++) {
+        // REPEAT_16(
             if (a->mid_hi & (1 << i)) {
                 hi_lut = mod_lut[384 + 3*i];
                 mid_lut = mod_lut[384 + 3*i + 1];
@@ -547,12 +563,13 @@ int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
                 res_hi += carry_hi;
             }
             i++;
-        )
+        // )
     }
 
     i = 0;
-    for (int j=0; j<64/unroll_factor; j++) {
-        REPEAT_16(
+    #pragma unroll
+    for (int j=0; j<64/1; j++) {
+        // REPEAT_16(
             if (a->hi & (1 << i)) {
                 hi_lut = mod_lut[576 + 3*i];
                 mid_lut = mod_lut[576 + 3*i + 1];
@@ -579,7 +596,7 @@ int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
                 res_hi += carry_hi;
             }
             i++;
-        )
+        // )
     }
 
     result->lo = res_lo;
