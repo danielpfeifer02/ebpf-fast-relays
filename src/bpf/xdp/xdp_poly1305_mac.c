@@ -1,5 +1,3 @@
-// #include <stdint.h>
-
 #include "xdp_crypto_defines.c"
 #include "xdp_crypto_structs.c"
 #include "xdp_common.c"
@@ -7,7 +5,7 @@
 
 #define DETERMINE_ADD_CARRY_PRESENCE(A, B, C) (((A) & (B)) | (((A) | (B)) & ~(C))) >> 63
 
-// For debugging purposes
+// Manual unroll helpers for the BPF verifier
 #define REPEAT_1(X) X
 #define REPEAT_2(X) X X
 
@@ -321,15 +319,9 @@ const uint64_t bit_lut[64] = {
     0x1000000000000000, 0x2000000000000000, 0x4000000000000000, 0x8000000000000000
 };
 
-// clamp = 0x0ffffffc0ffffffc_0ffffffc0fffffff
 const static uint64_t clamp_lo = 0x0ffffffc0fffffff;
 const static uint64_t clamp_hi = 0x0ffffffc0ffffffc;
-// const static struct my_uint128_t clamp = {
-//     .lo = clamp_lo,
-//     .hi = clamp_hi
-// };
 
-// p = 0x3_ffffffffffffffff_fffffffffffffffb
 const uint64_t p_lo =   0xfffffffffffffffb;
 const uint64_t p_mid =  0xffffffffffffffff;
 const uint64_t p_hi =   0x3;
@@ -378,7 +370,7 @@ __attribute__((always_inline)) void mul_my_uint128(struct my_uint128_t *a, struc
     uint64_t first_hi = a->hi * b->lo;
     uint64_t second_hi = a->lo * b->hi;
 
-    // We can skip a->hi * b->hi since it would be multiplied by 2^128 i.e. 0
+    // Skip a->hi * b->hi: product would shift by 2^128 (out of range).
 
     res.hi += first_hi;
     res.hi += second_hi;
