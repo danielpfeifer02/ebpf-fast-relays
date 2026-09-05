@@ -33,11 +33,8 @@
 
 #define INVALID_FRAME 0xff
 
-// This function would be needed in the ideal case where the BPF code parses the whole packet
-// payload (even in case there are multiple frames in the same packet). In this case, the BPF
-// would need to know the length of frames in order to be able to jump to the next frame.
-// Right now there are some extra assumptions e.g. that in case there is a stream frame, it is
-// always in a separate packet.
+// Frame-type -> number of leading varints (RFC 9000). Intended for walking multi-frame
+// payloads; current relay assumes stream frames arrive in their own packets.
 // https://datatracker.ietf.org/doc/html/rfc9000#frames
 uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
         switch (frame_id) {
@@ -79,8 +76,8 @@ uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
                 */
                 case ACK_FRAME:
                         return 5;
-                case ACK_ECN_FRAME: 
-                        return 8; //TODO: ACK Range (has two varints) and ECN Counts (has three varints???
+                case ACK_ECN_FRAME:
+                        return 8; // TODO: ACK Range (two varints) and ECN Counts (three varints)
                 
                 /*
                 RESET_STREAM Frame {
@@ -112,7 +109,7 @@ uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
                 }
                 */
                 case CRYPTO_FRAME:
-                        return 3; //TODO: plus crypto data
+                        return 3; // TODO: plus crypto data
                 
                 /*
                 NEW_TOKEN Frame {
@@ -122,7 +119,7 @@ uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
                 }
                 */
                 case NEW_TOKEN_FRAME:
-                        return 2; //TODO: second one is token length
+                        return 2; // TODO: second one is token length
 
                 /*
                 STREAM Frame {
@@ -190,7 +187,7 @@ uint8_t get_number_of_var_ints_of_frame(uint64_t frame_id) {
                   Maximum Stream Data (i),
                 }
                 */
-                case STREAM_DATA_BLOCKED_FRAME: 
+                case STREAM_DATA_BLOCKED_FRAME:
                         return 3;
                 
                 /*
