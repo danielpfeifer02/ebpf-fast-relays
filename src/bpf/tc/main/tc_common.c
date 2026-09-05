@@ -32,13 +32,7 @@
 
 // ++++++++++++++++++ CONFIG DEFINITIONS ++++++++++++++++++ //
 
-// The ingress to egress redirection happens from the veth1 interface to the veth2 interface.
-// For that the program needs to know the ifindex of the veth2 interface. 
-// This will be defined in the Makefile
-// since the ifindex can change and has
-// to be read from the system.
-// #define veth2_egress_ifindex ??
-
+// Ingress->egress redirect targets veth2; ifindex is injected via Makefile (-Dveth2_egress_ifindex).
 // The connection id length will always be 16 bytes since the underlying QUIC library
 // is expected to use a fixed length connection id. This is just for convenience since
 // otherwise the bpf program would need to keep state on how long the connection id is.
@@ -60,7 +54,7 @@
 // the relay and the forwarding mechanism open streams at the same time.
 // Therefore translate in the relay.
 #define MAX_UNISTREAM_ID_TRANSLATIONS (1<<15) // 32768 // TODO: what size is sufficient?
-// This stores the maximum number of ids stores at the same
+// Maximum number of ids stored at the same
 // time to identify them as being part of a retransmission.
 #define MAX_RETRANSMISSION_IDS_STORED (1<<15) // 32768 // TODO: what size is sufficient? (why are the entries not properly deleted?)
 // The maximum number of frames that are expected to be in a packet.
@@ -72,7 +66,7 @@
 // The maximum number of pairs of packet number and timestamp that can be stored
 // for RTT calculations.
 #define MAX_PN_TS_PAIRS (1<<15) // 32768 // TODO: what size is sufficient?
-// Defines the size of the rinbuffer used for packet events
+// Size of the ring buffer used for packet events
 #define MAX_PACKET_EVENTS (1<<15) // 32768 // TODO: what size is sufficient?
 
 // Ports are used to identify the QUIC connection. The relay will always use the same port
@@ -193,7 +187,7 @@ struct client_pn_map_key_t {
         uint32_t packet_number;
 };
 
-// This struct servers for the retransmission check of unidirectional stream ids.
+// Key for retransmission checks of unidirectional stream ids.
 struct client_unistream_id_pair_t {
         struct client_info_key_t key;
         uint64_t unistream_id;
@@ -424,7 +418,7 @@ struct {
     __uint(pinning, LIBBPF_PIN_BY_NAME);
 } index_pn_ts_storage SEC(".maps");
 
-// This map stores if the unirectional stream id is part of a retransmission 
+// Tracks whether a unidirectional stream id is part of a retransmission 
 // by the relay. This is needed when updating the stream id to make sure that 
 // retransmission do not get a new stream id when they should reuse the old one
 // (they would potentially get a new one since the origin of the stream differs).
@@ -475,7 +469,6 @@ __attribute__((always_inline)) int32_t store_packet_to_register_rb(struct regist
 // Update the stream id of a packet.
 __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key, uint8_t unistream_origin) {
 
-        // return 0;
         if (skb==NULL || key==NULL) {
                 bpf_printk("Invalid arguments for update_stream_id\n");
                 return 1;
@@ -485,13 +478,6 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
                 .key = *key,
                 .unistream_id = stream_id.value
         };
-
-        // uint64_t ts = bpf_ktime_get_tai_ns();
-        // if (unistream_origin == RELAY_ORIGIN) {
-        //         bpf_printk("Relay origin for %d %lu\n", stream_id.value, ts);
-        // } else {
-        //         bpf_printk("Media server origin for %d %lu\n", stream_id.value, ts);
-        // }
 
         // In case the origin is the relay userspace we need to check if it is a retransmission of a packet.
         // If it is a retransmission we can find out by checking the translation map with the origin set to
@@ -630,7 +616,6 @@ __attribute__((always_inline)) int32_t store_packet_to_register(struct register_
         }
         bpf_map_update_elem(&packets_to_register, index, &packet, BPF_ANY);
 
-        // bpf_printk("Storing packet to register with pn %d at index %d\n", packet.packet_number, *index);
 
         *index = *index + 1;
         if (*index == MAX_REGISTER_QUEUE_SIZE) { // TODO: why modulo not working?
@@ -766,7 +751,7 @@ __attribute__((always_inline)) uint8_t determine_minimal_length_encoded(uint64_t
 // This would be the optimal way to handle packets from the bpf
 // program but this approach seems to be too complex for the verifier.
 // Therefore the underlying QUIC library is expected to send supported
-// frams in separate packets for easy handling within bpf.
+// frames in separate packets for easy handling within bpf.
 __attribute__((always_inline)) int32_t get_stream_frame_start(void *payload, uint32_t payload_length, void **stream_frame_start) {
 
         // Normally this would be a while loop but one could assume that
