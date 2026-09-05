@@ -89,7 +89,7 @@ int tc_egress(struct __sk_buff *skb)
 
                 // We need to use bpf_skb_pull_data() to get the rest of the packet.
                 // If the pull fails we can pass the packet through.
-                if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
+                if (bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
                         bpf_printk("[ingress startup tc] failed to pull data");
                         return TC_ACT_OK;
                 }
@@ -155,7 +155,7 @@ int tc_egress(struct __sk_buff *skb)
                         // in the initial packet (and only those).
                         // TODO: this might cause a problem if the packet number length e.g. is still 
                         // TODO: two bytes for the userspace packet but needs more (i.e. something like
-                        // TODO: four) bytes to store the packet number that is acutally used. This could
+                        // TODO: four) bytes to store the packet number that is actually used. This could
                         // TODO: e.g. be circumvented by always using four bytes, or by telling userspace 
                         // TODO: the needed size.
                         uint8_t new_pn_bytes[4];
@@ -339,7 +339,7 @@ int tc_egress(struct __sk_buff *skb)
                 */
                 
                // To be able to access the payload we need to know the length of the packet number.
-               // Then we can read the frame type and determine if it is a stream frame or a datagram frame.
+                // Then we can read the frame type and determine if it is a stream frame or a datagram frame.
                 uint8_t pn_len = (quic_flags & 0x03) + 1;
                 uint8_t frame_type;
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
@@ -376,7 +376,6 @@ int tc_egress(struct __sk_buff *skb)
                         read_var_int(payload + stream_id_off_from_quic, &stream_id, VALUE_NEEDED); 
                         uint8_t is_unidirectional_and_server_side = stream_id.value & mask;
 
-                        // bpf_printk("stream id to be updated: %d\n", stream_id.value);
 
                         // If the stream is unidirectional we need to update the stream id
                         if (is_unidirectional_and_server_side == mask) {
@@ -475,7 +474,6 @@ int tc_egress(struct __sk_buff *skb)
                 // https://lore.kernel.org/netdev/CAEf4Bzb9KA=mzYo_x42ExRoZjm=dF6up1DxrUL_eqkDYs9+UUg@mail.gmail.com/T/
                 // https://man7.org/linux/man-pages/man7/bpf-helpers.7.html
                 uint64_t time_ns = bpf_ktime_get_tai_ns();
-                // bpf_printk("Current nanoseconds: %llu\n", time_ns);
 
                 struct register_packet_t pack_to_reg = {
                         .packet_number = (uint64_t)(*new_pn - 1),
