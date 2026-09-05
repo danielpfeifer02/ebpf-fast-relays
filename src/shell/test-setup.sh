@@ -1,8 +1,5 @@
 #!/bin/bash
-
-set -e
-set -x
-set -o errexit
+set -euxo pipefail
 
 SERVER_NS="server_ns"
 RELAY_NS="relay_ns"
@@ -15,27 +12,15 @@ CLIENT_VETH_ADDR="192.168.11.1"
 
 PUBLIC_IP="1.1.1.1"
 
-# Test the connectivity
+# Connectivity checks: every namespace can reach every other, plus the public internet.
+for ns in "$SERVER_NS" "$RELAY_NS" "$CLIENT_NS"; do
+	for addr in "$SERVER_VETH_ADDR" "$RELAY_VETH_ADDR_S" "$RELAY_VETH_ADDR_C" "$CLIENT_VETH_ADDR"; do
+		ip netns exec "$ns" ping -c 1 "$addr"
+	done
+done
 
-# Every ns should be able to ping every other ns
-ip netns exec ${SERVER_NS} ping -c 1 ${SERVER_VETH_ADDR}
-ip netns exec ${SERVER_NS} ping -c 1 ${RELAY_VETH_ADDR_S}
-ip netns exec ${SERVER_NS} ping -c 1 ${RELAY_VETH_ADDR_C}
-ip netns exec ${SERVER_NS} ping -c 1 ${CLIENT_VETH_ADDR}
+for ns in "$SERVER_NS" "$RELAY_NS" "$CLIENT_NS"; do
+	ip netns exec "$ns" ping -c 1 "$PUBLIC_IP"
+done
 
-ip netns exec ${RELAY_NS} ping -c 1 ${SERVER_VETH_ADDR}
-ip netns exec ${RELAY_NS} ping -c 1 ${RELAY_VETH_ADDR_S}
-ip netns exec ${RELAY_NS} ping -c 1 ${RELAY_VETH_ADDR_C}
-ip netns exec ${RELAY_NS} ping -c 1 ${CLIENT_VETH_ADDR}
-
-ip netns exec ${CLIENT_NS} ping -c 1 ${SERVER_VETH_ADDR}
-ip netns exec ${CLIENT_NS} ping -c 1 ${RELAY_VETH_ADDR_S}
-ip netns exec ${CLIENT_NS} ping -c 1 ${RELAY_VETH_ADDR_C}
-ip netns exec ${CLIENT_NS} ping -c 1 ${CLIENT_VETH_ADDR}
-
-# Every ns should be able to access the internet (i.e. ping any public IP like 1.1.1.1)
-ip netns exec ${SERVER_NS} ping -c 1 ${PUBLIC_IP}
-ip netns exec ${RELAY_NS} ping -c 1 ${PUBLIC_IP}
-ip netns exec ${CLIENT_NS} ping -c 1 ${PUBLIC_IP}
-
-echo "\n\n\t\tAll tests passed.\n\t\tSetup complete!\n\n"
+printf '\n\n\t\tAll tests passed.\n\t\tSetup complete!\n\n'
