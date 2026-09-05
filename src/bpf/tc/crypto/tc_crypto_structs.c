@@ -18,7 +18,7 @@ struct mac_generic_t {
     uint32_t offset;
 };
 
-// Struct for any operation that might give a carry out
+// Result of a 64-bit op that may produce a carry.
 struct result_carry_u64_t {
     uint64_t result;
     uint64_t carry;
@@ -39,8 +39,7 @@ struct decryption_bundle_t {
 };
 
 struct tls_chacha20_poly1305_bitstream_block_t {
-    uint8_t bitstream_bytes[BITSTREAM_BLOCK_SIZE]; // TODO
-    // uint32_t offset; // gives the offset in the bitstream for the 64 byte block.
+    uint8_t bitstream_bytes[BITSTREAM_BLOCK_SIZE];
 };
 
 struct tls_chacha20_poly1305_bitstream_map_key_t {
