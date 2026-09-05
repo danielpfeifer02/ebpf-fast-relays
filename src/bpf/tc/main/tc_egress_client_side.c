@@ -221,7 +221,7 @@ int tc_egress(struct __sk_buff *skb)
 
                                 // If the stream is unidirectional we need to update the stream id
                                 if (is_unidirectional_and_server_side == mask) {
-                                        update_stream_id(stream_id, skb, stream_id_off, &key, RELAY_ORIGIN);
+                                        update_stream_id(&stream_id, skb, stream_id_off, &key, RELAY_ORIGIN);
                                 }
 
                                 // Check if the offset field is present and potentially read it.
@@ -268,7 +268,7 @@ int tc_egress(struct __sk_buff *skb)
                                 .server_pn = old_pn,
                                 .flags = VALID_FLAG | USERSPACE_FLAG | (is_retransmission ? RETRANSMISSION_FLAG : 0),
                         };
-                        store_packet_to_register(pack_to_reg);
+                        store_packet_to_register(&pack_to_reg);
                         bpf_printk("Old packet number: %d, New packet number: %d\n", old_pn, pn_key.packet_number);
 
                         return TC_ACT_OK;
@@ -379,7 +379,7 @@ int tc_egress(struct __sk_buff *skb)
 
                         // If the stream is unidirectional we need to update the stream id
                         if (is_unidirectional_and_server_side == mask) {
-                                update_stream_id(stream_id, skb, stream_id_off, &key, MEDIA_SERVER_ORIGIN);
+                                update_stream_id(&stream_id, skb, stream_id_off, &key, MEDIA_SERVER_ORIGIN);
                         }
 
                         // Check if the offset field is present and potentially read it.
@@ -483,7 +483,7 @@ int tc_egress(struct __sk_buff *skb)
                         .server_pn = old_pn,
                         .flags = VALID_FLAG,
                 };
-                store_packet_to_register(pack_to_reg);
+                store_packet_to_register(&pack_to_reg);
 
                 store_pn_and_ts(*new_pn - 1, time_ns, value->dst_ip_addr, value->dst_port);
         
@@ -558,7 +558,7 @@ int tc_egress(struct __sk_buff *skb)
                         .server_pn = -1, // -1 -> we don't care right now // TODO: what to do with long headers?
                         .flags = VALID_FLAG, // TODO: register_packet_t: long header can only be from userspace (verify)
                 };
-                // store_packet_to_register(pack_to_reg); // TODO: even needed for long headers?
+                // store_packet_to_register(&pack_to_reg); // TODO: even needed for long headers?
 
                 store_pn_and_ts(pn_key.packet_number, time_ns, dst_ip_addr, dst_port);
 

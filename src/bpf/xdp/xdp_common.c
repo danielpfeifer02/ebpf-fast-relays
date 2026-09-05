@@ -448,28 +448,31 @@ struct {
 
 // Storing a packet to register in the ring buffer which allows for more efficient 
 // communication with the userspace program.
-__attribute__((always_inline)) int32_t store_packet_to_register_rb(struct register_packet_t packet) {
+__attribute__((always_inline)) int32_t store_packet_to_register_rb(struct register_packet_t *packet) {
+
+        if (packet==NULL)
+                return 0;
 
         // TODO: how to signal to packet_events 
         struct register_packet_t *data = bpf_ringbuf_reserve(&packet_events, sizeof(struct register_packet_t), 0); // TODO: check flags for waking up / not waking up
         if (!data)
                 return 0;
-        *data = packet;
+        *data = *packet;
         bpf_ringbuf_submit(data, 0); // TODO: check correct flags for wake up 8https://stackoverflow.com/questions/74092376/regarding-the-ebpf-question-bpf-ringbuf-submit-is-not-in-effect)
         return 0;
 }
 
 // Update the stream id of a packet.
-__attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key, uint8_t unistream_origin) {
+__attribute__((always_inline)) int32_t update_stream_id(struct var_int *stream_id, void *skb, uint32_t stream_id_off, struct client_info_key_t *key, uint8_t unistream_origin) {
 
-        if (skb==NULL || key==NULL) {
+        if (stream_id==NULL || skb==NULL || key==NULL) {
                 bpf_printk("Invalid arguments for update_stream_id\n");
                 return 1;
         }
 
         struct client_unistream_id_pair_t stream_id_key = {
                 .key = *key,
-                .unistream_id = stream_id.value
+                .unistream_id = stream_id->value
         };
 
         // In case the origin is the relay userspace we need to check if it is a retransmission of a packet.
@@ -484,9 +487,9 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
                 if (is_retransmission != NULL && *is_retransmission == 1) {
                         bpf_printk("Retransmission detected\n");
                         unistream_origin = MEDIA_SERVER_ORIGIN;
-                        bpf_map_delete_elem(&unistream_id_is_retransmission, &stream_id.value); // TODO: seems to not work?
+                        bpf_map_delete_elem(&unistream_id_is_retransmission, &stream_id->value); // TODO: seems to not work?
                 } else {
-                        bpf_printk("Nothing detected for %d %d %d\n", key->ip_addr, key->port, stream_id.value);
+                        bpf_printk("Nothing detected for %d %d %d\n", key->ip_addr, key->port, stream_id->value);
                 }
 
 
@@ -540,7 +543,7 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
                 // TODO: somehow the video does not play correcty is this print is not there. I assume this is because of the map update
                 // TODO: takes until the next packet is already being processed and this one then accesses old data?
                 // TODO: using 5 * "%d" seems to be necessary since for 4 * "%d" it still does not work.
-                bpf_printk("Unidirectional stream id mapping registered from %d to %d (%d %d %d)\n", stream_id.value, *new_stream_id, key->ip_addr, key->port, unistream_origin); 
+                bpf_printk("Unidirectional stream id mapping registered from %d to %d (%d %d %d)\n", stream_id->value, *new_stream_id, key->ip_addr, key->port, unistream_origin); 
 
         } 
 
@@ -559,7 +562,7 @@ __attribute__((always_inline)) int32_t update_stream_id(struct var_int stream_id
         new_stream_id_bytes[0] |= 0xc0;
         // TODO: make size 8 a constant in config.
         bpf_skb_store_bytes(skb, stream_id_off, new_stream_id_bytes, 8, 0);
-        bpf_printk("Unidirectional stream id updated from %d to %d (%d)\n", stream_id.value, *translation, unistream_origin);
+        bpf_printk("Unidirectional stream id updated from %d to %d (%d)\n", stream_id->value, *translation, unistream_origin);
 
         return 0;
 }
@@ -593,9 +596,9 @@ __attribute__((always_inline)) int32_t store_pn_and_ts(uint32_t packet_number, u
 
 // This function is used to store a packet that has to be registered
 // by the userspace program.
-__attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t packet) { // TODO: need to consider ip and port to support multiple clients
+__attribute__((always_inline)) int32_t store_packet_to_register(struct register_packet_t *packet) { // TODO: need to consider ip and port to support multiple clients
 
-        bpf_printk("Storing packet to register with pn %d and offset %d\n", packet.packet_number, packet.offset);
+        bpf_printk("Storing packet to register with pn %d and offset %d\n", packet->packet_number, packet->offset);
         // TODO: just for testing
         store_packet_to_register_rb(packet);
         return 0;
@@ -607,7 +610,7 @@ __attribute__((always_inline)) int32_t store_packet_to_register(struct register_
                 bpf_printk("Failed to get index for packets to register\n");
                 return 1;
         }
-        bpf_map_update_elem(&packets_to_register, index, &packet, BPF_ANY);
+        bpf_map_update_elem(&packets_to_register, index, packet, BPF_ANY);
 
 
         *index = *index + 1;
