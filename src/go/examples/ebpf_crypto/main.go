@@ -2,14 +2,9 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"log"
-	"math/big"
 	"os"
 	"time"
 
@@ -19,7 +14,6 @@ import (
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
 	"github.com/danielpfeifer02/quic-go-prio-packs/qlog"
 	"github.com/go-gst/go-gst/gst"
-	"github.com/go-gst/go-gst/gst/app"
 
 	crypto_settings "golang.org/x/crypto"
 )
@@ -252,45 +246,12 @@ func client_start_message() error {
 }
 
 func generateTLSConfig(generate_keylog bool) *tls.Config {
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
-	if err != nil {
-		panic(err)
-	}
-	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	if err != nil {
-		panic(err)
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-
-	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		panic(err)
-	}
-
-	if !generate_keylog {
-		return &tls.Config{
-			Certificates:       []tls.Certificate{tlsCert},
-			InsecureSkipVerify: true,
-			CipherSuites:       []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
-		}
-	}
-
-	// Keylog file
-	keylogFile, err := os.OpenFile("tls.keylog", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("TLS keylog file created")
-
-	return &tls.Config{
-		Certificates:       []tls.Certificate{tlsCert},
+	return common.GenerateTLSConfig(common.TLSConfigOptions{
 		InsecureSkipVerify: true,
-		KeyLogWriter:       keylogFile,
-		CipherSuites:       []uint16{tls.TLS_CHACHA20_POLY1305_SHA256},
-	}
+		EnableKeyLog:       generate_keylog,
+		KeyLogPerm:         0777,
+		PrintKeyLogCreated: true,
+	})
 }
 
 func generateQUICConfig() *quic.Config {
@@ -304,11 +265,5 @@ func generateQUICConfig() *quic.Config {
 }
 
 func handleMessage(msg *gst.Message) error {
-	switch msg.Type() {
-	case gst.MessageEOS:
-		return app.ErrEOS
-	case gst.MessageError:
-		return msg.ParseError()
-	}
-	return nil
+	return common.HandleGstMessage(msg)
 }
