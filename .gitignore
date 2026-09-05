@@ -1,0 +1,19 @@
+# Build / binary outputs
+**/build/main
+**/build/log.txt
+**/build/prof/
+src/utils/build/
+src/bpf/**/*.o
+src/bpf/**/*.ll
+
+# Runtime logs and accidental captures
+**/output.txt
+**/tls.keylog
+src/go/examples/**/log/
+src/go/examples/**/log_active_analysis/
+*.prof
+
+# Editor / OS noise
+.DS_Store
+*~
+*.swp
