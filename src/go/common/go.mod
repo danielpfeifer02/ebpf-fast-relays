@@ -1,4 +1,4 @@
-module common.com/common
+module github.com/danielpfeifer02/ebpf-fast-relays/src/go/common
 
 go 1.22.0
 

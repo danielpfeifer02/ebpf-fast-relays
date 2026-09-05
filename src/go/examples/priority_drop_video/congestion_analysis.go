@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"common.com/common"
+	"github.com/danielpfeifer02/ebpf-fast-relays/src/go/common"
 )
 
 /*
