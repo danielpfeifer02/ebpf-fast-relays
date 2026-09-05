@@ -55,7 +55,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
 
                 // We need to use bpf_skb_pull_data() to get the rest of the packet.
                 // If the pull fails we can pass the packet through.
-                if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
+                if (bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
                         bpf_printk("[ingress startup tc] failed to pull data");
                         return TC_ACT_OK;
                 }
@@ -67,7 +67,7 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 ip = (struct iphdr *)(eth + 1);
                 udp = (struct udphdr *)(ip + 1);
                 payload = (void *)(udp + 1);
-        }      
+        }
 
         // We load the first byte of the QUIC payload to determine the header form.
         uint8_t quic_flags;
@@ -82,8 +82,6 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 // 0x01 - 0-RTT
                 // 0x02 - Handshake
                 // 0x03 - Retry
-                // uint8_t packet_type = (quic_flags & 0x30) >> 4;
-
                 // Save connection id offsets.
                 uint8_t dst_connection_id_offset = 6;
                 uint8_t src_connection_id_offset = 6 + CONN_ID_LEN + 1;
@@ -182,11 +180,8 @@ int tc_ingress_from_client(struct __sk_buff *skb)
                 // in the relay user space program.
                 bpf_map_update_elem(&client_data, cid, &value, BPF_ANY);
 
-        } else if (header_form == 0) { // Short header
-                
-                // TODO: this should not be needed since the stream id translation is only for unidirectional streams
-                // In case a short header comes in we need to check if we should re-translate the stream id such that the relay can understand it.
-                
+        } else if (header_form == 0) {
+                // Short headers: stream-id re-translation not needed here (unistream-only).
         }
 
         return TC_ACT_OK;
