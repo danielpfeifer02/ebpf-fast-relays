@@ -6,8 +6,8 @@ import (
 	"runtime/pprof"
 	"time"
 
+	"common.com/common"
 	"github.com/go-gst/go-gst/gst"
-	"github.com/go-gst/go-gst/gst/app"
 )
 
 const video_server_address = "192.168.10.1:4242"
@@ -71,11 +71,5 @@ func video_main(user string) {
 }
 
 func handleMessage(msg *gst.Message) error {
-	switch msg.Type() {
-	case gst.MessageEOS:
-		return app.ErrEOS
-	case gst.MessageError:
-		return msg.ParseError()
-	}
-	return nil
+	return common.HandleGstMessage(msg)
 }

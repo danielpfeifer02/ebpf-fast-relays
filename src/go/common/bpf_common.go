@@ -88,7 +88,7 @@ func InitConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) {
 	debugPrint("INIT")
 	debugPrint("Initialize connection id for connection:", qconn.RemoteAddr().String())
 
-	key := getConnectionIDsKey(qconn)
+	key := GetConnectionIDsKey(qconn)
 
 	// If the key does not exist, create new list.
 	mutex.Lock()
@@ -123,7 +123,7 @@ func RetireConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 
 	retired_priority := id[0]
 
-	key := getConnectionIDsKey(qconn)
+	key := GetConnectionIDsKey(qconn)
 	for i, v := range connection_ids[key] {
 		if string(v) == string(id) {
 			connection_ids[key] = append(connection_ids[key][:i], connection_ids[key][i+1:]...)
@@ -189,8 +189,8 @@ func UpdateConnectionId(id []byte, l uint8, conn packet_setting.QuicConnection) 
 // TODO: mabye split up into a "get client data" function
 func SetBPFMapConnectionID(qconn quic.Connection, v []byte) {
 	ipaddr, port := GetIPAndPort(qconn, true)
-	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
-	port_key := swapEndianness16(port)
+	ipaddr_key := SwapEndianness32(IpToInt32(ipaddr))
+	port_key := SwapEndianness16(port)
 
 	key := Client_key_struct{
 		Ipaddr:  ipaddr_key,
@@ -249,8 +249,8 @@ func TranslateAckPacketNumber(pn int64, conn packet_setting.QuicConnection) (int
 
 	ipaddr, port := GetIPAndPort(qconn, true)
 	client_key := Client_key_struct{
-		Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
-		Port:    swapEndianness16(uint16(port)),
+		Ipaddr:  SwapEndianness32(IpToInt32(ipaddr)),
+		Port:    SwapEndianness16(uint16(port)),
 		Padding: [2]uint8{0, 0},
 	}
 	key := Client_pn_map_key{
@@ -293,8 +293,8 @@ func DeleteAckPacketNumberTranslation(pn int64, conn packet_setting.QuicConnecti
 
 	ipaddr, port := GetIPAndPort(qconn, true)
 	client_key := Client_key_struct{
-		Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
-		Port:    swapEndianness16(uint16(port)),
+		Ipaddr:  SwapEndianness32(IpToInt32(ipaddr)),
+		Port:    SwapEndianness16(uint16(port)),
 		Padding: [2]uint8{0, 0},
 	}
 	key := Client_pn_map_key{
@@ -315,8 +315,8 @@ func GetLargestSentPacketNumber(conn packet_setting.QuicConnection) int64 {
 	qconn := conn.(quic.Connection)
 
 	ipaddr, port := GetIPAndPort(qconn, true)
-	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
-	port_key := swapEndianness16(port)
+	ipaddr_key := SwapEndianness32(IpToInt32(ipaddr))
+	port_key := SwapEndianness16(port)
 
 	key := Client_key_struct{
 		Ipaddr:  ipaddr_key,
@@ -342,8 +342,8 @@ func RegisterBPFPacket(conn quic.Connection) { // TODO: make more efficient with
 
 		ipaddr, port := GetIPAndPort(conn, true)
 		key := Client_key_struct{
-			Ipaddr:  swapEndianness32(IpToInt32(ipaddr)),
-			Port:    swapEndianness16(port),
+			Ipaddr:  SwapEndianness32(IpToInt32(ipaddr)),
+			Port:    SwapEndianness16(port),
 			Padding: [2]uint8{0, 0},
 		}
 
@@ -538,8 +538,8 @@ skip_retrieval:
 func SetConnectionEstablished(ip net.IP, port uint16) error {
 
 	key := Client_key_struct{
-		Ipaddr:  swapEndianness32(IpToInt32(ip)),
-		Port:    swapEndianness16(uint16(port)),
+		Ipaddr:  SwapEndianness32(IpToInt32(ip)),
+		Port:    SwapEndianness16(uint16(port)),
 		Padding: [2]uint8{0, 0},
 	}
 
@@ -562,8 +562,8 @@ func MarkStreamIdAsRetransmission(stream_id uint64, conn packet_setting.QuicConn
 	qconn := conn.(quic.Connection)
 
 	ipaddr, port := GetIPAndPort(qconn, true)
-	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
-	port_key := swapEndianness16(port)
+	ipaddr_key := SwapEndianness32(IpToInt32(ipaddr))
+	port_key := SwapEndianness16(port)
 
 	key := Unistream_id_retransmission_struct{
 		IpAddr:   ipaddr_key,
@@ -629,8 +629,8 @@ func HandleCongestionMetricUpdate(data packet_setting.CongestionWindowData, conn
 	}
 
 	ipaddr, port := GetIPAndPort(qconn, true)
-	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
-	port_key := swapEndianness16(port)
+	ipaddr_key := SwapEndianness32(IpToInt32(ipaddr))
+	port_key := SwapEndianness16(port)
 
 	key := Client_key_struct{
 		Ipaddr:  ipaddr_key,
@@ -759,8 +759,8 @@ func startPrintCongestionWindowDataThread() {
 
 func GetClientID(ipaddr net.IP, port uint16) (uint32, error) {
 
-	ipaddr_key := swapEndianness32(IpToInt32(ipaddr))
-	port_key := swapEndianness16(port)
+	ipaddr_key := SwapEndianness32(IpToInt32(ipaddr))
+	port_key := SwapEndianness16(port)
 
 	key := Client_key_struct{
 		Ipaddr:  ipaddr_key,

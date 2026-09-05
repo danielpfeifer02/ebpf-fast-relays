@@ -13,7 +13,7 @@ import (
 	"github.com/go-gst/go-gst/gst"
 )
 
-func getConnectionIDsKey(qconn quic.Connection) [6]byte {
+func GetConnectionIDsKey(qconn quic.Connection) [6]byte {
 	ipaddr, port := GetIPAndPort(qconn, true)
 	ipv4 := ipaddr.To4()
 	if ipv4 == nil {
@@ -51,11 +51,11 @@ func IpToInt32(ip net.IP) uint32 {
 	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
 }
 
-func swapEndianness16(val uint16) uint16 {
+func SwapEndianness16(val uint16) uint16 {
 	return (val&0xFF)<<8 | (val&0xFF00)>>8
 }
 
-func swapEndianness32(val uint32) uint32 {
+func SwapEndianness32(val uint32) uint32 {
 	return (val&0xFF)<<24 | (val&0xFF00)<<8 | (val&0xFF0000)>>8 | (val&0xFF000000)>>24
 }
 
