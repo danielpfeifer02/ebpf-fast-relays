@@ -2,10 +2,10 @@
 
 /*
  - This program is intercepting incoming packets from the video server,
- - duplicates and redirects them directly to egress. The initial copy of 
+ - duplicates and redirects them directly to egress. The initial copy of
  - the packet is still passed up to userspace so that the bpf program
  - does not need to handle any connection related logic (e.g. ACKs).
- - Also the userspace will handle any caching that is expected 
+ - Also the userspace will handle any caching that is expected
  - of the relay.
  */
 
@@ -46,7 +46,7 @@ int tc_ingress(struct __sk_buff *skb)
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
         // If the packet is not sent from the port where the server is
-        // listening we can pass it through since the packet is from a 
+        // listening we can pass it through since the packet is from a
         // different program.
         if (udp->source != SERVER_PORT) {
                 return TC_ACT_OK;
@@ -61,11 +61,11 @@ int tc_ingress(struct __sk_buff *skb)
 
                 // We need to use bpf_skb_pull_data() to get the rest of the packet.
                 // If the pull fails we can pass the packet through.
-                if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
+                if (bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
                         bpf_printk("[ingress startup tc] failed to pull data");
                         return TC_ACT_OK;
                 }
-                
+
                 // Once we have pulled the data we need to update the pointers.
                 data_end = (void *)(long)skb->data_end;
                 data = (void *)(long)skb->data;
@@ -135,7 +135,7 @@ int tc_ingress(struct __sk_buff *skb)
                         }
                         // Since we do not need the connection id anymore once we're at the egress
                         // we can use it to store the index of the for loop. At egress the bpf program
-                        // can then handle the packet containing the i-th index so fit the i-th client.
+                        // can then handle the packet containing the i-th index to fit the i-th client.
                         // We need index + 1 since we want to avoid 0 as an index. // TODO: start with 0?
                         uint32_t index = i + 1;
                         // We use the second byte of the connection id to store the index
@@ -150,15 +150,13 @@ int tc_ingress(struct __sk_buff *skb)
                         uint16_t mrk = PORT_MARKER;
                         bpf_skb_store_bytes(skb, dst_port_off, &mrk, sizeof(mrk), 0);
 
-                        // bpf_printk("Redirecting to client %d\n", i);
-                        
                         // We need to use clone_redirect to redirect the packet to the egress program
                         // since otherwise we get errors when changing the packet in here.
                         if (TURNOFF_INGRESS_FORWARDING) {
                                 break; // TODO: not the most efficient place for this check but works for now
                         }
                         bpf_clone_redirect(skb, veth2_egress_ifindex, 0);
-                
+
                 }
 
                 // Before passing the packet on to userspace we need to set UDP port to RELAY_PORT again
@@ -173,7 +171,7 @@ int tc_ingress(struct __sk_buff *skb)
 
                 // Now we just pass on the packet to userspace.
                 return TC_ACT_OK;
-        
+
         }
 
         return TC_ACT_OK;
