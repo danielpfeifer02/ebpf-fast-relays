@@ -2,7 +2,6 @@
 
 #include "tc_crypto_defines.c"
 #include "tc_crypto_structs.c"
-#include "tc_mac_update_from_asm.c"
 #include "../main/tc_common.c"
 
 #define DETERMINE_ADD_CARRY_PRESENCE(A, B, C) (((A) & (B)) | (((A) | (B)) & ~(C))) >> 63
