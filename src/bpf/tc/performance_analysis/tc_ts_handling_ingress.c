@@ -1,13 +1,9 @@
 #include "../main/tc_common.c"
 
 /*
- - This program is intercepting incoming packets from the client side
- - and makes sure that new clients are "registered" in the client_data map
- - as well as separate maps that allow iteration over the clients in the
- - egress program.
- - Here only long headers are considered, since they are used primarily
- - in the initial handshake phase and that way we can avoid looking at
- - short headers containing ACKs once the connection is established.
+ * Performance analysis: optionally log arrival time and/or write
+ * bpf_ktime_get_tai_ns() into stream payloads at TS_OFF_INGRESS.
+ * Short headers only; gated by PRINT_ARRIVAL_TS / WRITE_TS_TO_PACKET.
  */
 
 __section("ts_ingress")
@@ -40,7 +36,7 @@ int tc_ts_ingress(struct __sk_buff *skb)
         struct udphdr *udp = (struct udphdr *)(ip + 1);
 
         // If the packet is not addressed to the port where our relay is
-        // listening we can pass it through since the packet is from a 
+        // listening we can pass it through since the packet is from a
         // different program.
         if (udp->source != RELAY_PORT) {
                 return TC_ACT_OK;
@@ -55,7 +51,7 @@ int tc_ts_ingress(struct __sk_buff *skb)
 
                 // We need to use bpf_skb_pull_data() to get the rest of the packet.
                 // If the pull fails we can pass the packet through.
-                if(bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
+                if (bpf_skb_pull_data(skb, (data_end-data)+payload_size) < 0) {
                         bpf_printk("[tc_ts_handling_ingress] Failed to pull data");
                         return TC_ACT_OK;
                 }
@@ -67,7 +63,7 @@ int tc_ts_ingress(struct __sk_buff *skb)
                 ip = (struct iphdr *)(eth + 1);
                 udp = (struct udphdr *)(ip + 1);
                 payload = (void *)(udp + 1);
-        }      
+        }
 
         // We load the first byte of the QUIC payload to determine the header form.
         uint8_t quic_flags;
@@ -77,10 +73,10 @@ int tc_ts_ingress(struct __sk_buff *skb)
         // We only consider short headers here.
         if (header_form == 0) {
 
-                // Only thing to change is the timetamp.
+                // Optionally print arrival time and/or stamp stream data.
                 uint8_t pn_len = (quic_flags & 0x03) + 1;
 
-                uint32_t quic_payload_offset = 1 /* Header */+ CONN_ID_LEN + pn_len;
+                uint32_t quic_payload_offset = 1 /* Header */ + CONN_ID_LEN + pn_len;
 
                 uint8_t frame_type;
                 SAVE_BPF_PROBE_READ_KERNEL(&frame_type, sizeof(frame_type), payload + quic_payload_offset);
@@ -98,7 +94,7 @@ int tc_ts_ingress(struct __sk_buff *skb)
                                 bpf_printk("[tc_ts_handling_ingress] Not a stream frame");
                                 return TC_ACT_OK;
                         }
-                        
+
                         uint8_t offset_present = frame_type & 0x04;
                         uint8_t length_present = frame_type & 0x02;
 
@@ -121,14 +117,12 @@ int tc_ts_ingress(struct __sk_buff *skb)
                         stream_data_offset += TS_OFF_INGRESS;
 
                         uint64_t timestamp = bpf_ktime_get_tai_ns();
-                        uint32_t overall_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr)+ quic_payload_offset + 1 /* Frame type */ + stream_data_offset;
+                        uint32_t overall_off = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + quic_payload_offset + 1 /* Frame type */ + stream_data_offset;
                         bpf_skb_store_bytes(skb, overall_off, &timestamp, sizeof(timestamp), 0);
 
                         bpf_printk("[tc_ts_handling_ingress] Timestamp added to packet");
 
                 }
-
-
         }
 
         return TC_ACT_OK;
