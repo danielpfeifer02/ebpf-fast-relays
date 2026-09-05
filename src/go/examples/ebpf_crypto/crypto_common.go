@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"common.com/common"
+	"github.com/danielpfeifer02/ebpf-fast-relays/src/go/common"
 	"github.com/cilium/ebpf"
 	crypto_settings "golang.org/x/crypto"
 

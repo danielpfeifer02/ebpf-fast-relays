@@ -6,7 +6,7 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"common.com/common"
+	"github.com/danielpfeifer02/ebpf-fast-relays/src/go/common"
 	"github.com/go-gst/go-gst/gst"
 )
 

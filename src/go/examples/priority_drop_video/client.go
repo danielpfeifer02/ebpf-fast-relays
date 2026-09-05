@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"common.com/common"
+	"github.com/danielpfeifer02/ebpf-fast-relays/src/go/common"
 )
 
 func client() error {

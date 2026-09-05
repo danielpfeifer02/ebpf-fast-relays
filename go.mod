@@ -3,7 +3,7 @@ module github.com/danielpfeifer02/ebpf-fast-relays
 go 1.22.0
 
 require (
-	common.com/common v0.0.0
+	github.com/danielpfeifer02/ebpf-fast-relays/src/go/common v0.0.0
 	fyne.io/fyne/v2 v2.4.5
 	github.com/cilium/ebpf v0.15.0
 	github.com/danielpfeifer02/priority-moqtransport v0.1.1-6
@@ -21,7 +21,7 @@ replace github.com/danielpfeifer02/priority-moqtransport v0.1.1-6 => ../gst-prio
 
 replace github.com/danielpfeifer02/quic-go-prio-packs v0.41.0-28 => ../quic-go-prio-packs
 
-replace common.com/common v0.0.0 => ./src/go/common
+replace github.com/danielpfeifer02/ebpf-fast-relays/src/go/common v0.0.0 => ./src/go/common
 
 replace golang.org/x/crypto v0.23.0 => ../crypto
 

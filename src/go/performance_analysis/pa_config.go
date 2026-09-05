@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"common.com/common"
+	"github.com/danielpfeifer02/ebpf-fast-relays/src/go/common"
 	"github.com/danielpfeifer02/quic-go-prio-packs"
 	"github.com/danielpfeifer02/quic-go-prio-packs/crypto_turnoff"
 	"github.com/danielpfeifer02/quic-go-prio-packs/packet_setting"
