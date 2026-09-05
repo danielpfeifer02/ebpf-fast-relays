@@ -339,7 +339,7 @@ int tc_egress(struct __sk_buff *skb)
                 */
                 
                // To be able to access the payload we need to know the length of the packet number.
-                // Then we can read the frame type and determine if it is a stream frame or a datagram frame.
+               // Then we can read the frame type and determine if it is a stream frame or a datagram frame.
                 uint8_t pn_len = (quic_flags & 0x03) + 1;
                 uint8_t frame_type;
                 uint16_t frame_off = 1 /* Short header bits */ + CONN_ID_LEN + pn_len;
