@@ -44,10 +44,3 @@ program that used kernel-forwarding run:<br />
     ``source delete.sh``
 
 This, for example, removes all used eBPF programs that have been hooked to TC.
-
-
-## Go module
-The Go module path is `github.com/danielpfeifer02/ebpf-fast-relays` (aligned with this repository).
-It was previously named `github.com/danielpfeifer02/adaptive_moq`; nothing inside the tree imported that old path.
-Shared helpers live under the local `common.com/common` module (see the `replace` in root `go.mod`).
-Sibling checkouts expected by other `replace` directives (`../crypto`, `../quic-go-prio-packs`, `../gst-prio-moq-app`, `../plain-quic-go-lib`) are unchanged.
