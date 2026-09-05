@@ -7,7 +7,7 @@
 
 #define DETERMINE_ADD_CARRY_PRESENCE(A, B, C) (((A) & (B)) | (((A) | (B)) & ~(C))) >> 63
 
-// For debugging purposes
+// Manual unroll helpers for the BPF verifier
 #define REPEAT_1(X) X
 #define REPEAT_2(X) X X
 #define REPEAT_4(X) X X X X
@@ -359,7 +359,6 @@ int add_my_uint128(struct my_uint128_t *a, struct my_uint128_t *b, struct my_uin
 
     return 0;
 }
-
 __attribute__((always_inline)) void add_my_uint256(struct my_uint256_t *a, struct my_uint256_t *b, struct my_uint256_t *result) {
 
     result->lo = a->lo + b->lo;
@@ -402,7 +401,6 @@ int mul_my_uint128(struct my_uint128_t *a, struct my_uint128_t *b, struct my_uin
 
     return 0;
 }
-
 __attribute__((always_inline)) 
 int mul_my_uint256_with_my_uint128(struct my_uint256_t *a, struct my_uint128_t *b, struct my_uint256_t *result) {
 
@@ -605,7 +603,6 @@ int my_mod_p(struct my_uint256_t *a, struct my_uint256_t *result) {
     result->hi = res_hi;    
     return 0;
 }
-
 __attribute__((always_inline)) clamp(struct my_uint128_t *x) {
     x->lo &= clamp_lo;
     x->hi &= clamp_hi;
@@ -670,7 +667,7 @@ __attribute__((always_inline))
                             8 + 8; // 8 bytes for additional_data_size and decryption_size as uint64_t each
 
 
-    //! Write data into the linearized padded map
+    // Write AAD + ciphertext + lengths into linearized_padded_data
     uint32_t ctr = 0;
 
     uint32_t limit_add_data = decryption_bundle->additional_data_size;
@@ -683,16 +680,6 @@ __attribute__((always_inline))
         bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
         ctr++;
     }
-    // TODO: wrong
-    // for (int i=0; i<16; i++) { // Implicitly done since map has type uint64_t
-    //     if (i >= additional_data_padding) {
-    //         break;
-    //     }
-    //     byte = 0;
-    //     bpf_map_update_elem(&linearized_padded_data, &ctr, &byte, BPF_ANY);
-    //     ctr++;
-    // }
-    // TODO: right
     // 7 bytes and less will be done implicitly because of uint64_t.
     // If we need more then we add one more qword.
     // The padding is never >= 16.
@@ -722,16 +709,6 @@ __attribute__((always_inline))
         i += 8;
         });
     }
-    // TODO: wrong
-    // for (int i=0; i<16; i++) { // Implicitly done since map has type uint64_t
-    //     if (i >= payload_padding) {
-    //         break;
-    //     }
-    //     byte = 0;
-    //     bpf_map_update_elem(&linearized_padded_data, &ctr, &byte, BPF_ANY);
-    //     ctr++;
-    // }
-    // TODO: right
     // 7 bytes and less will be done implicitly because of uint64_t.
     // If we need more then we add one more qword.
     // The padding is never >= 16.
@@ -742,19 +719,6 @@ __attribute__((always_inline))
     }
 
 
-    // TODO: wrong
-    // for (int i=0; i<8; i++) {
-    //     qword = (decryption_bundle->additional_data_size >> (8 * i)) & 0xff;
-    //     bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
-    //     ctr++;
-    // }
-    // for (int i=0; i<8; i++) {
-    //     qword = (decryption_bundle->decyption_size >> (8 * i)) & 0xff;
-    //     bpf_map_update_elem(&linearized_padded_data, &ctr, &qword, BPF_ANY);
-    //     ctr++;
-    // }
-
-    // TODO: right
     qword = 0;
     qword |= (decryption_bundle->additional_data_size & 0x000000ff) << 56;
     qword |= (decryption_bundle->additional_data_size & 0x0000ff00) << 48;
@@ -823,7 +787,7 @@ __attribute__((always_inline))
         bpf_printk("debug out a->lo: %llu\n", a.lo);
         bpf_printk("debug out a->mid_lo: %llu\n", a.mid_lo);
         bpf_printk("debug out a->mid_hi: %llu\n", a.mid_hi);
-        bpf_printk("debug out a->hi: %llu\n", a.hi);  
+        bpf_printk("debug out a->hi: %llu\n", a.hi);
 
         a_old = a;
         my_mod_p(&a_old, &a); // https://electronics.stackexchange.com/questions/608840/verilog-modulus-operator-for-non-power-of-two-synthetizable/608854#608854
@@ -832,15 +796,11 @@ __attribute__((always_inline))
 
     // a += s
     a_old = a;
-    // bpf_printk("Debug hi: %llu, %llu\n", a_old.hi, a.hi);
-    // bpf_printk("Debug lo: %llu, %llu\n", a_old.lo, a.lo);
-    // add_my_uint128(&a_old, &s, &a); // TODO: why add as function not working?
     a.lo = a_old.lo + s.lo;
     a.hi = a_old.hi + s.hi + (a_old.lo + s.lo < a_old.lo);
 
 
-    // Now the 128 least significant bits of a should be equal to the tag
-    // TODO: check this
+    // Compare low 128 bits of a against the expected Poly1305 tag
     uint64_t created_tag_lo = a.lo;
     uint64_t created_tag_hi = a.hi;
 
