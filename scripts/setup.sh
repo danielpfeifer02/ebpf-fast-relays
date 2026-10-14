@@ -28,6 +28,7 @@ need_cmd() {
 }
 
 # ---------- Phase 1: privileges + kernel features ----------
+# tc / iproute2 checks run in phase_tc_ready after apt can install them.
 phase_checks() {
 	log "Phase 1: privileges and kernel features"
 
@@ -39,9 +40,14 @@ phase_checks() {
 		die "Kernel BTF not found at /sys/kernel/btf/vmlinux. Enable CONFIG_DEBUG_INFO_BTF / install a BTF-enabled kernel."
 	fi
 	echo "BTF: OK (/sys/kernel/btf/vmlinux)"
+}
+
+# ---------- After apt: tc present + clsact supported ----------
+phase_tc_ready() {
+	log "Phase 2b: tc / clsact readiness (after apt)"
 
 	if ! need_cmd tc; then
-		die "'tc' (iproute2) not found; install iproute2 (Phase 2) or ensure it is on PATH."
+		die "'tc' (iproute2) not found after apt phase; install iproute2 or ensure it is on PATH."
 	fi
 
 	# clsact smoke test on lo (add if missing, then remove our qdisc)
@@ -140,23 +146,26 @@ phase_apt() {
 		echo "All required apt packages already present."
 	fi
 
-	if [[ "${SKIP_GST:-0}" != "1" ]]; then
-		local gst_missing=()
-		for p in "${GST_PACKAGES[@]}"; do
-			if ! pkg_installed "$p"; then
-				if apt-cache show "$p" >/dev/null 2>&1; then
-					gst_missing+=("$p")
-				fi
+	# GStreamer dev libs are required even for priority_drop_chat: src/go/common
+	# imports go-gst unconditionally, so chat cannot build without them.
+	# SKIP_GST only skips building the video example later (Phase 6).
+	local gst_missing=()
+	local p
+	for p in "${GST_PACKAGES[@]}"; do
+		if ! pkg_installed "$p"; then
+			if apt-cache show "$p" >/dev/null 2>&1; then
+				gst_missing+=("$p")
 			fi
-		done
-		if [[ "${#gst_missing[@]}" -gt 0 ]]; then
-			echo "Installing optional gstreamer packages for video example: ${gst_missing[*]}"
-			apt-get install -y "${gst_missing[@]}" || warn "gstreamer install failed; video example may not build (chat still OK)."
-		else
-			echo "gstreamer packages already present (or unavailable); video optional."
 		fi
+	done
+	if [[ "${#gst_missing[@]}" -gt 0 ]]; then
+		echo "Installing gstreamer packages (needed by common / chat, and video): ${gst_missing[*]}"
+		apt-get install -y "${gst_missing[@]}" || warn "gstreamer install failed; chat and video builds may fail."
 	else
-		echo "SKIP_GST=1 — skipping gstreamer packages."
+		echo "gstreamer packages already present (or unavailable)."
+	fi
+	if [[ "${SKIP_GST:-0}" == "1" ]]; then
+		echo "SKIP_GST=1 — packages still installed for chat; video example build will be skipped."
 	fi
 }
 
@@ -244,11 +253,34 @@ pick_clang_wrap() {
 	printf '%s' "${wrap_dir}"
 }
 
+relay_veth2_ifindex() {
+	# After Phase 4, veth2 lives in relay_ns; read its ifindex from there.
+	ip netns exec relay_ns sh -c "ip link show veth2 2>/dev/null | awk '/^[0-9]+:/ {print \$1}' | sed 's/://'"
+}
+
 build_tc_main_objs() {
 	# Build the three attachable TC program objects only.
 	# (tc_common.c / tc_frame_length_lut.c are #included, not standalone programs.)
-	# Attaching via `make tc_main` is left to example execute scripts at runtime.
-	make -C "${BPF_DIR}" 		tc/main/tc_ingress_client_side.o 		tc/main/tc_ingress_server_side.o 		tc/main/tc_egress_client_side.o
+	# Pass relay_ns's veth2 ifindex explicitly: the Makefile defaults to host
+	# `ip link show veth2` (0 when the device is gone from the host ns).
+	local idx
+	idx="$(relay_veth2_ifindex)"
+	[[ -n "${idx}" && "${idx}" != "0" ]] || die "could not read veth2 ifindex inside relay_ns"
+	echo "veth2 ifindex in relay_ns: ${idx}"
+	make -C "${BPF_DIR}" DEV_EG_INDEX="${idx}" \
+		tc/main/tc_ingress_client_side.o \
+		tc/main/tc_ingress_server_side.o \
+		tc/main/tc_egress_client_side.o
+}
+
+attach_tc_main() {
+	# Pin/attach programs and maps so the relay can LoadPinnedMap number_of_clients.
+	# ip netns exec remounts sysfs; ensure bpffs is available for tc pin paths.
+	log "Phase 5b: attach TC main programs in relay_ns"
+	ip netns exec relay_ns sh -c 'mkdir -p /sys/fs/bpf; mountpoint -q /sys/fs/bpf || mount -t bpf bpf /sys/fs/bpf'
+	ip netns exec relay_ns env PATH="${PATH}" make -C "${BPF_DIR}" tc_main \
+		|| die "make tc_main failed inside relay_ns (are veth1/veth2 present there?)"
+	echo "TC programs attached in relay_ns; maps under /sys/fs/bpf/tc/globals/"
 }
 
 phase_bpf() {
@@ -319,12 +351,12 @@ print_next_steps() {
 	log "Done. Next steps"
 	cat <<EOF
 Namespaces: server_ns, relay_ns, client_ns (bridges v-net-0 / v-net-1).
+TC main programs are already attached in relay_ns (maps pinned under /sys/fs/bpf/tc/globals/).
 
-Enter a namespace and run an example, e.g.:
-  sudo ip netns exec relay_ns bash
-  cd ${CHAT_DIR} && ./build/main relay
+Run the chat relay (bpf maps must already be attached, which setup did):
+  sudo ip netns exec relay_ns ${CHAT_DIR}/build/main relay
 
-Or use the example start/execute scripts under src/go/examples/.
+Or use the example start/execute scripts under src/go/examples/ (execute.sh re-runs make + attach).
 
 BPF objects: ${BPF_DIR}/tc/main/*.o
 Chat binary:  ${CHAT_DIR}/build/main
@@ -339,9 +371,11 @@ main() {
 
 	phase_checks
 	phase_apt
+	phase_tc_ready
 	phase_siblings
 	phase_bridges
 	phase_bpf
+	attach_tc_main
 	phase_go
 	print_next_steps
 }
