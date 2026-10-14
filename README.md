@@ -20,6 +20,19 @@ A special performance analysis implementation of the application layer
 is also provided such that there is no need to actually transmit video
 data but mock-data is sent instead.
 
+## One-shot local lab setup ##
+On a suitable Linux host (root/sudo, BTF, clsact-capable kernel), bring up dependencies,
+sibling Go modules, netns bridges, BPF objects, and the chat example with:
+
+```
+sudo ./scripts/setup.sh
+```
+
+Optional: `SKIP_GST=1 sudo -E ./scripts/setup.sh` to skip gstreamer packages (video example).
+The script is idempotent-ish (skips existing sibling clones; recreates bridges).
+It does **not** hardcode cloud-provider IPs. See the script header for the expected
+sibling-repo layout next to this repository.
+
 ## Set up the namespaces ##
 - Go into the directory ``src/shell/``
 - Run the following commands to set up the bridges and namespaces:<br />
